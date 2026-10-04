@@ -40,3 +40,21 @@ Adaptación de Scrum por objetivos: un Product Backlog, un sprint activo sin cad
 ## Desarrollo vigente
 
 El usuario autoriza implementar el producto completo siguiendo [Scrum por objetivos y revisión adversaria](docs/process/METODOLOGIA.md), sin cadencia fija. La descripción de preparación anterior es histórica. Sin publicación ni modificación de perfiles personales.
+
+## Incremento textual disponible para desarrollo
+
+S01 contiene lector UTF-8 local/literal/stdin externo, salida textual y sesión de terminal. Ejecutable de desarrollo `r3viewer`; el comando público `viewer` y el puente Nu tipado son trabajo posterior. No es la distribución final ni acredita todos los formatos del uso previsto.
+
+```powershell
+. ./scripts/dev.ps1 # si se usa el toolchain privado .tools
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
+cargo run -- --value "Texto literal"
+cargo run -- -i archivo.txt
+```
+
+Para otro entorno de desarrollo se necesita Rust 1.99.0 conforme a rust-toolchain.toml y compilador/enlazador de su plataforma. La configuración privada de esta sesión no cambia PATH global ni perfiles. Cargo.lock fija dependencias. El paquete final no requerirá Rust al usuario.
+
+Límites S01: solo texto UTF-8, hasta 128MiB por entrada; URL, formatos enriquecidos y --path desde pipe textual diagnosticados como pendientes. Pipeline externo textual no preserva tipos Nu. -p y -v incompatibles; stdin vacío válido, sin entrada con TTY error2. ESC/OSC y controles peligrosos se muestran visiblemente. Cancelación devuelve130; BrokenPipe sin cancelación es salida normal. Sesión: flechas/hjkl, páginas, Home/End, ?, q/Escape y Ctrl-C.
+
+Validación actual: 15 pruebas, fmt y Clippy Windows; compilación/Clippy de partes Linux sin ejecutar Linux. Revisión adversaria de código R2 sin críticas pendientes; aceptación textual independiente. ConPTY funcional comprobado; QA visual Windows Terminal/WezTerm y resto de matriz pendiente. Detalle: docs/sprints/S01.md. Script opcional de reproducción de señales Windows: `python scripts/test-cancellation-windows.py target/debug/r3viewer.exe` (binario debug, grupos hijos aislados; no prueba visual y falla como inconcluso si el proceso acaba antes de señal).

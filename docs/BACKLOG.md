@@ -131,3 +131,14 @@ Los detalles de transporte, APIs, locks, límites y UX se refinan con cada histo
 ## Autoridad y proceso vigentes
 
 Implementación completa autorizada el 2026-10-04. Scrum por objetivos sin cadencia fija según process/METODOLOGIA.md. Estados anteriores conservan evidencia histórica; S01 se refina ahora. No cerrar RV por una entrega parcial ni sustituir QA pendiente por documentación. El backlog sigue abierto hasta satisfacer toda su aceptación.
+
+## Seguimiento de desarrollo por objetivos
+
+| Corte | Estado | Aceptación/evidencia |
+|---|---|---|
+| S01-A entrada textual | Comprobado Windows | Archivo/literal/stdin finito; Unicode/vacíos/conflictos/límites. RV-101 parcial. |
+| S01-B salida textual | Comprobado Windows | -i y redirección, controles visibles, canales, cancelación de escritura. RV-103 parcial. |
+| S01-C sesión | En validación | ConPTY funcional, teclado por pipe y retorno; QA visual/matriz pendiente. RV-104 parcial. |
+| S02 puente Nu | Refinamiento | Contrato candidato en sprints/S02.md; no integración tipada implementada. |
+
+S01 código revisado iterativamente hasta R2 SIN_CRITICAS_PENDIENTES; aceptación independiente y15pruebas. Evidencia y límites en sprints/S01.md. RV-003/004/006/008 y H1–H5 conservan pendientes completos; no borrar tareas ni marcar RV terminado por subhistorias comprobadas.
