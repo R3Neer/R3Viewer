@@ -1,0 +1,7 @@
+[workspace]
+members = ["nu-plugin", "nu-plugin-core"]
+resolver = "3"
+
+[patch.crates-io]
+nu-plugin = { path = "nu-plugin" }
+nu-plugin-core = { path = "nu-plugin-core" }

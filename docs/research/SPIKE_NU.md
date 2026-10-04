@@ -46,3 +46,11 @@ Resolver recepción cancelable de entrada y abandono por invocación: comprobar 
 - [ByteStream0.115.1](https://github.com/nushell/nushell/blob/0.115.1/crates/nu-protocol/src/pipeline/byte_stream.rs).
 
 Build SDK emite aviso de futura incompatibilidad en proc-macro-error2 2.0.1; actualmente compila con Rust fijado1.99.0. No desactivar verificaciones ni afirmar versiones futuras.
+
+## Prelude de módulo y conservación de entrada
+
+Nu0.115.1 comprobado: `export def inspect-prelude [] { let args = []; r3viewer inspect-input }` pierde entrada de pipeline: null, cadena vacía y lista llegan como absent. No basta evitar capturar $in; también hay que mantener encoder como primer comando del pipeline del cuerpo.
+
+`export def inspect-direct [--flag] { r3viewer inspect-input | ^python ... ...(if $flag { ['x'] } else { [] }) }` conserva absent/nothing/string/list. Implementar viewer con pipeline directo y construir argumentos mediante expresiones inline, sin prelude. Corpus de regresión obligatorio para el módulo definitivo.
+
+`path self` es keyword const de Nu instalado: resuelve ruta del archivo/módulo al parsear y rutas relativas. `plugin use` necesita registro previo; no carga arbitrariamente un binario no registrado. Pruebas actuales usan --plugins explícito temporal. Distribución requiere preparar registro privado propio de instalación, sin alterar perfiles por pruebas; no insertar silenciosamente comandos de registro global en el módulo.

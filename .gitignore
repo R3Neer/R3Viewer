@@ -12,3 +12,5 @@ Thumbs.db
 .DS_Store
 
 /.tools/
+/vendor/nushell/target/
+/vendor/nushell/Cargo.lock

@@ -1,0 +1,85 @@
+{
+  "version": "0.115.1",
+  "source": "https://github.com/nushell/nushell/tree/0.115.1",
+  "license": "MIT",
+  "packages": [
+    {
+      "name": "nu-plugin-core",
+      "version": "0.115.1",
+      "archive_sha256": "d196dd9a016a90f0b893fa3d7ba3f7fbc84b61bf9b7abbf3ce07e61fa40c9319",
+      "upstream_files_sha256": {
+        "Cargo.toml": "11b5d947d51113486320e18f8915bf165228d3cdbbeffc2a0052a9a758783559",
+        "Cargo.toml.orig": "8aa3903ed72b3d32fff79f62f471bccd60fa10ddd25692195704c3c54c86736e",
+        "LICENSE": "3d23502719a1557ebfccca99dfc2a4bce7b43c281c1408df2101dac12c65d46b",
+        "README.md": "26e3509a02a272ee0097b4ae46c429cf2959fdffb3f072c72baca784f4692281",
+        "src/communication_mode/local_socket/mod.rs": "73ecdf4336c8667d1cf9fb40f01945fb9263b249d38fc37a316ea354c756a0f7",
+        "src/communication_mode/local_socket/tests.rs": "3b75ecec479abd93a7e704a82808fb07d31610d35ad3f299f72d3baf90a77195",
+        "src/communication_mode/mod.rs": "604443755c90542a95fa283b02fbdcea8e05fa7a74d6f51604f7b14bd963de78",
+        "src/interface/mod.rs": "ac28e94b9f16d30ba7f5542e893446a734342527c28e7f4c9fa22770c1e6cc8b",
+        "src/interface/stream/mod.rs": "64d4f8de07a5574c7aa793c47d0e60b8578acad0e329428b485c08ad5b709658",
+        "src/interface/stream/tests.rs": "51a07d1c3b6b9cf648c8e702932887cda3a8f44066244f6b8d066d3cdbba2bc8",
+        "src/interface/test_util.rs": "a97ca8df04b8e03a4a983a8149a013c560e2f861a21468d14941cbec0b40908b",
+        "src/interface/tests.rs": "8cb30b30793c5fa8e92c10928803427d3b44ce514257c4c934ac527f822da2d7",
+        "src/lib.rs": "39ed2f09b8c0364ea5c88086e05253f1e0e10596023574042e0aca78c5744642",
+        "src/serializers/json.rs": "cd1a7c93cceff385e242592daa95f84f5d83c4e762e61a368c5c48ac3d8e8bf4",
+        "src/serializers/mod.rs": "013b67a182c3e7120ff37f570a286a0a9769b3c94d0794fa383f7bd2a7233138",
+        "src/serializers/msgpack.rs": "28b1df07b7bede34394fac064222cf6f795d76703166cf88729c8a10d199989b",
+        "src/serializers/tests.rs": "cf546c53a6a3548a49f26cafa8faaa1eb6f42357e03244636e621610b72e0219",
+        "src/util/mod.rs": "dd93e5aee4e097948ad64a7c7b98aab235019bd9d83a811f8f22d946a1d8d4b6",
+        "src/util/waitable.rs": "8fbb55c148574623d65fcf69f0bc20bc8e1e9e3c479f5e251f893b6d8a0341dd",
+        "src/util/with_custom_values_in.rs": "53180760f0460299978f0736ceb75468ad4002bbe8a10a3935c12302a37130bb"
+      },
+      "upstream_files_lf_sha256": {
+        "Cargo.toml": "11b5d947d51113486320e18f8915bf165228d3cdbbeffc2a0052a9a758783559",
+        "Cargo.toml.orig": "9c4f9962e2df53835459a41e14d48289be7ab1fb05a95db72b312da01575b3b8",
+        "LICENSE": "2dc1f03f729c21902d869b4d8f8dc528fc730f4c6ad83fc128672bda0ad69196",
+        "README.md": "9c97853c98b665bdcd84a594e1ef9ad1b6a5c6797894aae7034947d2e5e1e6ec",
+        "src/communication_mode/local_socket/mod.rs": "3bc4b651a03e9df4d076b4ecc41a60c2a5d61a97cd5b4d6047e45ebb1bdaec33",
+        "src/communication_mode/local_socket/tests.rs": "c28dfec1baebac8152dc757f0e67f6152da30bb554f393d9b65d90ccfeceb9e2",
+        "src/communication_mode/mod.rs": "88376334f227de75a0b48f30bfeeb08af8de3481818390059d23203dcb58f844",
+        "src/interface/mod.rs": "fe08ca61b173e3034e9482bb36a9ec43df81ae240f6e7af561e3b16ccdd0b803",
+        "src/interface/stream/mod.rs": "7d581d0cd46259728803234151c8a1c33d1131fc9f5b322006816a940ad2fda1",
+        "src/interface/stream/tests.rs": "bd01e18c47bbed97ac07818f8f3d7ebf7c7a2e5155b85cdf9316edd46454e46a",
+        "src/interface/test_util.rs": "ba877647d6f7725d268a7c0290299304052639a59a58ce9cca95661939f82888",
+        "src/interface/tests.rs": "c668942f7e63fb00e6f25c8fec9738f829de95dc667c8d726aa23b25a7f07e80",
+        "src/lib.rs": "ce93dabf8941842596f2a5d32a282de4113253055e1539146778bfafd5a6e38d",
+        "src/serializers/json.rs": "04483f02097c1ecab914ba592353a3a47254b1cab323916d58de58e69af58d55",
+        "src/serializers/mod.rs": "c9043126aeeef1bd412d630a4cf00fa94b6baf1660b00cbd68b1c2a1346e7037",
+        "src/serializers/msgpack.rs": "6cb11b9654f9099ad8bad831d35c86b98ebbf3fff16c6bc3b67189ee6239b860",
+        "src/serializers/tests.rs": "9c2551fde5754cc22646e8499acdb3c65f62e6d4548bd2d8fd6f7793d1c4fcc4",
+        "src/util/mod.rs": "17a61ec1a392bdc80bd908efe84c463fa0d0f38df1ab5919fdb5d70e06bc7729",
+        "src/util/waitable.rs": "7fa2dd412c255f7998d9dfd4f3da65ff00443cf94d91efade67b474ba0134bb2",
+        "src/util/with_custom_values_in.rs": "f70677b9246bc4241e697cc011013432b5477a422849985be53902c984a22bbb"
+      }
+    },
+    {
+      "name": "nu-plugin",
+      "version": "0.115.1",
+      "archive_sha256": "347f0fb6b328f6704a403cb5570872926a171026960ecf5208f0597244bb0514",
+      "upstream_files_sha256": {
+        "Cargo.toml": "86a4a41604f7244ca687c6784c0410023e6fc007f7d68e5aa29a8ec130a38e94",
+        "Cargo.toml.orig": "be79b22357008d8239a77275fa962f34e66109d8867e2b8a3abf7e7285a812a1",
+        "LICENSE": "3d23502719a1557ebfccca99dfc2a4bce7b43c281c1408df2101dac12c65d46b",
+        "README.md": "e8c635bfcc085fbea3e5b76f0ed062090f0c9515e73ef11aa7bcc08bfb927634",
+        "src/lib.rs": "ceba4156075ed0c575c7088cef70c1c70b108be348686be992fc9eded0a67327",
+        "src/plugin/command.rs": "7a05adeced2e2d1c23e3c8f5977bda04fdcb6c5d0052aa210d58c48256075775",
+        "src/plugin/interface/mod.rs": "0c5a47091a4ebc9ae805a32a8593338869826c6b3bd79b11bc17deee064a26e2",
+        "src/plugin/interface/tests.rs": "a71e99a1f370633d88927a8f9f6f6a712c4696cd7c432bef430a69389de68cf7",
+        "src/plugin/mod.rs": "73f103b088debc67711b3f11657956cadc2dbf0f2149841781f76c72f04bab00",
+        "src/test_util.rs": "a4ca8c353e4ec19f336a4a627c08c2e72fe4bfe9ea3b7d74cb9e718aa710d53d"
+      },
+      "upstream_files_lf_sha256": {
+        "Cargo.toml": "86a4a41604f7244ca687c6784c0410023e6fc007f7d68e5aa29a8ec130a38e94",
+        "Cargo.toml.orig": "b218a36c0f79c27de97e5159b72ab7b26c2c8ab6d09346534bf190a1f242bdef",
+        "LICENSE": "2dc1f03f729c21902d869b4d8f8dc528fc730f4c6ad83fc128672bda0ad69196",
+        "README.md": "f0051addf5eaec07fefef2102d6cc17828359b696b09ee233c916c7514900d22",
+        "src/lib.rs": "2ecd320552372edda0c311112c08e3e07c6479eb15665724696c36abbb85d369",
+        "src/plugin/command.rs": "8535179af34dacca7a6a04bce12a4dcc21bb3e6d58a5d2d202c49b124743e5b8",
+        "src/plugin/interface/mod.rs": "330a4a667a6b6e01db2be7018bec6df813186b0c87f0bfa2cb9d9f65139bb80e",
+        "src/plugin/interface/tests.rs": "fd0b248397b7fff1b8f7e237fa4e7e99b8f6723d74a5aa70869d16bdce829928",
+        "src/plugin/mod.rs": "2f8fed100f208e944f75e13a20cec5c27a26e509a470a7bda6fb5cf874e848ad",
+        "src/test_util.rs": "83ad1c076f677672cbcc01e46fced5c2163c94db50db22c8b9938bf4fd852583"
+      }
+    }
+  ]
+}
