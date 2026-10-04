@@ -51,7 +51,7 @@ Registradas el 2026-10-04 en una única respuesta. A/B remiten a las alternativa
 - Destino futuro: repositorio Git bajo D:\Tools.
 - Nombre aprobado el 2026-10-04: D:\Tools\R3Viewer; comando viewer.
 - Intención futura: subir a GitHub. No autoriza publicación ahora.
-- No se ha creado repositorio ni movido la documentación fuera del chat.
+- Repositorio creado en D:\Tools\R3Viewer el 2026-10-04 por autorización posterior; documentación canónica migrada y commits locales autorizados. Sin remoto ni publicación.
 
 ## Sustituciones
 
@@ -72,3 +72,11 @@ Q02 retira el contrato anterior de open -p/--pretty y su incompatibilidad con --
 - open de URLs sería una ampliación distinta y sigue sin aprobarse. Se recomienda mantener http get para transporte remoto.
 - La petición mantiene la fase de análisis: no se implementa conversor, visor ni repositorio.
 - Q24 confirmada: controles HTML solo muestran estado; no modificar casillas ni enviar formularios.
+
+## Preparación autorizada y decisiones técnicas de trabajo
+
+Encargo posterior autoriza migrar documentación, git init, política de commits y commits locales. Continúa sin autorizar implementar el producto ni instalar/publicar. README y CONTRIBUTING son entradas canónicas; las copias del chat quedan históricas.
+
+ADRs registrados: núcleo Rust, encoder compañero Nu + módulo + proceso de terminal externo; DOM/documento/datos separados; Ratatui/Crossterm/ratatui-image con renderer inline específico; PDFium privado preferido a MuPDF; Mermaid oficial y MathJax workers; html5ever/pulldown-cmark/resvg/image/syntect como base de diseño. No son integraciones probadas ni versiones bloqueadas.
+
+Revisión documental inicial cerrada en docs/research/INVESTIGACION_TECNICA.md. RV-008 valida las decisiones antes de ampliar desarrollo; versiones/arquitecturas y garantías quedan candidatas hasta QA. Licencia de proyecto pendiente de respuesta, MIT recomendada.

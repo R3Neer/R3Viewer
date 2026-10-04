@@ -55,3 +55,19 @@ Entradas finitas inicialmente; no prometer detectar infinitud. Cancelación disp
 ## Pendientes que no se trasladan al usuario como elecciones de tecnología
 
 Lenguaje, protocolo Nu, acceso al TTY, APIs, bibliotecas, licencias, versiones, métricas y códigos exactos: decisiones técnicas con investigación y alternativas justificadas. Preguntar al usuario cuando cambien instalación, cobertura, comportamiento o experiencia prometida.
+
+## Resolución técnica en preparación del repositorio
+
+Fecha: 2026-10-04. Véanse ../architecture/ARQUITECTURA.md y ../research/INVESTIGACION_TECNICA.md. Se adoptan como decisiones de trabajo: --format, origen único, ausencia de entrada como error, salida textual automática cuando stdout no es terminal; códigos 0 normal, 1 fatal IO/render, 2 CLI/config y 130 cancelación (propagación por Nu por validar). Documento parcialmente legible mantiene 0 con diagnóstico stderr; limitación que impide completar entrada es fatal, nunca truncamiento oculto.
+
+Navegación por URL de pipeline: sigue siendo texto. Para abrirla, pasar explícitamente como argumento, por ejemplo viewer ($url); --path se mantiene local. --value interpreta la cadena como contenido y --format indica HTML/Markdown si hace falta. El comando no adivina que una cadena parece URL o existe como ruta al recibirla por pipe.
+
+Datos finitos se transportan por frames limitados, lectura cancelable. Los límites alcanzados no eligen datos silenciosamente: diagnóstico y cancelación/error, o selección de ventana explícita. Cancelar durante una carga conserva vista anterior cuando exista.
+
+from html se importa desde módulo opcional; la instalación del encoder no exporta ese conversor silenciosamente. Su proyección --flat es una capacidad posterior opcional, no necesaria para devolver árbol completo. El parser comparte representación y origen con adaptador HTML; metadatos que no sobreviven en pipeline requieren base explícita --base, propuesta de nombre.
+
+PDF con texto permite búsqueda y salto; highlight exacto depende de validación de bounding boxes. PDF escaneado sigue visible, búsqueda comunica ausencia de texto. Selección/copia exacta y OCR no prometidos. SVG/imágenes animadas muestran representación estática inicial. No ejecutar acciones de PDF, scripts HTML o código de Markdown.
+
+Búsqueda v1: texto literal con siguiente/anterior y estado sin coincidencias; contenido textual del documento completo dentro de límites; PDF indexado por página bajo demanda. No prometer regex, OCR ni búsqueda de imágenes. Búsqueda profunda en datos tiene límites visibles y no evalúa valores ejecutables.
+
+Configuración v1: archivo TOML por usuario en ruta estándar del SO; flags prevalecen sobre config, luego entorno y detección. NO_COLOR se respeta salvo override explícito; --graphics auto|sixel|kitty|iterm2|symbols|none propuesto. Teclado funcional sin ratón y ayuda de teclas en sesión; no vincular todas las acciones al ratón.

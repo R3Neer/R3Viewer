@@ -1,6 +1,6 @@
 # Viewer: batería de preguntas
 
-Fecha: 2026-10-04. Q01–Q22 respondidas por el usuario; Q03 tiene una condición por cerrar y Q11 abre Q23. Se conservan las alternativas originales como historial.
+Fecha: 2026-10-04. Q01–Q25 respondidas o aclaradas; Q03 cerrada, Q23 orientada a HTML estático, Q24 solo lectura y Q25 from html opcional. Se conservan las alternativas originales como historial.
 
 Relacionado: [requisitos](REQUISITOS.md), [decisiones](DECISIONES.md).
 
@@ -245,3 +245,8 @@ Ejemplo: open pagina.html devuelve árbol HTML; open -r pagina.html muestra fuen
 - B. Mantener HTML solo dentro de viewer inicialmente: inspección estructural por herramientas existentes o ampliación futura.
 
 Respuesta confirmada: A, incluir from html como utilidad opcional. El árbol estructural conserva información que el lector no muestra.
+
+
+## Preparación técnica posterior
+
+El repositorio canónico ya es D:\Tools\R3Viewer. Investigaciones y gates en ../research/INVESTIGACION_TECNICA.md y ../VALIDACION.md. Licencia MIT/GPL-3.0/pendiente preguntada al usuario; no elegida todavía. Las preguntas originales se conservan como historial y sus respuestas prevalecen.

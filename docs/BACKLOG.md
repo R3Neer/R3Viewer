@@ -1,12 +1,12 @@
 # R3Viewer: backlog inicial
 
-Fecha: 2026-10-04. Todos los elementos pendientes. Planificación autorizada; ejecución no autorizada. Dependencias y aceptación propuestas, revisables con respuestas nuevas.
+Fecha: 2026-10-04. Preparación documental y Git autorizados; implementación pendiente de encargo. Los estados precisos se registran al final. Dependencias y aceptación propuestas, revisables con respuestas nuevas.
 
 ## Cómo leerlo
 
 Un producto, dos entregables: lector y puente Nushell. H0 contiene decisiones/investigaciones; H1–H5 son entregas futuras verificables. Terminar un hito no completa todo el producto. Un elemento condicionado no se implementa sin cerrar la decisión indicada. Publicar o instalar exige autorización de destino independiente.
 
-Estados: pendiente, en análisis, listo, bloqueado por decisión, en implementación, en validación, terminado. «Terminado» requiere evidencia de sus criterios, incluidos QA visual cuando corresponda. Estado actual global: pendiente; los análisis documentales existentes son insumos, no prototipos probados.
+Estados: pendiente, en análisis, listo, bloqueado por decisión, en implementación, en validación, terminado. «Terminado» requiere evidencia de sus criterios, incluidos QA visual cuando corresponda. Estado actual: contratos/documentación inicial preparados; algunos elementos H0 pendientes de validación runtime. Véase tabla de estados al final. Los análisis documentales son insumos, no prototipos probados.
 
 ## H0 — Contratos y viabilidad técnica
 
@@ -102,4 +102,22 @@ H0 antes de implementación. H1 habilita H2 y Markdown textual de H3. HTML parse
 
 ## Fuera del alcance actual
 
-open --pretty, sustitución de explore/open, navegador CSS/JS completo, envío de formularios, gestor de archivos con escritura, monitor de streams infinitos, editor de datos, compilación LaTeX de documentos completos y OCR implícito. Publicación, creación del repositorio e implementación no autorizadas por este backlog.
+open --pretty, sustitución de explore/open, navegador CSS/JS completo, envío de formularios, gestor de archivos con escritura, monitor de streams infinitos, editor de datos, compilación LaTeX de documentos completos y OCR implícito. El encargo posterior autorizó crear el repositorio y commits locales. Publicación e implementación no están autorizadas por este backlog.
+
+## Actualización de preparación del repositorio
+
+Repositorio y commits locales autorizados y documentación migrada. Fuente canónica docs/spec. Investigación de T01–T04 documentada en [investigación](research/INVESTIGACION_TECNICA.md) y [arquitectura](architecture/ARQUITECTURA.md); los puntos que necesitan ejecución siguen abiertos como gates, no como preguntas de producto sin investigar.
+
+| Elemento | Estado a 2026-10-04 | Evidencia y siguiente paso |
+|---|---|---|
+| RV-001 | Terminado: especificación | Entrada, flags, validación de un origen y ausencia de entrada en CONTRATOS. Implementación RV-101. |
+| RV-002 | Terminado: especificación | HTML estático, controles solo lectura, from html opt-in; recursos secundarios explícitos. |
+| RV-003 | En validación técnica | Comparación de puentes y TTY cerrada documentalmente; requiere spike RV-008. |
+| RV-004 | En validación técnica | ADR/motores definidos; bundle/build y licencias concretas pendientes RV-008/501. |
+| RV-005 | Terminado: diseño inicial | Modelos y transporte etiquetado en ADR; detalles binarios/build se validan en RV-008/102. |
+| RV-006 | En validación técnica | Matriz/corpus/límites candidatos definidos; versiones reales y métricas requieren ejecución. |
+| RV-007 | Terminado: especificación | stdout/stderr, códigos, configuración y presentación documentados; validar propagación en Nu. |
+| RV-008 | Pendiente; requiere implementación/prototipo autorizado | Gate de puente tipado/TTY/señales, gráficos TUI+inline, PDFium ABI y worker Mermaid/math frío. Depende RV-003/004/005/006; criterios en VALIDACION.md. |
+| H1–H5 | Pendiente | No hay código ejecutable ni QA runtime. |
+
+RV-008 bloquea desarrollo amplio H1–H5 hasta verificar arquitectura; un prototipo limitado puede ser la primera tarea de implementación autorizada. No se altera el objetivo final ni se presentan garantías multiplataforma antes de medirlas. El backlog pasa de 39 a 40 elementos al explicitar este gate.

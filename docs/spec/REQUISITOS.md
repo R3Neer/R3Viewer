@@ -1,10 +1,10 @@
 # Viewer: requisitos y alcance
 
-Fecha: 2026-10-04. Estado: análisis inicial, sin autorización de implementación.
+Fecha: 2026-10-04. Estado: análisis y preparación de repositorio; Git y commits locales autorizados, implementación del producto no autorizada.
 
 Documentos relacionados: [decisiones](DECISIONES.md), [preguntas](PREGUNTAS.md) y [aclaraciones](ESTUDIO_ADICIONAL.md).
 
-Actualización: Q01–Q22 respondidas y Q03 cerrada posteriormente. Q23 se orienta a lector HTML estático con convenciones Markdown, por aclaración posterior del usuario. Véanse [HTML/web](WEB_HTML.md), [contratos](CONTRATOS.md) y [backlog](BACKLOG.md). Las recomendaciones no se convierten en decisiones confirmadas al incluirlas en el backlog.
+Actualización: Q01–Q22 respondidas y Q03 cerrada posteriormente. Q23 se orienta a lector HTML estático con convenciones Markdown, por aclaración posterior del usuario. Véanse [HTML/web](WEB_HTML.md), [contratos](CONTRATOS.md) y [backlog](../BACKLOG.md). Las recomendaciones no se convierten en decisiones confirmadas al incluirlas en el backlog.
 
 Este documento registra el estado de la conversación. «Confirmado» expresa una petición o respuesta del usuario; «propuesto» expresa una recomendación pendiente. Los motores mencionados son candidatos documentales, no una integración probada. Las decisiones posteriores sustituyen las propuestas incompatibles y se registran en DECISIONES.md.
 
@@ -20,7 +20,7 @@ Este documento registra el estado de la conversación. «Confirmado» expresa un
 - Lectura de HTML local y remoto con convenciones visuales Markdown, semejante a una página sin CSS; detalles en WEB_HTML.md.
 - Controles HTML solo muestran estado: no se modifican ni se envían formularios.
 - Se retira open --pretty. open y explore permanecen intactos; viewer concentra la visualización.
-- Solo análisis y especificación. Se autoriza guardar y mantener estos Markdown del chat; no implementar, instalar ni modificar unidades.
+- Solo análisis y especificación. Se autoriza mantener documentación canónica en D:\Tools\R3Viewer, inicializar Git y crear commits locales; no implementar, instalar, publicar ni modificar unidades.
 
 ## Organización propuesta del producto
 
@@ -189,3 +189,19 @@ Criterio de aceptación propuesto: abrir una unidad de Clases, mostrar sus gráf
 - [resvg](https://github.com/linebender/resvg)
 - [Mermaid CLI](https://github.com/mermaid-js/mermaid-cli) y [beautiful-mermaid](https://github.com/lukilabs/beautiful-mermaid)
 - [MathJax Node](https://docs.mathjax.org/en/latest/server/direct.html) y [termtex](https://github.com/doug/termtex)
+
+## Cierre de preparación inicial: 2026-10-04
+
+Ubicación canónica: D:\Tools\R3Viewer. Git y commits locales autorizados por encargo posterior. Las frases históricas sobre documentación solo en el chat quedan sustituidas por esta migración. No autoriza implementación del visor, instalación ni publicación.
+
+Investigación técnica: [resultados](../research/INVESTIGACION_TECNICA.md), [arquitectura](../architecture/ARQUITECTURA.md), [validación](../VALIDACION.md). Las versiones/arquitecturas son candidatas y requieren ejecución; no afirmar garantía actual de soporte.
+
+Contratos técnicos de trabajo: --format para formato ambiguo; rechazar varios orígenes y ausencia de entrada con diagnóstico; texto automático al redirigir stdout; sin terminal no iniciar TUI. stdout lleva contenido, stderr diagnóstico. Salida normal 0; fallo de entrada/configuración 2; fallo fatal de lectura/render 1; cancelación 130; errores locales recuperables conservan original y no hacen fallar documento. Son decisiones de diseño, sujetas a verificar propagación de códigos en Nu.
+
+Archivos de datos compatibles inicialmente JSON/YAML/TOML/XML: fuente resaltada por defecto, interpretación en modo explícito; sin conversiones destructivas ni ejecución. Markdown/CommonMark y extensiones declaradas, wikilinks/callouts propios y Mermaid/math con corpus de aceptación. HTML conserva semántica sin ejecutar CSS/JS; MathML y modo artículo no se añaden automáticamente.
+
+Propuesta de transporte y tipos: véase ADR-001. Se mantienen tipos fundamentales, anidamiento y orden; valores custom opacos identificados no prometen comprensión universal. PDF: búsqueda sobre texto extraíble, página física y resultados navegables; OCR y copia exacta de maquetación fuera del contrato inicial.
+
+Imágenes: primera imagen/frame estático por defecto, sin animaciones indefinidas. Binario/carpetas con inspección lazy; metadata de Show-Tree opcional conserva snapshot recibido. Recursos remotos secundarios: referencias por defecto, acción individual interactiva y --load-remote propuesto por invocación. No se guardan permisos permanentes por inferencia.
+
+Límites iniciales de diseño, configuración, matriz candidata y metas experimentales están en investigación; no son resultados acreditados. Distribución completa con runtime privado y inventario de licencias; from html opt-in para no cambiar open HTML al instalar únicamente el puente viewer.

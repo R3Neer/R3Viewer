@@ -32,7 +32,7 @@ ls | where size > 1mb | viewer          # tabla transformada recibida
 
 No admitir simultáneamente argumento de contenido y entrada de tubería sin definir una combinación explícita; propuesta: error por dos fuentes. --path requiere una sola ruta textual en la primera versión. Una lista de cadenas sin --path permanece una lista de datos.
 
-Nombres finales, formatos explícitos y cierre de la condición Q03 pendientes.
+Actualización: Q03 cerrada posteriormente con --path/-p y --value/-v. El estado técnico vigente está en CONTRATOS.md y ../architecture/ARQUITECTURA.md; este estudio conserva antecedentes de la investigación.
 
 ## URLs y páginas web
 
