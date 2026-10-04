@@ -1,14 +1,14 @@
 # R3Viewer: contratos para preparar el backlog
 
-Fecha: 2026-10-04. Especificación de análisis, sin implementación autorizada.
+Fecha inicial: 2026-10-04. Contratos vigentes durante desarrollo autorizado; detalles refinados y verificados por objetivos según ../process/METODOLOGIA.md.
 
 ## Estado y autoridad
 
-REQUISITOS.md y DECISIONES.md recogen decisiones confirmadas. Este documento concreta recomendaciones operativas y señala lo pendiente. El backlog no autoriza implementar, instalar, publicar ni elegir implícitamente una opción pendiente. Crear Git y commits locales fue autorizado por encargo posterior.
+REQUISITOS.md y DECISIONES.md recogen decisiones confirmadas. Este documento concreta recomendaciones operativas y señala lo pendiente. El backlog no autoriza implementar, instalar, publicar ni elegir implícitamente una opción pendiente. El usuario autorizó posteriormente implementación completa y commits locales; publicación y cambios de perfiles siguen fuera del encargo.
 
 ## Entrada: Q03 confirmada
 
-Confirmado por el usuario: argumento posicional local abre archivo/carpeta; URL HTTP(S) explícita abre recurso remoto; pipeline contiene un valor. --path/-p fuerza ruta local; --value/-v fuerza valor literal. Flags incompatibles. Propuestas de validación: un solo origen, rechazar argumento más pipeline no vacío y múltiples argumentos. Una tabla/lista es un valor, no varios archivos. No detectar rutas examinando si una cadena de pipeline coincide con un archivo existente.
+Confirmado por el usuario: argumento posicional local abre archivo/carpeta; URL HTTP(S) explícita abre recurso remoto; pipeline contiene un valor. --path/-p fuerza ruta local; --value/-v fuerza valor literal. Flags incompatibles. Contrato refinado: un solo origen; argumento más pipeline semánticamente presente, incluidos nothing/null, cadena vacía y lista vacía, produce error2. Rechazar múltiples argumentos. El stdin textual externo de r3viewer con EOF vacío no representa por sí mismo un valor Nu presente. Una tabla/lista es un valor, no varios archivos. No detectar rutas examinando si una cadena de pipeline coincide con un archivo existente.
 
 Sin entrada: diagnóstico y ejemplo de uso; no abrir cwd implícitamente. Formato explícito debe poder resolver texto ambiguo; --format es nombre propuesto. Una URL de pipeline es texto salvo modalidad explícita de origen remoto, cuyo contrato está pendiente. No ampliar --path a URLs sin cambiar su definición.
 

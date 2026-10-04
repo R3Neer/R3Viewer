@@ -1,6 +1,6 @@
 # R3Viewer: Product Backlog
 
-Fecha: 2026-10-04. Preparación documental y Git autorizados; implementación pendiente de encargo. Los estados precisos se registran al final. Dependencias y aceptación propuestas, revisables con respuestas nuevas.
+Fecha inicial: 2026-10-04. Implementación completa y commits locales autorizados; Scrum por objetivos sin cadencia fija. Los estados conservan aceptación real, sin cerrar QA ausente. Los estados precisos se registran al final. Dependencias y aceptación propuestas, revisables con respuestas nuevas.
 
 ## Cómo leerlo
 
@@ -102,7 +102,7 @@ Ordenar el Product Backlog por valor y riesgo; las épicas no son sprints fijos.
 
 ## Fuera del alcance actual
 
-open --pretty, sustitución de explore/open, navegador CSS/JS completo, envío de formularios, gestor de archivos con escritura, monitor de streams infinitos, editor de datos, compilación LaTeX de documentos completos y OCR implícito. El encargo posterior autorizó crear el repositorio y commits locales. Publicación e implementación no están autorizadas por este backlog.
+open --pretty, sustitución de explore/open, navegador CSS/JS completo, envío de formularios, gestor de archivos con escritura, monitor de streams infinitos, editor de datos, compilación LaTeX de documentos completos y OCR implícito. El encargo posterior autorizó crear el repositorio y commits locales. Este backlog no autoriza publicación; la implementación quedó autorizada después, según el apartado vigente.
 
 ## Actualización de preparación del repositorio
 
@@ -121,7 +121,7 @@ Repositorio y commits locales autorizados y documentación migrada. Fuente canó
 | H1–H5 | Pendiente | No hay código ejecutable ni QA runtime. |
 
 RV-008 coordina spikes por riesgo dentro de E10, con referencias a E02/E04/E05: no es bloqueo global de H1–H5. Cada validación antecede solo a las historias que dependen de ella; prototipos e implementación requieren encargo futuro. Los sprints buscan cortes verticales útiles, no completar toda una capa horizontal. No se altera el objetivo final ni se presentan garantías multiplataforma antes de medirlas. El backlog contiene 39 tareas únicas: 38 originales y el gate RV-008 añadido. El recuento anterior de 39 antes del gate era incorrecto.
-## Organización Scrum vigente
+## Organización Scrum histórica antes de la adaptación
 
 Plan general revisado por adversario independiente: dos propuestas generales y dos informes temporales; cierre SIN_CRITICAS_PENDIENTES. Épicas E01–E10 y propietarios principales en architecture/ARQUITECTURA.md, única tabla canónica de asignación. Las referencias secundarias no duplican tareas.
 
@@ -139,6 +139,6 @@ Implementación completa autorizada el 2026-10-04. Scrum por objetivos sin caden
 | S01-A entrada textual | Comprobado Windows | Archivo/literal/stdin finito; Unicode/vacíos/conflictos/límites. RV-101 parcial. |
 | S01-B salida textual | Comprobado Windows | -i y redirección, controles visibles, canales, cancelación de escritura. RV-103 parcial. |
 | S01-C sesión | En validación | ConPTY funcional, teclado por pipe y retorno; QA visual/matriz pendiente. RV-104 parcial. |
-| S02 puente Nu | Refinamiento | Contrato candidato en sprints/S02.md; no integración tipada implementada. |
+| S02 puente Nu | Comprobado funcionalmente Windows | 48pruebas, revisión integrada R1 sin críticas, AE y ConPTY Ctrl-C/reset/máscaras. QA visual/matriz y distribución pendientes. RV-102 parcial; sprints/S02.md. |
 
 S01 código revisado iterativamente hasta R2 SIN_CRITICAS_PENDIENTES; aceptación independiente y15pruebas. Evidencia y límites en sprints/S01.md. RV-003/004/006/008 y H1–H5 conservan pendientes completos; no borrar tareas ni marcar RV terminado por subhistorias comprobadas.

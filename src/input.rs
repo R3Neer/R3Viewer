@@ -30,6 +30,7 @@ impl InputError {
 pub struct TextSource {
     pub title: String,
     pub text: String,
+    pub typed: Option<r3viewer_wire::TypedInput>,
 }
 
 fn read_bounded(mut reader: impl Read, limit: usize) -> io::Result<Vec<u8>> {
@@ -78,6 +79,9 @@ pub fn load(
     stdin_is_terminal: bool,
     cancelled: Arc<AtomicBool>,
 ) -> Result<TextSource, InputError> {
+    if cli.nu_wire {
+        return crate::nu_input::load(cli, cancelled);
+    }
     if cli.source.is_none() && stdin_is_terminal {
         return Err(InputError::new(
             2,
@@ -137,7 +141,11 @@ pub fn load(
             ),
         )
     })?;
-    Ok(TextSource { title, text })
+    Ok(TextSource {
+        title,
+        text,
+        typed: None,
+    })
 }
 
 #[cfg(test)]

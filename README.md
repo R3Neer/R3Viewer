@@ -2,7 +2,7 @@
 
 Visor de archivos, documentos y valores de Nushell, con lectura interactiva y salida inline (`--inline/-i`). Windows nativo, macOS y Linux son objetivos de soporte.
 
-Estado: desarrollo autorizado, primer incremento en preparación. Todavía no hay una entrega certificada. Implementación, revisión iterativa y commits locales autorizados; publicación e instalación en perfiles personales fuera del encargo.
+Estado: desarrollo autorizado; lectura textual e integración Nu tipada comprobadas funcionalmente en Windows. Todavía no hay una entrega certificada. Implementación, revisión iterativa y commits locales autorizados; publicación e instalación en perfiles personales fuera del encargo.
 
 ## Documentación
 
@@ -13,7 +13,7 @@ Estado: desarrollo autorizado, primer incremento en preparación. Todavía no ha
 - [Arquitectura general y épicas](docs/architecture/ARQUITECTURA.md), revisada iterativamente con adversario independiente hasta cierre sin críticas, y [validación por capacidad](docs/VALIDACION.md).
 - [Política de commits](CONTRIBUTING.md).
 
-## Uso previsto, todavía no implementado
+## Contrato objetivo; cobertura actual indicada más abajo
 
 ```nu
 viewer notas.md
@@ -43,12 +43,12 @@ El usuario autoriza implementar el producto completo siguiendo [Scrum por objeti
 
 ## Incremento textual disponible para desarrollo
 
-S01 contiene lector UTF-8 local/literal/stdin externo, salida textual y sesión de terminal. Ejecutable de desarrollo `r3viewer`; el comando público `viewer` y el puente Nu tipado son trabajo posterior. No es la distribución final ni acredita todos los formatos del uso previsto.
+S01 contiene lector UTF-8 local/literal/stdin externo, salida textual y sesión de terminal. S02 incorpora el módulo público `viewer` y companion privado `nu_plugin_r3viewer`; transporta valores tipados de Nushell al ejecutable `r3viewer`. Todavía se muestran como proyección textual: navegación estructurada y formatos enriquecidos están pendientes. No es la distribución final.
 
 ```powershell
 . ./scripts/dev.ps1 # si se usa el toolchain privado .tools
-cargo test --locked
-cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked --workspace
+cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo run -- --value "Texto literal"
 cargo run -- -i archivo.txt
 ```
@@ -58,3 +58,13 @@ Para otro entorno de desarrollo se necesita Rust 1.99.0 conforme a rust-toolchai
 Límites S01: solo texto UTF-8, hasta 128MiB por entrada; URL, formatos enriquecidos y --path desde pipe textual diagnosticados como pendientes. Pipeline externo textual no preserva tipos Nu. -p y -v incompatibles; stdin vacío válido, sin entrada con TTY error2. ESC/OSC y controles peligrosos se muestran visiblemente. Cancelación devuelve130; BrokenPipe sin cancelación es salida normal. Sesión: flechas/hjkl, páginas, Home/End, ?, q/Escape y Ctrl-C.
 
 Validación actual: 15 pruebas, fmt y Clippy Windows; compilación/Clippy de partes Linux sin ejecutar Linux. Revisión adversaria de código R2 sin críticas pendientes; aceptación textual independiente. ConPTY funcional comprobado; QA visual Windows Terminal/WezTerm y resto de matriz pendiente. Detalle: docs/sprints/S01.md. Script opcional de reproducción de señales Windows: `python scripts/test-cancellation-windows.py target/debug/r3viewer.exe` (binario debug, grupos hijos aislados; no prueba visual y falla como inconcluso si el proceso acaba antes de señal).
+
+## Prueba de desarrollo con Nushell
+
+Construir workspace y preparar directorios privados bin/ y nu/ con los dos ejecutables y nu/r3viewer.nu. Cargar companion temporalmente en Nu0.115.1 con --plugins y usar módulo, sin registrar plugins ni cambiar perfiles. En esta sesión existe .tmp/package para reproducir:
+
+```powershell
+& 'C:/Users/Usuario/AppData/Local/Programs/nu/bin/nu.exe' -n --plugins '[D:/Tools/R3Viewer/.tmp/package/bin/nu_plugin_r3viewer.exe]' -c 'use D:/Tools/R3Viewer/.tmp/package/nu/r3viewer.nu *; {nombre: "Ana", puntos: 42} | viewer -i'
+```
+
+Validación S02: 48pruebas del workspace, Clippy/fmt, revisión independiente R1 sin críticas y aceptación de tipos, errores, límites y abandono. ConPTY propia confirma Ctrl-C130, modos restaurados y siguiente invocación funcional; no acredita QA visual. [Detalle y límites](docs/sprints/S02.md). Custom ajenos no son universalmente transportables: Nu los rechaza por propietario. No se convierten ejecutando callbacks.

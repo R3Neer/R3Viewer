@@ -1,0 +1,12 @@
+[package]
+name = "r3viewer-wire"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+description = "Bounded neutral typed transport for R3Viewer"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+rmp-serde = "1.3"
+serde_bytes = "0.11"

@@ -1,0 +1,16 @@
+[package]
+name = "r3viewer-nu-plugin"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "MIT"
+description = "Private Nushell typed encoder for R3Viewer"
+
+[[bin]]
+name = "nu_plugin_r3viewer"
+path = "src/main.rs"
+
+[dependencies]
+nu-plugin = "=0.115.1"
+nu-protocol = "=0.115.1"
+r3viewer-wire = { path = "../wire" }

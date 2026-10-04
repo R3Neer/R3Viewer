@@ -1,6 +1,6 @@
 # Viewer: requisitos y alcance
 
-Fecha: 2026-10-04. Estado: análisis y preparación de repositorio; Git y commits locales autorizados, implementación del producto no autorizada.
+Fecha inicial: 2026-10-04. Estado vigente: desarrollo completo autorizado, Scrum por objetivos sin cadencia fija según ../process/METODOLOGIA.md. Commits locales autorizados; publicación e instalación en perfiles personales fuera del encargo.
 
 Documentos relacionados: [decisiones](DECISIONES.md), [preguntas](PREGUNTAS.md) y [aclaraciones](ESTUDIO_ADICIONAL.md).
 
@@ -20,7 +20,7 @@ Este documento registra el estado de la conversación. «Confirmado» expresa un
 - Lectura de HTML local y remoto con convenciones visuales Markdown, semejante a una página sin CSS; detalles en WEB_HTML.md.
 - Controles HTML solo muestran estado: no se modifican ni se envían formularios.
 - Se retira open --pretty. open y explore permanecen intactos; viewer concentra la visualización.
-- Solo análisis y especificación. Se autoriza mantener documentación canónica en D:\Tools\R3Viewer, inicializar Git y crear commits locales; no implementar, instalar, publicar ni modificar unidades.
+- Autoridad vigente: implementar el producto completo y mantener documentación/commits locales en D:\Tools\R3Viewer. No publicar, instalar en perfiles personales ni modificar unidades de Clases.
 
 ## Organización propuesta del producto
 
@@ -41,7 +41,7 @@ Componentes internos:
 - Presentación normal: imprimir texto y gráficos, finalizar y dejar salida en el historial.
 - Presentación interactiva: navegación, búsqueda, historial, ampliación y redibujado.
 
-Los adaptadores y motores externos no son productos independientes nuestros. Se elige distribución completa; reconsiderar modularidad necesita nueva respuesta. Lenguaje, motores y protocolo de integración pendientes.
+Los adaptadores y motores externos no son productos independientes nuestros. Se elige distribución completa; reconsiderar modularidad necesita nueva respuesta. Las decisiones técnicas y su evidencia vigente se encuentran en arquitectura, investigaciones y sprints; los motores candidatos no acreditan funcionamiento.
 
 ## Requisitos específicos confirmados por Q01–Q22
 
@@ -61,7 +61,7 @@ Los adaptadores y motores externos no son productos independientes nuestros. Se 
 - Distribución completa B; variante modular solo como alternativa por reconsiderar.
 - Garantizar Windows Terminal en Windows y WezTerm en Windows/macOS/Linux; versiones/arquitecturas pendientes.
 - Configuración sencilla, teclado completo y ratón opcional.
-- Entregas verificables; implementación/publicación no autorizadas ahora.
+- Entregas verificables; implementación autorizada, publicación pendiente de autorización de destino.
 - Preferencia visual confirmada: discreción como Show-Tree e integración con lenguaje visual de Nushell. Evaluación R3CLI documentada en ESTUDIO_ADICIONAL.md; no imponer banners ni perder tipos por motivos de presentación.
 
 ## Requisitos funcionales generales propuestos
