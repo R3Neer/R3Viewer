@@ -79,4 +79,4 @@ Encargo posterior autoriza migrar documentación, git init, política de commits
 
 ADRs registrados: núcleo Rust, encoder compañero Nu + módulo + proceso de terminal externo; DOM/documento/datos separados; Ratatui/Crossterm/ratatui-image con renderer inline específico; PDFium privado preferido a MuPDF; Mermaid oficial y MathJax workers; html5ever/pulldown-cmark/resvg/image/syntect como base de diseño. No son integraciones probadas ni versiones bloqueadas.
 
-Revisión documental inicial cerrada en docs/research/INVESTIGACION_TECNICA.md. RV-008 valida las decisiones antes de ampliar desarrollo; versiones/arquitecturas y garantías quedan candidatas hasta QA. Licencia de proyecto pendiente de respuesta, MIT recomendada.
+Revisión documental inicial cerrada en docs/research/INVESTIGACION_TECNICA.md. RV-008 valida las decisiones antes de ampliar desarrollo; versiones/arquitecturas y garantías quedan candidatas hasta QA. Licencia de proyecto MIT confirmada por el usuario el 2026-10-04.

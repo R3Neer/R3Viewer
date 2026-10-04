@@ -31,4 +31,4 @@ Argumentos abren rutas o URLs; el pipeline contiene valores. `--path/-p` y `--va
 
 Repositorio local: `D:\Tools\R3Viewer`. Los documentos iniciales de este chat se copiaron conservando el historial como primer commit. A partir de la migración las modificaciones se hacen aquí; las copias del chat son una referencia histórica.
 
-No hay remoto configurado. La licencia del proyecto aún debe elegirse antes de distribuirlo; no inferir permiso de redistribución por la intención futura de GitHub.
+No hay remoto configurado. Licencia del proyecto: [MIT](LICENSE), confirmada el 2026-10-04. Las dependencias conservan sus licencias y avisos; revisarlos antes de distribuir.

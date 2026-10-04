@@ -41,4 +41,4 @@ No se impone firma nueva ni hooks todavía. Se respeta la identidad y firma conf
 
 Mantener referencias relativas válidas. Los requisitos confirmados se separan de propuestas, y una decisión técnica indica fecha, evidencia y efectos. Un elemento del backlog se cierra solo cuando cumple su aceptación; investigación cerrada no significa QA runtime terminada.
 
-Licencia del proyecto pendiente; revisión de avisos y licencias de dependencias obligatoria antes de distribuir. No incorporar apuntes privados al repositorio: fixtures propios/sintéticos o autorizados.
+Licencia del proyecto MIT, confirmada por el usuario; revisión de avisos y licencias de dependencias obligatoria antes de distribuir. No incorporar apuntes privados al repositorio: fixtures propios/sintéticos o autorizados.

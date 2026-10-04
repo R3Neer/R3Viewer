@@ -249,4 +249,4 @@ Respuesta confirmada: A, incluir from html como utilidad opcional. El árbol est
 
 ## Preparación técnica posterior
 
-El repositorio canónico ya es D:\Tools\R3Viewer. Investigaciones y gates en ../research/INVESTIGACION_TECNICA.md y ../VALIDACION.md. Licencia MIT/GPL-3.0/pendiente preguntada al usuario; no elegida todavía. Las preguntas originales se conservan como historial y sus respuestas prevalecen.
+El repositorio canónico ya es D:\Tools\R3Viewer. Investigaciones y gates en ../research/INVESTIGACION_TECNICA.md y ../VALIDACION.md. Licencia MIT confirmada por el usuario. Las preguntas originales se conservan como historial y sus respuestas prevalecen.

@@ -76,7 +76,7 @@ No fijar MSRV/crates a latest/main sin compilar conjunto. El main consultado de 
 
 Completo por defecto no significa arquitectura monolítica. El usuario no necesita instalar Python/Rust/Node global para usar el paquete final. Rust será requisito de desarrollo; runtime Node/Chromium privado solo se inicia para capacidad que lo necesita. Instalador futuro Nu usa manifiesto de archivos/registro, integración reversible y perfiles preservados.
 
-Licencias: proyecto pendiente de respuesta; se recomienda MIT. PDFium tiene licencia BSD-style y dependencias propias; pdfium-render requiere su propio aviso. MuPDF se documenta como AGPL/comercial, por eso no se adopta automáticamente. Chafa no se vincula por defecto. Mermaid/MathJax, Chromium, fuentes y codecs se inventarían con su versión exacta antes de distribuir, incluyendo notices y obligaciones de binarios. Esta revisión de candidatos no acredita legalmente un bundle que aún no existe.
+Licencias: proyecto MIT confirmado por el usuario. Los candidatos y dependencias conservan sus licencias. PDFium tiene licencia BSD-style y dependencias propias; pdfium-render requiere su propio aviso. MuPDF se documenta como AGPL/comercial, por eso no se adopta automáticamente. Chafa no se vincula por defecto. Mermaid/MathJax, Chromium, fuentes y codecs se inventarían con su versión exacta antes de distribuir, incluyendo notices y obligaciones de binarios. Esta revisión de candidatos no acredita legalmente un bundle que aún no existe.
 
 ## Evidencia que falta ejecutar, trasladada al backlog
 
