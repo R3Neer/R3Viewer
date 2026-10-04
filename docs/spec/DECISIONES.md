@@ -80,3 +80,11 @@ Encargo posterior autoriza migrar documentación, git init, política de commits
 ADRs registrados: núcleo Rust, encoder compañero Nu + módulo + proceso de terminal externo; DOM/documento/datos separados; Ratatui/Crossterm/ratatui-image con renderer inline específico; PDFium privado preferido a MuPDF; Mermaid oficial y MathJax workers; html5ever/pulldown-cmark/resvg/image/syntect como base de diseño. No son integraciones probadas ni versiones bloqueadas.
 
 Revisión documental inicial cerrada en docs/research/INVESTIGACION_TECNICA.md. RV-008 valida las decisiones antes de ampliar desarrollo; versiones/arquitecturas y garantías quedan candidatas hasta QA. Licencia de proyecto MIT confirmada por el usuario el 2026-10-04.
+## Arquitectura general y Scrum: 2026-10-04
+
+El usuario confirma licencia MIT y autoriza elaborar/revisar el plan con adversario independiente hasta cierre sin críticas. Aclara después: plan general de organización, relaciones y épicas; los sprints Scrum refinan lo específico. No implica implementación del visor.
+
+Referencia vigente: ../architecture/ARQUITECTURA.md. Un producto, piezas de lector/integración/distribución, siete dominios de responsabilidad y diez épicas. Se conservan 39 tareas con dueño principal; hitos previos no son sprints ni fases obligatorias. RV-008 coordina validaciones por capacidad, no bloqueo global. Tecnología en investigación/ADRs previos es hipótesis de trabajo para los sprints, no detalle cerrado por revisión macro.
+
+Revisión: dos propuestas generales, dos informes temporales del agente architecture_adversary; último veredicto SIN_CRITICAS_PENDIENTES. Informes y borradores fuera de Git. Esto valida estructura del plan, no runtime ni garantías de plataformas. Antes del primer sprint se acordarán responsabilidades reales, duración y DoD.
+SHA-256 del plan general revisado/copiado: AC56D44929F4D158D143136DE1B594A7BFF93E1ACF830DDBC170C096125D69EA.

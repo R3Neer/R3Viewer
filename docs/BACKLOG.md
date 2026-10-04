@@ -1,10 +1,10 @@
-# R3Viewer: backlog inicial
+# R3Viewer: Product Backlog
 
 Fecha: 2026-10-04. Preparación documental y Git autorizados; implementación pendiente de encargo. Los estados precisos se registran al final. Dependencias y aceptación propuestas, revisables con respuestas nuevas.
 
 ## Cómo leerlo
 
-Un producto, dos entregables: lector y puente Nushell. H0 contiene decisiones/investigaciones; H1–H5 son entregas futuras verificables. Terminar un hito no completa todo el producto. Un elemento condicionado no se implementa sin cerrar la decisión indicada. Publicar o instalar exige autorización de destino independiente.
+Un producto: lector, integración Nushell y distribución conjunta. Las diez épicas y asignaciones principales de las 39 tareas están en [arquitectura general](architecture/ARQUITECTURA.md). H0 contiene decisiones/investigaciones; H1–H5 conservan agrupaciones históricas de alcance, no sprints ni fases obligatorias. Terminar un hito no completa todo el producto. Un elemento condicionado no se implementa sin cerrar la decisión indicada. Publicar o instalar exige autorización de destino independiente.
 
 Estados: pendiente, en análisis, listo, bloqueado por decisión, en implementación, en validación, terminado. «Terminado» requiere evidencia de sus criterios, incluidos QA visual cuando corresponda. Estado actual: contratos/documentación inicial preparados; algunos elementos H0 pendientes de validación runtime. Véase tabla de estados al final. Los análisis documentales son insumos, no prototipos probados.
 
@@ -15,7 +15,7 @@ Estados: pendiente, en análisis, listo, bloqueado por decisión, en implementac
 | RV-001 | Cerrar entrada y CLI | Q03 | Ejemplos de ruta, texto, URL y pipeline inequívocos; combinaciones incompatibles y ausencia de entrada documentadas. |
 | RV-002 | Consolidar alcance HTML | Q24/Q25 cerradas | Controles solo lectura y from html opcional incluidos; resolver política de recursos secundarios y cobertura restante sin ampliar a navegador completo. |
 | RV-003 | Evaluar puente Nu y acceso al terminal | RV-001 | Comparar plugin y puente externo: tipos, TTY al recibir pipeline, señales y versiones; evidencia en Windows y plan de contraste macOS/Linux. |
-| RV-004 | Seleccionar arquitectura y motores | RV-003 | Decisión argumentada por portabilidad, licencias, cobertura, composición y distribución completa; fallback y versiones definidos. |
+| RV-004 | Seleccionar arquitectura y motores | RV-001; RV-003 solo para puente Nu | Decisión argumentada por portabilidad, licencias, cobertura, composición y distribución completa; fallback y versiones definidos. |
 | RV-005 | Definir modelo documento/datos/origen | RV-001/004 | Contratos de bloques e inline, tipos Nu, recursos, posiciones y bases; demostrar en diseño cómo preservan texto mixto HTML y fórmulas inline. |
 | RV-006 | Fijar compatibilidad y criterios medibles | RV-004 | Versiones mínimas/arquitecturas propuestas, corpus representativo y métricas de primera vista, memoria, caché y cancelación; sin garantías inventadas. |
 | RV-007 | Especificar errores, configuración y diseño | RV-001/005 | stdout/stderr, salida sin TTY, códigos, errores locales/fatales, tema Nu y roles R3CLI descritos con ejemplos. |
@@ -27,7 +27,7 @@ Estados: pendiente, en análisis, listo, bloqueado por decisión, en implementac
 | RV-101 | Resolver entrada y seleccionar adaptador | RV-001/005/007 | Ruta y pipeline según contrato; errores de entrada claros; no reabrir datos transformados; formato explícito para ambigüedad. |
 | RV-102 | Integración Nushell tipada | RV-003/101 | Tablas/listas/registros anidados y tipos acordados sobreviven al puente; null, ausencia y texto vacío distinguibles. |
 | RV-103 | Presentación inline y redirección | RV-005/007/101 | Orden, ancho y saltos correctos; -i equivalente a --inline; redirección sin escapes, referencias de gráficos pendientes. |
-| RV-104 | Sesión interactiva y ciclo terminal | RV-003/005/007/101 | Abrir, desplazarse, redimensionar, salir y cancelar; restaurar cursor/pantalla/entrada tras fallos; teclado suficiente. |
+| RV-104 | Sesión interactiva y ciclo terminal | RV-005/007/101; RV-003 para transporte Nu | Abrir, desplazarse, redimensionar, salir y cancelar; restaurar cursor/pantalla/entrada tras fallos; teclado suficiente. |
 | RV-105 | Texto y código | RV-103/104 | Fuente preservada, resaltado legible, líneas largas navegables; no ejecución ni reforma del archivo. |
 | RV-106 | Datos tipados y archivos de datos | RV-102/104/105 | Navegar registros/listas/tablas, buscar; archivo abre fuente y permite estructura; pipeline conserva su transformación. |
 | RV-107 | Configuración y coherencia visual | RV-007/103/104 | Tema claro/oscuro, límites visuales y fallbacks; integración discreta con Nu, sin banners; R3CLI solo si evaluación lo justifica. |
@@ -98,7 +98,7 @@ Salida H4: formatos restantes y navegación web estática dentro de límites. Ma
 
 ## Orden y paralelismo futuros
 
-H0 antes de implementación. H1 habilita H2 y Markdown textual de H3. HTML parser y from html comparten parser pero conservan modelos distintos. H4 directorios/binarios puede adelantarse tras H1; composición gráfica y caso Clases priorizan el objetivo central. Empaquetado/licencias deben estudiarse en H0 y concretarse durante hitos, aunque entrega final sea H5.
+Ordenar el Product Backlog por valor y riesgo; las épicas no son sprints fijos. E01 permite texto/archivos; E02 habilita valores tipados de Nu sin bloquear lectura independiente. Gráficos y sus spikes bloquean solo historias dependientes. Markdown/HTML textual puede avanzar antes de gráficos. Directorios/binarios pueden adelantarse según prioridad. Calidad, documentación y distribución son transversales desde los primeros incrementos. Refinar historias, protocolos y tareas específicas durante preparación y planificación de cada sprint.
 
 ## Fuera del alcance actual
 
@@ -120,4 +120,11 @@ Repositorio y commits locales autorizados y documentación migrada. Fuente canó
 | RV-008 | Pendiente; requiere implementación/prototipo autorizado | Gate de puente tipado/TTY/señales, gráficos TUI+inline, PDFium ABI y worker Mermaid/math frío. Depende RV-003/004/005/006; criterios en VALIDACION.md. |
 | H1–H5 | Pendiente | No hay código ejecutable ni QA runtime. |
 
-RV-008 bloquea desarrollo amplio H1–H5 hasta verificar arquitectura; un prototipo limitado puede ser la primera tarea de implementación autorizada. No se altera el objetivo final ni se presentan garantías multiplataforma antes de medirlas. El backlog contiene 39 tareas únicas: 38 originales y el gate RV-008 añadido. El recuento anterior de 39 antes del gate era incorrecto.
+RV-008 coordina spikes por riesgo dentro de E10, con referencias a E02/E04/E05: no es bloqueo global de H1–H5. Cada validación antecede solo a las historias que dependen de ella; prototipos e implementación requieren encargo futuro. Los sprints buscan cortes verticales útiles, no completar toda una capa horizontal. No se altera el objetivo final ni se presentan garantías multiplataforma antes de medirlas. El backlog contiene 39 tareas únicas: 38 originales y el gate RV-008 añadido. El recuento anterior de 39 antes del gate era incorrecto.
+## Organización Scrum vigente
+
+Plan general revisado por adversario independiente: dos propuestas generales y dos informes temporales; cierre SIN_CRITICAS_PENDIENTES. Épicas E01–E10 y propietarios principales en architecture/ARQUITECTURA.md, única tabla canónica de asignación. Las referencias secundarias no duplican tareas.
+
+Antes del primer sprint se acordarán responsables reales de Product Owner, Scrum Master y Developers, duración, Definition of Done y realización de eventos. No hay Sprint Backlog, fechas, estimaciones ni capacidad comprometidos todavía. Planning selecciona resultado/objetivo; Daily inspecciona/adapta; Review recoge feedback del incremento; Retrospective mejora el proceso. El adversario revisa diseño, no sustituye eventos Scrum. La preparación actual no autoriza implementar el producto.
+
+Los detalles de transporte, APIs, locks, límites y UX se refinan con cada historia. La revisión macro no cierra RV-003/004/006/008 runtime ni modifica las decisiones funcionales confirmadas.

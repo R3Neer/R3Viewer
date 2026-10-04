@@ -4,7 +4,7 @@ Fecha: 2026-10-04. Especificación de análisis, sin implementación autorizada.
 
 ## Estado y autoridad
 
-REQUISITOS.md y DECISIONES.md recogen decisiones confirmadas. Este documento concreta recomendaciones operativas y señala lo pendiente. El backlog no autoriza implementar, instalar, crear Git, publicar ni elegir implícitamente una opción pendiente.
+REQUISITOS.md y DECISIONES.md recogen decisiones confirmadas. Este documento concreta recomendaciones operativas y señala lo pendiente. El backlog no autoriza implementar, instalar, publicar ni elegir implícitamente una opción pendiente. Crear Git y commits locales fue autorizado por encargo posterior.
 
 ## Entrada: Q03 confirmada
 
@@ -71,3 +71,7 @@ PDF con texto permite búsqueda y salto; highlight exacto depende de validación
 Búsqueda v1: texto literal con siguiente/anterior y estado sin coincidencias; contenido textual del documento completo dentro de límites; PDF indexado por página bajo demanda. No prometer regex, OCR ni búsqueda de imágenes. Búsqueda profunda en datos tiene límites visibles y no evalúa valores ejecutables.
 
 Configuración v1: archivo TOML por usuario en ruta estándar del SO; flags prevalecen sobre config, luego entorno y detección. NO_COLOR se respeta salvo override explícito; --graphics auto|sixel|kitty|iterm2|symbols|none propuesto. Teclado funcional sin ratón y ayuda de teclas en sesión; no vincular todas las acciones al ratón.
+
+## Refinamiento por sprint
+
+La arquitectura general vigente es ../architecture/ARQUITECTURA.md. Las decisiones funcionales confirmadas se mantienen. Nombres/UX/API/límites técnicos propuestos en este documento se refinan por sprint y no se consideran contratos implementados por aprobar el plan macro. Transporte, recursos, caché y terminal conservan validaciones por capacidad.

@@ -80,7 +80,7 @@ Licencias: proyecto MIT confirmado por el usuario. Los candidatos y dependencias
 
 ## Evidencia que falta ejecutar, trasladada al backlog
 
-Spike obligatorio: Nu↔encoder↔stdin↔TTY, cancelación y restoration, imágenes TUI/inline en Windows Terminal/WezTerm, PDFium ABI/render/text y Mermaid/math cache en paquete frío. No hay runtime QA disponible en esta fase; RV-008 concentra estos gates antes de extender implementación.
+Spikes por capacidad: Nu↔encoder↔stdin↔TTY, cancelación y restauración, imágenes TUI/inline en Windows Terminal/WezTerm, PDFium ABI/render/text y Mermaid/math cache en paquete frío. No hay runtime QA disponible en esta fase; RV-008 coordina estas validaciones antes de ampliar cada capacidad dependiente, sin gate global para todo el lector.
 
 ## Fuentes primarias consultadas
 
@@ -94,3 +94,8 @@ Spike obligatorio: Nu↔encoder↔stdin↔TTY, cancelación y restoration, imág
 - [resvg](https://github.com/linebender/resvg), [Mermaid CLI](https://github.com/mermaid-js/mermaid-cli), [MathJax Node](https://docs.mathjax.org/en/latest/server/direct.html).
 
 Inspección local adicional: README/diseño/licencia de D:\Tools\R3CLI; dependencies.json de Show-Tree. Fuente se verificó localmente; no se copiaron dependencias al nuevo repositorio.
+
+
+## Estado tras la revisión de arquitectura general
+
+Este documento conserva investigación y candidatos técnicos, no impone detalles a todos los sprints. La referencia vigente es ../architecture/ARQUITECTURA.md. RV-008 coordina spikes por capacidad; APIs/versiones/límites/seguridad detallada se refinan con el trabajo dependiente. La revisión general no acredita runtime.

@@ -2,7 +2,7 @@
 
 Fecha: 2026-10-04. Ninguna prueba runtime de R3Viewer ejecutada todavía. Documentación y repositorio se verifican ahora; pruebas siguientes requieren implementación/prototipo autorizado.
 
-## Gate RV-008 antes de desarrollo amplio
+## RV-008: validaciones por capacidad dentro de los sprints
 
 | Caso | Evidencia necesaria |
 |---|---|
@@ -14,7 +14,7 @@ Fecha: 2026-10-04. Ninguna prueba runtime de R3Viewer ejecutada todavía. Docume
 | Mermaid/math | Runtime privado frío, PNG/SVG autosuficiente, baseline inline, errores locales y cancelación; no iniciar browser para texto. |
 | HTML converter opt-in | open y http get convierten con módulo activado; -r conserva fuente; sin activación mantienen comportamiento nativo. |
 
-Un fallo de gate cambia arquitectura/alcance documentado antes de seguir. No marcar runtime soportado por revisión de fuente solamente.
+Cada spike se selecciona y refina según las historias que necesitan esa capacidad. No deben terminar todos para leer texto/archivos ni actúan como fase previa global. Un fallo cambia la elección técnica o el trabajo dependiente antes de continuar con esa capacidad; no reduce alcance confirmado sin acuerdo. No marcar runtime soportado por revisión de fuente solamente.
 
 ## Corpus propio
 
@@ -36,3 +36,9 @@ Windows x86_64 Windows Terminal + WezTerm; macOS arm64 WezTerm; Linux x86_64 Wez
 ## Criterio de preparación inicial
 
 Repositorio local inicializado, archivos canónicos migrados, política de commits vigente, contratos de entrada y casos de error definidos, decisiones técnicas motivadas, backlog con dependencias y gates de ejecución, y licencia registrada o explícitamente pendiente. Esto no declara terminados H0 runtime ni H1–H5.
+
+## Relación con el plan general
+
+La arquitectura general de architecture/ARQUITECTURA.md fue revisada iterativamente hasta SIN_CRITICAS_PENDIENTES. Su alcance es dominios, relaciones y épicas. Esta validación es un catálogo inicial para refinar por sprint, no APIs finales ni orden completo de implementación.
+
+Puente Nu corresponde a E02; gráficos a E04; PDF a E05; formatos/Obsidian/HTML a E06–E08; compatibilidad/calidad a E10 y a cada historia afectada. Los criterios específicos y versiones se concretan al seleccionar el trabajo. Sin ejecutar QA no anunciar plataforma/capacidad acreditada. Licencia MIT registrada; revisar avisos de dependencias al distribuir.

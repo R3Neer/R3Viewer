@@ -8,9 +8,9 @@ Estado: análisis y preparación del repositorio. No hay aplicación ejecutable 
 
 - [Requisitos](docs/spec/REQUISITOS.md), [decisiones](docs/spec/DECISIONES.md) y [preguntas](docs/spec/PREGUNTAS.md).
 - [Contratos](docs/spec/CONTRATOS.md), [HTML/web](docs/spec/WEB_HTML.md) y [estudio previo](docs/spec/ESTUDIO_ADICIONAL.md).
-- [Backlog](docs/BACKLOG.md): entregas, dependencias y aceptación.
+- [Product Backlog](docs/BACKLOG.md): 39 tareas, dependencias y aceptación; diez épicas en el plan general.
 - [Investigación técnica](docs/research/INVESTIGACION_TECNICA.md): fuentes, conclusiones y límites de evidencia.
-- [Arquitectura](docs/architecture/ARQUITECTURA.md) y [validación](docs/VALIDACION.md).
+- [Arquitectura general y épicas](docs/architecture/ARQUITECTURA.md), revisada iterativamente con adversario independiente hasta cierre sin críticas, y [validación por capacidad](docs/VALIDACION.md).
 - [Política de commits](CONTRIBUTING.md).
 
 ## Uso previsto, todavía no implementado
@@ -32,3 +32,7 @@ Argumentos abren rutas o URLs; el pipeline contiene valores. `--path/-p` y `--va
 Repositorio local: `D:\Tools\R3Viewer`. Los documentos iniciales de este chat se copiaron conservando el historial como primer commit. A partir de la migración las modificaciones se hacen aquí; las copias del chat son una referencia histórica.
 
 No hay remoto configurado. Licencia del proyecto: [MIT](LICENSE), confirmada el 2026-10-04. Las dependencias conservan sus licencias y avisos; revisarlos antes de distribuir.
+
+## Forma de trabajo
+
+Scrum: un Product Backlog, incrementos por sprint y detalles refinados según prioridad/riesgo. Los hitos históricos no fijan sprints. Antes del primero se acordarán responsabilidades reales, duración y Definition of Done. No hay calendario ni implementación comprometidos por este plan. Las revisiones intermedias de arquitectura son temporales; el plan final es canónico.
