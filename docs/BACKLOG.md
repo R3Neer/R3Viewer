@@ -120,4 +120,4 @@ Repositorio y commits locales autorizados y documentación migrada. Fuente canó
 | RV-008 | Pendiente; requiere implementación/prototipo autorizado | Gate de puente tipado/TTY/señales, gráficos TUI+inline, PDFium ABI y worker Mermaid/math frío. Depende RV-003/004/005/006; criterios en VALIDACION.md. |
 | H1–H5 | Pendiente | No hay código ejecutable ni QA runtime. |
 
-RV-008 bloquea desarrollo amplio H1–H5 hasta verificar arquitectura; un prototipo limitado puede ser la primera tarea de implementación autorizada. No se altera el objetivo final ni se presentan garantías multiplataforma antes de medirlas. El backlog pasa de 39 a 40 elementos al explicitar este gate.
+RV-008 bloquea desarrollo amplio H1–H5 hasta verificar arquitectura; un prototipo limitado puede ser la primera tarea de implementación autorizada. No se altera el objetivo final ni se presentan garantías multiplataforma antes de medirlas. El backlog contiene 39 tareas únicas: 38 originales y el gate RV-008 añadido. El recuento anterior de 39 antes del gate era incorrecto.
