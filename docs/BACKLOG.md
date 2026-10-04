@@ -128,3 +128,6 @@ Plan general revisado por adversario independiente: dos propuestas generales y d
 Antes del primer sprint se acordarán responsables reales de Product Owner, Scrum Master y Developers, duración, Definition of Done y realización de eventos. No hay Sprint Backlog, fechas, estimaciones ni capacidad comprometidos todavía. Planning selecciona resultado/objetivo; Daily inspecciona/adapta; Review recoge feedback del incremento; Retrospective mejora el proceso. El adversario revisa diseño, no sustituye eventos Scrum. La preparación actual no autoriza implementar el producto.
 
 Los detalles de transporte, APIs, locks, límites y UX se refinan con cada historia. La revisión macro no cierra RV-003/004/006/008 runtime ni modifica las decisiones funcionales confirmadas.
+## Autoridad y proceso vigentes
+
+Implementación completa autorizada el 2026-10-04. Scrum por objetivos sin cadencia fija según process/METODOLOGIA.md. Estados anteriores conservan evidencia histórica; S01 se refina ahora. No cerrar RV por una entrega parcial ni sustituir QA pendiente por documentación. El backlog sigue abierto hasta satisfacer toda su aceptación.

@@ -126,3 +126,7 @@ Consultadas el 2026-10-04. Fuentes primarias; evidencian posibilidades/reglas, n
 - [Mermaid CLI](https://github.com/mermaid-js/mermaid-cli), [Mermaid securityLevel](https://mermaid.js.org/config/schema-docs/config-properties-securitylevel.html), [secure config](https://mermaid.js.org/config/schema-docs/config-properties-secure.html): motor y configuración controlada; no equivalen a sandbox SO.
 - [MathJax Node](https://docs.mathjax.org/en/latest/server/direct.html) y [resvg](https://github.com/linebender/resvg): render matemático y SVG; separar métricas/composición del motor.
 - R3CLI/Show-Tree inspeccionados previamente en D:\Tools: recursos/diseño discreto y datos estructurados; integración concreta para refinamiento.
+
+## Actualización de proceso
+
+El encargo posterior autoriza implementación completa y sustituye restricciones históricas de solo análisis. El usuario confirma Scrum por objetivos sin cadencia temporal fija, adaptación explícita descrita en ../process/METODOLOGIA.md. Arquitectura transversal y revisiones iterativas independientes por incremento; aceptación y QA siguen obligatorias.

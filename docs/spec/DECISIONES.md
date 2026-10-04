@@ -88,3 +88,7 @@ Referencia vigente: ../architecture/ARQUITECTURA.md. Un producto, piezas de lect
 
 Revisión: dos propuestas generales, dos informes temporales del agente architecture_adversary; último veredicto SIN_CRITICAS_PENDIENTES. Informes y borradores fuera de Git. Esto valida estructura del plan, no runtime ni garantías de plataformas. Antes del primer sprint se acordarán responsabilidades reales, duración y DoD.
 SHA-256 del plan general revisado/copiado: AC56D44929F4D158D143136DE1B594A7BFF93E1ACF830DDBC170C096125D69EA.
+
+## Desarrollo y metodología vigentes
+
+El 2026-10-04 el usuario sustituye D01 (solo análisis) y las restricciones históricas de implementación: autoriza desarrollar todo R3Viewer y continuar hasta completar aceptación del backlog. Confirma Scrum por objetivos sin cadencia temporal fija, adaptación explícita. Metodología canónica: ../process/METODOLOGIA.md. Publicación e instalación en perfiles personales siguen fuera del encargo. Los estados antiguos documentan su fecha y no revocan esta autorización posterior.

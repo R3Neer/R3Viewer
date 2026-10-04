@@ -2,7 +2,7 @@
 
 Visor de archivos, documentos y valores de Nushell, con lectura interactiva y salida inline (`--inline/-i`). Windows nativo, macOS y Linux son objetivos de soporte.
 
-Estado: análisis y preparación del repositorio. No hay aplicación ejecutable ni instalación disponible. La creación de Git y commits locales está autorizada; implementar el producto, instalarlo y publicar requieren su correspondiente encargo.
+Estado: desarrollo autorizado, primer incremento en preparación. Todavía no hay una entrega certificada. Implementación, revisión iterativa y commits locales autorizados; publicación e instalación en perfiles personales fuera del encargo.
 
 ## Documentación
 
@@ -35,4 +35,8 @@ No hay remoto configurado. Licencia del proyecto: [MIT](LICENSE), confirmada el 
 
 ## Forma de trabajo
 
-Scrum: un Product Backlog, incrementos por sprint y detalles refinados según prioridad/riesgo. Los hitos históricos no fijan sprints. Antes del primero se acordarán responsabilidades reales, duración y Definition of Done. No hay calendario ni implementación comprometidos por este plan. Las revisiones intermedias de arquitectura son temporales; el plan final es canónico.
+Adaptación de Scrum por objetivos: un Product Backlog, un sprint activo sin cadencia temporal fija y detalles refinados según prioridad/riesgo. Responsabilidades, aceptación y Definition of Done en docs/process/METODOLOGIA.md. Revisiones iterativas independientes de propuestas y código; informes intermedios temporales, versiones finales y evidencia canónicas.
+
+## Desarrollo vigente
+
+El usuario autoriza implementar el producto completo siguiendo [Scrum por objetivos y revisión adversaria](docs/process/METODOLOGIA.md), sin cadencia fija. La descripción de preparación anterior es histórica. Sin publicación ni modificación de perfiles personales.
