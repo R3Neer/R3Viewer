@@ -279,3 +279,6 @@ PDF texto: [contrato UTF16 R3+deltaR4](refinement/PDF-TEXTO-UTF16.md) con [revis
 
 
 HTML: [inspección primaria de API](research/HTML_PARSER_API.md) confirma sinkDOM mutable, entrada Unicode incremental y decodificaciónUTF8 lossy de la API de comodidad; identifica gates para identidad/procedencia, presupuestos y configuración noscript. Sólo investigación documental; versión/dependencia/implementación/aceptación de RV-402/404 pendientes.
+
+
+GIPC privado R1 congelado FCB6AE119CC5CE20ED34FB95BB9C747FF2715B8A403C7BC394320230952F887B en revisión/AE. GIPC-ROOT01 reproducido nativamente: cleanup devuelve Reaped con tres handles de pipes no transferidos aún vivos; GetHandleInformation propio confirma tras wait/Active0/close proceso. Fallo y snapshot278registros preservados fuera de Git, sin rescate de procesos. R1 no aprobado; corregir cierres/autoridad Pending y repetir aceptación. No cierre G2/RV ni adopción.
