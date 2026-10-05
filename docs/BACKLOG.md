@@ -264,3 +264,6 @@ PDF Rust R4: [estado y evidencia](research/PDF_RUST_GATE.md), revisión y AE ind
 
 
 S03-UNICODE01: [plan operacional](refinement/S03-UNICODE-INTEGRACION.md) revisado [sin críticas pendientes](reviews/S03-unicode-integration-plan-r1.md) sobre rutas actuales; implementación conjunta Source/Nu/inline/legacy/borrowedYAMLXML/preflight autorizada en el incremento activo. Gate verde no sustituye revisión/AE del código integrado; defecto y RV-105/504 permanecen abiertos.
+
+
+Markdown: [plan operacional de documento enriquecido](refinement/MARKDOWN-DOCUMENTO.md) revisado [sin críticas pendientes a nivel general](reviews/Markdown-document-integration-plan-r1.md). Mantiene imágenes/Mermaid/mathinline+block/Obsidian y separar datosNu/DOM. Wire/ledger/contención efectiva/baseline/resolver/servicios se refinan antes de implementación; no abre otro sprint en paralelo a integraciónUnicode ni cierra prestaciones.
