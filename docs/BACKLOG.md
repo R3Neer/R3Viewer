@@ -235,3 +235,5 @@ Gramáticas Nushell y PowerShell integradas con revisión de código y aceptaci�
 
 
 Sixel: [candidato privado R2 final](research/GRAFICOS_SIXEL_SPIKE.md) con revisión independiente y AE240invocaciones sobre oráculos previos. R1 tenía dos fallos de ownership/captura del helper, corregidos con encoder intacto; snapshots/controles negativos conservados. Sin críticas pendientes en el gate probado. Snapshot/IPC/agregado/cache/framing/terminal/inline/visual/Unix y G2 completo permanecen abiertos, sin adopción ni cierre RV/S03.
+
+S03-UNICODE01 abierto: [reproducción privada de cancelación](research/S03_UNICODE_CANCELACION.md) detecta demora en un único grafema de32MiB. Fuente intacta; no corrección ni límite nuevo aprobado. Refinamiento independiente de segmentación/ancho/render cancelables en curso; conservar original y revisar todas las rutas antes de cerrar RV-105/504.
