@@ -44,3 +44,9 @@ En documento vacío `---\n...`, el evento Scalar("",Plain) sintético trae el ra
 Los casos ampliados confirman en experimento quotedmultiline completo, blockvacío con header y blockindent+commentCRLF con header. Rangos siguen en caracteres; convertirlos a bytes permanece obligatorio. No se declara gate cerrado por estos19casos.
 
 Comparación del autor de los178eventos/errores de19casos, excluyendo posiciones: original y patch conservan la misma secuencia y contenido. Resultado `.tmp/yaml-research/expanded-comparison.json`; logs originalSHA9708C37A7EEA559D3BAFC5E37B8574E5536CB7997158CBA635281C0B25897A6F y derivadoSHA DBE2E399AC3EEFFC40B5F08E72FDB79CFE4F40262DEA6995DA45EA8BA6629BA4. No demuestra equivalencia fuera de ese corpus ni resuelve versiones/scope/syntheticspans.
+
+## Segundo candidato experimental: perfil y scope
+
+`.tmp/yaml-research/saphyr-parser-profile` conserva patchscalar anterior y añade dos cambios en parser.rs: limpiar mapa anchors al comenzar cada documento para APIpull; versión explícita solo1.2 en parser_process_directives. Diff `profile-parser.patch`, parser.rsSHA77427BA7019138FA96D7050042E80AA0669902E9AA1159162023DC0BDF245E38. Original permanece intacto, span-only permanece separado.
+
+`.tmp/yaml-research/profile-spike-output.log`19casos ejecutados:1.1/1.3 producen error de perfil,1.2 sigueaceptada; aliasdocumentoanterior ahora unknownanchor, rebind local permanece. Esta política de versiones es R3Viewer y cambia aceptación upstream intencionalmente, no declarar equivalencia gramatical. Scope corrige comportamiento observado de iterator frente a `load`, que upstream limpia anchors antes de cargar cada documento. Spans sintéticos, propiedades/contigüidad, Unicode/cancel/budgets y validaciónindependiente aún pendientes; no integrar este candidato sin gate.
