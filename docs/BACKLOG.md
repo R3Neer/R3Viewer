@@ -209,3 +209,6 @@ Gráficos: [propuesta G2 R2](refinement/GRAFICOS-G2.md) revisada sin críticas d
 
 
 XML R1: [addendum inline](reviews/S03-XML-inline-r1.md) aporta timeout del controlador real bajo suspensión propia y Fuente completa, exit0 y reap/residuos correctos, con inspección independiente. Tiempo final observado incluye escritura/drenaje; medición aislada, carreras adicionales/estrés y visual/Unix siguen pendientes. No cierre de RV ni modificación de código por esta evidencia.
+
+
+Contención [Unix R2](refinement/CONTENCION-UNIX.md) revisada sin críticas de diseño: supervisor macOS externo y nacimiento/configuración cgroup delimitados, AS distinto de committed/RSS. Probes privados preparados antes de adopción; ejecución Linux/macOS pendiente y fallback transitorio no satisface el objetivo final. No habilitación de producción ni cierre de S03/matriz/RV por esta revisión.
