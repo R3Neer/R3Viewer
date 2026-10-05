@@ -552,12 +552,16 @@ impl<'a> App<'a> {
         {
             return Ok(false);
         }
+        let duplicate_diagnostic = structure.duplicate_diagnostic();
         file.navigator = Some(FileNavigator::new(structure));
         self.structure_message.clear();
         if self.editor.is_none() && !self.help {
             self.swap_file_domain(cancel)?;
         } else {
             self.structure_message = "estructura disponible; Tab alterna la vista".into();
+        }
+        if let Some(diagnostic) = duplicate_diagnostic {
+            self.structure_message = diagnostic;
         }
         Ok(true)
     }
@@ -1751,8 +1755,8 @@ pub fn run(
     };
     let mut structure_diagnostic = structure_selection.diagnostic().unwrap_or("").to_owned();
     let mut structure_owner = StructureOwner {
-        client: if structure_selection.is_toml() {
-            match StructureClient::new(cancelled.clone()) {
+        client: if structure_selection.format().is_some() {
+            match StructureClient::new(cancelled.clone(), structure_selection.format().unwrap()) {
                 Ok(client) => {
                     client.set_document(source_text.original_handle(), 1);
                     Some(client)
@@ -1774,7 +1778,7 @@ pub fn run(
     // cancellable preparation, and drop both before the owning guard.
     let result = (|| {
         let keyboard = KeyboardReader::new(cancelled.clone())?;
-        let inspect_typed = if structure_selection.is_toml() {
+        let inspect_typed = if structure_selection.format().is_some() {
             None
         } else {
             typed.clone()
@@ -1788,7 +1792,7 @@ pub fn run(
         )?;
         app.syntax_diagnostic = syntax_diagnostic;
         app.structure_message = structure_diagnostic;
-        if structure_selection.is_toml() {
+        if structure_selection.format().is_some() {
             app.file = Some(FileWorkspace::new(1, app.source.original_handle()));
             if structure_owner.client.is_none() {
                 app.file.as_mut().unwrap().build.state =
@@ -2375,7 +2379,7 @@ mod tests {
         );
         assert!(app.file_active());
         assert!(app.query.is_empty());
-        app.query = "界␛".into();
+        app.query = "界\x1b".into();
         let SearchOutcome::FileFound(hit) =
             find_structure(&structure, &app.query, None, Direction::Forward, &cancel)
         else {
@@ -2403,7 +2407,7 @@ mod tests {
         );
         app.swap_file_domain(&cancel).unwrap();
         assert!(app.file_active());
-        assert_eq!(app.query, "界␛");
+        assert_eq!(app.query, "界\x1b");
         assert_eq!(app.file_hit.as_ref().unwrap().range, hit.range);
         assert_eq!(
             app.file

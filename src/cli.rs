@@ -50,6 +50,7 @@ pub enum Format {
     Text,
     Code,
     Toml,
+    Json,
 }
 
 impl Cli {

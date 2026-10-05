@@ -14,3 +14,6 @@
 # Fixed syntax resources retain the exact reviewed/package hash on checkout.
 resources/syntax/toml/*.sublime-syntax -text
 resources/syntax/toml/*.patch -text
+
+# Vendored parser provenance is byte-exact.
+vendor/jiter/** -text

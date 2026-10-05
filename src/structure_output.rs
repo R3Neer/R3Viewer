@@ -87,13 +87,17 @@ impl<'a> Builder<'a> {
     }
 }
 pub enum PreparedStructure {
-    Rendered(String),
+    Rendered {
+        content: String,
+        diagnostic: Option<String>,
+    },
     Fallback(String),
 }
 /// Inline/redirection has no syntax child: build and validate the whole arena,
 /// reap the controller, then prepare bounded output before any document write.
 pub fn prepare(
     source: std::sync::Arc<String>,
+    format: crate::structure_model::StructureFormat,
     cancel: std::sync::Arc<AtomicBool>,
 ) -> Result<PreparedStructure, OutputError> {
     use crate::{
@@ -104,7 +108,7 @@ pub fn prepare(
     if cancel.load(Ordering::Relaxed) {
         return Err(OutputError::Cancelled);
     }
-    let mut client = match StructureClient::new(cancel.clone()) {
+    let mut client = match StructureClient::new(cancel.clone(), format) {
         Ok(client) => client,
         Err(_) => {
             return Ok(PreparedStructure::Fallback(
@@ -154,7 +158,10 @@ pub fn prepare(
     }
     match result {
         Ok(structure) => match render(&structure, &cancel) {
-            Ok(text) => Ok(PreparedStructure::Rendered(text)),
+            Ok(text) => Ok(PreparedStructure::Rendered {
+                content: text,
+                diagnostic: structure.duplicate_diagnostic(),
+            }),
             Err(OutputError::Cancelled) => Err(OutputError::Cancelled),
             Err(_) => Ok(PreparedStructure::Fallback(
                 "la representación estructurada excede sus límites; se conserva la fuente completa"

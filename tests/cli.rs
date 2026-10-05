@@ -462,3 +462,82 @@ fn explicit_toml_string_byte_stream_accepts_text_but_unknown_never_becomes_text(
         }
     }
 }
+#[cfg(windows)]
+#[test]
+fn json_structure_preserves_order_duplicates_numbers_and_null() {
+    let raw = r#"{"b":0,"a":9007199254740993,"\u0061":1e400,"a":-0,"n":null}"#;
+    let result = invoke(&["--format", "json", "--structure", "--value", raw], None);
+    assert!(result.status.success(), "{:?}", result.stderr);
+    let human = String::from_utf8(result.stdout).unwrap();
+    for number in ["0", "9007199254740993", "1e400", "-0"] {
+        assert!(
+            human.contains(&format!("number(raw=\"{number}\")")),
+            "{human}"
+        );
+    }
+    assert_eq!(human.matches("key(\"a\")").count(), 3);
+    assert!(human.contains("null(raw=\"null\")"));
+    assert!(
+        String::from_utf8(result.stderr)
+            .unwrap()
+            .contains("2 repeticiones")
+    );
+    assert!(!human.contains('\x1b'));
+    let huge = "9".repeat(65536);
+    let result = invoke(&["--format", "json", "--structure"], Some(huge.as_bytes()));
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert_eq!(
+        String::from_utf8(result.stdout).unwrap(),
+        format!("number(raw=\"{huge}\")\n")
+    );
+}
+#[cfg(windows)]
+#[test]
+fn json_failure_keeps_original_and_representation_diagnostic_is_distinct() {
+    for (raw, diagnostic) in [
+        ("[1,]\r\n", "JSON no válido"),
+        (r#"{"value":"\uD800"}"#, "no representable"),
+    ] {
+        let result = invoke(&["--format", "json", "--structure", "--value", raw], None);
+        assert!(result.status.success());
+        assert_eq!(result.stdout, raw.as_bytes());
+        assert!(
+            String::from_utf8(result.stderr)
+                .unwrap()
+                .contains(diagnostic)
+        );
+    }
+    let wire = nu_value_wire(r3viewer_wire::Value::Nothing);
+    let result = invoke(
+        &["--nu-wire", "--format", "json", "--structure"],
+        Some(&wire),
+    );
+    assert_eq!(result.status.code(), Some(2));
+    assert!(result.stdout.is_empty());
+}
+#[cfg(windows)]
+#[test]
+fn json_file_infers_structure_but_literal_and_metadata_do_not() {
+    let raw = " \r\n{\"a.b\": true} \t";
+    let fixture = Fixture::new(raw.as_bytes());
+    let path = fixture.0.with_extension("json");
+    fs::rename(&fixture.0, &path).unwrap();
+    let file = Fixture(path);
+    let plain = invoke(&[file.path()], None);
+    assert!(plain.status.success());
+    assert_eq!(plain.stdout, raw.as_bytes());
+    let structure = invoke(&["--structure", "--language", "toml", file.path()], None);
+    assert!(structure.status.success(), "{:?}", structure.stderr);
+    assert!(
+        String::from_utf8(structure.stdout)
+            .unwrap()
+            .contains("key(\"a.b\")")
+    );
+    let literal = invoke(&["--structure", "--language", "json", "--value", raw], None);
+    assert!(literal.status.success());
+    assert_eq!(literal.stdout, raw.as_bytes());
+    let wire = nu_value_wire(r3viewer_wire::Value::String(raw.into()));
+    let transformed = invoke(&["--nu-wire", "--structure"], Some(&wire));
+    assert!(transformed.status.success());
+    assert_eq!(transformed.stdout, raw.as_bytes());
+}

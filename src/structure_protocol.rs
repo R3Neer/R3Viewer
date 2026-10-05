@@ -6,6 +6,7 @@ pub(crate) const MAX_FRAME: usize = 1024 * 1024;
 pub(crate) const BATCH: usize = 2048;
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Counts {
+    pub format: StructureFormat,
     pub nodes: u32,
     pub entries: u32,
     pub declarations: u32,
@@ -24,6 +25,7 @@ pub(crate) struct WireNode {
 pub(crate) enum Message {
     Boot,
     Init {
+        format: StructureFormat,
         bytes: u32,
     },
     Ack {
@@ -132,7 +134,8 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
         .map_err(|_| invalid())?;
     let tag = match &frame.message {
         Message::Boot => 0,
-        Message::Init { bytes } => {
+        Message::Init { format, bytes } => {
+            body.byte(*format as u8);
             body.word(*bytes);
             1
         }
@@ -146,6 +149,7 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
         }
         Message::SourceEnd => 4,
         Message::Begin(c) => {
+            body.byte(c.format as u8);
             for n in [
                 c.nodes,
                 c.entries,
@@ -210,7 +214,7 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
     }
     let mut header = [0u8; 28];
     header[..4].copy_from_slice(b"R3ST");
-    header[4] = 1;
+    header[4] = 2;
     header[6] = tag;
     header[8..16].copy_from_slice(&frame.generation.to_le_bytes());
     header[16..24].copy_from_slice(&frame.request.to_le_bytes());
@@ -288,7 +292,7 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
         }
     }
     input.read_exact(&mut header[1..])?;
-    if &header[..4] != b"R3ST" || header[4] != 1 || header[5] != 0 || header[7] != 0 {
+    if &header[..4] != b"R3ST" || header[4] != 2 || header[5] != 0 || header[7] != 0 {
         return Err(invalid());
     }
     let len = u32::from_le_bytes(header[24..28].try_into().unwrap()) as usize;
@@ -305,7 +309,10 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
     };
     let message = match header[6] {
         0 => Message::Boot,
-        1 => Message::Init { bytes: d.word()? },
+        1 => Message::Init {
+            format: StructureFormat::decode(d.byte()?).ok_or_else(invalid)?,
+            bytes: d.word()?,
+        },
         2 => Message::Ack { offset: d.word()? },
         3 => {
             let (offset, bytes) = d.bytes()?;
@@ -313,6 +320,7 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
         }
         4 => Message::SourceEnd,
         5 => Message::Begin(Counts {
+            format: StructureFormat::decode(d.byte()?).ok_or_else(invalid)?,
             nodes: d.word()?,
             entries: d.word()?,
             declarations: d.word()?,
@@ -340,6 +348,8 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
                     8 => StructureKind::LocalDateTime,
                     9 => StructureKind::LocalDate,
                     10 => StructureKind::LocalTime,
+                    11 => StructureKind::Null,
+                    12 => StructureKind::JsonNumber,
                     _ => return Err(invalid()),
                 };
                 nodes.push(WireNode {
@@ -414,6 +424,26 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
 mod tests {
     use super::*;
     #[test]
+    fn format_is_versioned_and_echoed_without_unknown_discriminants() {
+        for format in [StructureFormat::Toml, StructureFormat::Json] {
+            let mut bytes = Vec::new();
+            write_frame(
+                &mut bytes,
+                &Frame::new(1, 2, Message::Init { format, bytes: 5 }),
+            )
+            .unwrap();
+            assert!(
+                matches!(read_frame(&mut bytes.as_slice()).unwrap().unwrap().message, Message::Init { format: actual, bytes: 5 } if actual == format)
+            );
+            bytes[4] = 1;
+            assert!(read_frame(&mut bytes.as_slice()).is_err());
+            bytes[4] = 2;
+            bytes[28] = 255;
+            assert!(read_frame(&mut bytes.as_slice()).is_err());
+        }
+    }
+
+    #[test]
     fn split_unicode_and_truncation_preserve_transport_contract() {
         let frame = Frame::new(
             7,
@@ -434,7 +464,7 @@ mod tests {
     fn oversized_header_rejected_before_payload_allocation() {
         let mut bytes = [0u8; 28];
         bytes[..4].copy_from_slice(b"R3ST");
-        bytes[4] = 1;
+        bytes[4] = 2;
         bytes[24..].copy_from_slice(&((MAX_FRAME + 1) as u32).to_le_bytes());
         assert!(read_frame(&mut bytes.as_slice()).is_err());
     }

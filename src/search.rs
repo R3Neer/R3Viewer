@@ -558,23 +558,26 @@ pub fn find_structure(
                     };
                 }
             };
-            let mut range = 0..safe.visible().len();
+            let mut range = 0..safe.original().len();
             if let Some(last) = previous.filter(|last| index == last.visit_index) {
+                let original = safe.source_range(last.range.clone());
                 match (direction, pass) {
-                    (Direction::Forward, 0) => range.start = last.range.end.min(range.end),
-                    (Direction::Backward, 0) => range.end = last.range.start.min(range.end),
-                    (Direction::Forward, _) => range.end = last.range.end.min(range.end),
-                    (Direction::Backward, _) => range.start = last.range.start.min(range.end),
+                    (Direction::Forward, 0) => range.start = original.end.min(range.end),
+                    (Direction::Backward, 0) => range.end = original.start.min(range.end),
+                    (Direction::Forward, _) => range.end = original.end.min(range.end),
+                    (Direction::Backward, _) => range.start = original.start.min(range.end),
                 }
             }
-            match segment(safe.visible(), query, range, direction, cancel) {
+            // Match decoded content, then translate only the highlight to safe display.
+            // A placeholder for ESC must not impersonate a literal control-picture glyph.
+            match segment(safe.original(), query, range, direction, cancel) {
                 Err(()) => return SearchOutcome::Cancelled,
                 Ok(None) => (),
                 Ok(Some(range)) => {
                     let hit = FileSearchHit {
                         visit_index: index,
                         path: visit.path,
-                        range,
+                        range: safe.visible_range(range),
                     };
                     if direction == Direction::Forward {
                         return SearchOutcome::FileFound(hit);
@@ -604,7 +607,7 @@ mod file_search_tests {
         };
         assert_eq!(key.path.0[0].part, crate::data::FilePart::Key);
         let SearchOutcome::FileFound(cooked) =
-            find_structure(&structure, "界␛", None, Direction::Forward, &cancel)
+            find_structure(&structure, "界\x1b", None, Direction::Forward, &cancel)
         else {
             panic!()
         };
@@ -621,7 +624,7 @@ mod file_search_tests {
         assert_ne!(raw, cooked.range);
         for direction in [Direction::Forward, Direction::Backward] {
             let SearchOutcome::FileFound(wrapped) =
-                find_structure(&structure, "界␛", Some(&cooked), direction, &cancel)
+                find_structure(&structure, "界\x1b", Some(&cooked), direction, &cancel)
             else {
                 panic!()
             };
@@ -669,7 +672,7 @@ mod file_search_tests {
         let cancel = AtomicBool::new(false);
         let structure = builder.finish(root, 0, 0, &cancel).unwrap();
         let SearchOutcome::FileFound(hit) =
-            find_structure(&structure, "needle␛", None, Direction::Forward, &cancel)
+            find_structure(&structure, "needle\x1b", None, Direction::Forward, &cancel)
         else {
             panic!()
         };
@@ -677,11 +680,50 @@ mod file_search_tests {
         assert!(hit.path.0.is_empty());
         for direction in [Direction::Forward, Direction::Backward] {
             let SearchOutcome::FileFound(next) =
-                find_structure(&structure, "needle␛", Some(&hit), direction, &cancel)
+                find_structure(&structure, "needle\x1b", Some(&hit), direction, &cancel)
             else {
                 panic!()
             };
             assert_eq!(next.range, hit.range);
         }
+    }
+}
+
+#[cfg(test)]
+mod file_search_control_identity_tests {
+    use super::*;
+    #[test]
+    fn decoded_controls_do_not_match_literal_display_glyphs_or_escape_labels() {
+        let cancel = AtomicBool::new(false);
+        let (structure, _, _) = crate::json_worker::project(
+            std::sync::Arc::new(r#"{"escaped":"\u001b\u009b","glyph":"␛\\u{009b}"}"#.to_owned()),
+            0,
+            &cancel,
+        )
+        .unwrap();
+        for query in ["␛", "\\u{009b}"] {
+            let SearchOutcome::FileFound(first) =
+                find_structure(&structure, query, None, Direction::Forward, &cancel)
+            else {
+                panic!("literal glyph not found");
+            };
+            assert_eq!(first.path.0[0].ordinal, 1);
+            for direction in [Direction::Forward, Direction::Backward] {
+                let SearchOutcome::FileFound(next) =
+                    find_structure(&structure, query, Some(&first), direction, &cancel)
+                else {
+                    panic!("literal glyph wrap not found");
+                };
+                assert_eq!(next.path, first.path);
+                assert_eq!(next.range, first.range);
+            }
+        }
+        let SearchOutcome::FileFound(control) =
+            find_structure(&structure, "\x1b", None, Direction::Forward, &cancel)
+        else {
+            panic!("decoded ESC not found");
+        };
+        assert_eq!(control.path.0[0].ordinal, 0);
+        assert_eq!(control.range, 0..3);
     }
 }

@@ -1213,6 +1213,8 @@ pub fn file_kind_name(kind: crate::structure_model::StructureKind) -> &'static s
         LocalDateTime => "local_datetime",
         LocalDate => "local_date",
         LocalTime => "local_time",
+        Null => "null",
+        JsonNumber => "number",
     }
 }
 #[derive(Clone, Copy)]

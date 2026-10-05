@@ -19,6 +19,9 @@ impl SyntaxSelection {
             if cli.format == Format::Toml {
                 return Some("toml");
             }
+            if cli.format == Format::Json {
+                return Some("json");
+            }
             if let SourceOrigin::LocalFile(path) = origin {
                 path.extension().and_then(|e| e.to_str())
             } else {
@@ -67,6 +70,7 @@ impl SyntaxSelection {
 pub enum StructureSelection {
     None { diagnostic: Option<String> },
     Toml,
+    Json,
 }
 impl StructureSelection {
     pub fn select(
@@ -74,28 +78,46 @@ impl StructureSelection {
         origin: &SourceOrigin,
         typed: Option<&r3viewer_wire::TypedInput>,
     ) -> Result<Self, crate::input::InputError> {
-        if cli.format == Format::Toml {
+        if matches!(cli.format, Format::Toml | Format::Json) {
             if !textual_input(typed) {
                 return Err(crate::input::InputError::new(
                     2,
-                    "--format toml requiere texto; los valores Nu tipados conservan su inspección sin ese selector",
+                    "--format toml/json requiere texto; los valores Nu tipados conservan su inspección sin ese selector",
                 ));
             }
-            return Ok(Self::Toml);
+            return Ok(if cli.format == Format::Json {
+                Self::Json
+            } else {
+                Self::Toml
+            });
         }
-        let candidate = cli.format != Format::Text
+        if cli.format != Format::Text
             && textual_input(typed)
-            && matches!(origin, SourceOrigin::LocalFile(path) if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("toml")));
-        if candidate {
-            return Ok(Self::Toml);
+            && let SourceOrigin::LocalFile(path) = origin
+            && let Some(ext) = path.extension()
+        {
+            if ext.eq_ignore_ascii_case("toml") {
+                return Ok(Self::Toml);
+            }
+            if ext.eq_ignore_ascii_case("json") {
+                return Ok(Self::Json);
+            }
         }
         Ok(Self::None {
             diagnostic: if cli.structure && typed.is_none() {
-                Some("no hay intérprete estructural para esta fuente; indica --format toml para interpretar TOML".into())
+                Some("no hay intérprete estructural para esta fuente; indica --format toml o json para interpretar datos".into())
             } else {
                 None
             },
         })
+    }
+    pub fn format(&self) -> Option<crate::structure_model::StructureFormat> {
+        use crate::structure_model::StructureFormat;
+        match self {
+            Self::Toml => Some(StructureFormat::Toml),
+            Self::Json => Some(StructureFormat::Json),
+            Self::None { .. } => None,
+        }
     }
     pub fn is_toml(&self) -> bool {
         matches!(self, Self::Toml)
@@ -103,7 +125,7 @@ impl StructureSelection {
     pub fn diagnostic(&self) -> Option<&str> {
         match self {
             Self::None { diagnostic } => diagnostic.as_deref(),
-            Self::Toml => None,
+            Self::Toml | Self::Json => None,
         }
     }
 }
@@ -167,6 +189,36 @@ pub fn textual_input(input: Option<&r3viewer_wire::TypedInput>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn explicit_json_literal_selects_json_but_language_does_not_reclassify() {
+        let cli = Cli::parse_from(["viewer", "--format", "json", "--value", "null"]);
+        let origin = SourceOrigin::Literal;
+        assert_eq!(
+            StructureSelection::select(&cli, &origin, None).unwrap(),
+            StructureSelection::Json
+        );
+        assert_eq!(
+            SyntaxSelection::select(&cli, &origin),
+            SyntaxSelection::Language("JSON".into())
+        );
+        let cli = Cli::parse_from(["viewer", "--language", "toml", "x.json"]);
+        assert_eq!(
+            StructureSelection::select(&cli, &SourceOrigin::LocalFile("x.json".into()), None)
+                .unwrap(),
+            StructureSelection::Json
+        );
+        assert_eq!(
+            SyntaxSelection::select(&cli, &SourceOrigin::LocalFile("x.json".into())),
+            SyntaxSelection::Language("TOML".into())
+        );
+        assert_eq!(
+            StructureSelection::select(&cli, &origin, None)
+                .unwrap()
+                .format(),
+            None
+        );
+    }
+
     use clap::Parser;
     #[test]
     fn only_actual_file_origin_infers_and_explicit_language_precedes_extension() {

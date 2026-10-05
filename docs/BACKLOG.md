@@ -169,3 +169,10 @@ Estado D1 TOML R1: candidato integrado en validación,145tests/build/fmt/Clippy 
 Estado D1 actualizado: revisiónR1 detectó dosP2 (presupuesto previo agregado e IPC trasSourceEnd), corregidos en candidatoR2 con147tests/build/Clippy. Revisión y AE del delta pendientes. AE independienteR1:69CLI/Nu+26semánticas y controles/cancel/reintento ConPTY pasan; límites exhaustivos y visual/matriz permanecen. Véase S03-D1.md. No cerrar RV106 ni eliminar JSON/YAML/XML ni los otros formatos del backlog.
 
 D1R2 integrado y revisado sin críticas, [cierre de candidato](reviews/S03-TOML-producto.md). AEfuncional69+26+2casos y147tests pasan. TOML mantiene pendientes exhaustivos/visual/matriz; RV106 sigue abierto con JSON/YAML/XML. JSON detalle técnico en revisión sobre este núcleo, no producciónJSON todavía.
+
+
+## Estado vigente JSON D2 R2 y refinamiento YAML
+
+JSON integrado sobre TOML,159tests workspace/fmt/Clippy/build PASS. R1 revisiónadversaria sincríticas pero AE encontró fallo de identidad glifo/ESC; R2 corregido, revisión cerrada y aceptación delta funcionalWindows PASS con trazabilidad de corpusR1. [Cierre del candidato](reviews/S03-JSON-producto.md). No hay aceptación visual de algunas filas UnicodeConPTY (decoder/presentación indeterminado), ni QA/contenciónUnix/presupuestos exhaustivos. RV-106 sigue en implementación/validación parcial; YAML/XML y resto deaceptación no se eliminan.
+
+[YAML D3](sprints/S03-D3-YAML.md) contrato observable cerrado en dosrondas adversarias; [gate experimental](research/S03_YAML_PARSER_SPIKE.md) todavía en revisión. APIpull, rangos originales yscope/version/tagdirectives requieren adaptaciónprobada antesdetalle/integración. El corte activoS03 continúa; no abrir otro sprint ni completarproducto por este resultado.

@@ -46,3 +46,7 @@ Cierre del contrato en [revisión del plan](../reviews/S03-D2-plan.md). El spike
 Gate del parser refinado: [spike](../research/S03_JSON_PARSER_SPIKE.md) y [revisión](../reviews/S03-D2-parser.md) cierran adaptación mínima NumberRange de Jiter0.17.0, que elimina su límite artificial4300 para lexemas. Solo fuente temporal; integración/vendoring/presupuestos/AE del producto siguen pendientes. La proyección en arena y extensión del controlador se especifican sobre D1 integrado, sin nueva infraestructura paralela.
 
 Detalle [core](S03-D2-core.md) y [revisión](../reviews/S03-D2-core.md) cerrados sin críticas enR3. Se inicia implementación JSON reutilizando núcleo TOML revisado; ningún resultado JSON acreditado todavía.
+
+## Estado integrado vigente
+
+JSON implementado sobre núcleo D1 y derivado JiterrawOnly. R1 pasó revisión adversaria pero AE encontró confusión glifo literal/ESC cooked; R2 corregido y159tests workspacePASS, revisión adversaria sin críticas. AE del delta funcional R2 PASS, incluyendo glifos/controles, n/N/wrap, coordenadas y dominios separados. Corpus inalteradoR1 reutilizado con trazabilidad, no repetido ni renombradoR2. Algunas filas ConPTY Unicode quedan pendientes deQAvisual por causa indeterminada. [Registro de producto](../reviews/S03-JSON-producto.md). Ningún cierre RV-106/S03 por ese resultado; YAML/XML/QA pendientes.

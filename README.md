@@ -85,4 +85,19 @@ viewer archivo.rs
 viewer -i -n archivo.rs
 ```
 
-Un fallo detectado o presupuesto excedido del motor deja el documento entero plano; no bloquea navegación/búsqueda. Inline espera el resultado completo antes de imprimir. El aislamiento de sintaxis está validado funcionalmente en Windows; en Unix el lector compila como candidato con sintaxis plana y diagnóstico hasta validar su contención y ejecución. Catálogo real en src/language_catalog.rs: no incluye aún TOML, Nushell ni PowerShell; la cobertura adicional sigue abierta. Detalles y límites en [S03](docs/sprints/S03.md), [revisión](docs/reviews/S03-sintaxis-integracion-r1.md) y [aceptación](docs/reviews/S03-sintaxis-aceptacion-r1.md).
+Un fallo detectado o presupuesto excedido del motor deja el documento entero plano; no bloquea navegación/búsqueda. Inline espera el resultado completo antes de imprimir. El aislamiento de sintaxis está validado funcionalmente en Windows; en Unix el lector compila como candidato con sintaxis plana y diagnóstico hasta validar su contención y ejecución. Catálogo real en src/language_catalog.rs: incluye TOML1.1 con recurso versionado; Nushell y PowerShell siguen pendientes; la cobertura adicional sigue abierta. Detalles y límites en [S03](docs/sprints/S03.md), [revisión](docs/reviews/S03-sintaxis-integracion-r1.md) y [aceptación](docs/reviews/S03-sintaxis-aceptacion-r1.md).
+
+
+## Estructura opcional de archivos de datos
+
+TOML y candidato JSON conservan Fuente como vista inicial. Para un archivo real .toml/.json, Tab/BackTab cambia a Estructura y vuelve manteniendo posición/búsquedas; `--structure` pide Estructura inicialmente. `--format toml|json` selecciona parser para literal/stdin/string de Nu. `--language` solo selecciona resaltado, no parser; `--format text --structure` es error2.
+
+```nu
+viewer config.toml
+viewer datos.json --structure
+'{"a":1,"a":2}' | viewer --format json --structure -i
+```
+
+Estructura conserva orden y lexemas originales, incluidas todas las ocurrencias JSON con claves repetidas y una advertencia; no convierte números enormes a float. Buscar Estructura compara contenido decodificado, con identidad separada de placeholders de controles. `o` salta al span original completo acreditado; si no existe, conserva la vista y diagnostica. Fallo de parseo/límite mantiene Fuente completa con diagnóstico y código0; cancelar devuelve130. Datos Nu ya tipados mantienen navegación y no se reabren ni se convierten a JSON/TOML.
+
+[Estado JSON y rondas](docs/reviews/S03-JSON-producto.md), [TOML](docs/reviews/S03-TOML-producto.md). Aceptación de candidato no certifica visual/matriz ni completa RV-106; YAML/XML siguen pendientes. [YAML](docs/sprints/S03-D3-YAML.md) tiene contrato revisado, parser experimental aún sin gate aprobado.

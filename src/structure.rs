@@ -32,10 +32,16 @@ pub enum StructureFailure {
     WorkerExited,
     UnsupportedPlatform,
     ContainmentFailed,
+    InvalidJson,
+    UnicodeRepresentation,
 }
 impl StructureFailure {
     pub fn description(self) -> &'static str {
         match self {
+            Self::InvalidJson => "JSON no válido; se conserva la fuente",
+            Self::UnicodeRepresentation => {
+                "surrogate Unicode aislado no representable; se conserva la fuente"
+            }
             Self::InvalidToml => "TOML no válido; se conserva la fuente",
             Self::SourceBudget => "fuente demasiado grande para estructura",
             Self::ArenaBudget => "estructura supera el presupuesto",
@@ -60,6 +66,8 @@ impl StructureFailure {
             6 => Self::WorkerExited,
             7 => Self::UnsupportedPlatform,
             8 => Self::ContainmentFailed,
+            9 => Self::InvalidJson,
+            10 => Self::UnicodeRepresentation,
             _ => return None,
         })
     }
@@ -78,6 +86,7 @@ pub enum StructureEvent {
     },
 }
 struct Request {
+    format: StructureFormat,
     generation: u64,
     id: u64,
     revision: u64,
@@ -104,6 +113,7 @@ struct State {
     cleanup_failed: bool,
 }
 struct Shared {
+    format: StructureFormat,
     state: Mutex<State>,
     wake: Condvar,
     cancel: Arc<AtomicBool>,
@@ -131,8 +141,9 @@ impl StructureShutdown {
     }
 }
 impl StructureClient {
-    pub fn new(cancelled: Arc<AtomicBool>) -> io::Result<Self> {
+    pub fn new(cancelled: Arc<AtomicBool>, format: StructureFormat) -> io::Result<Self> {
         let shared = Arc::new(Shared {
+            format,
             state: Mutex::new(State {
                 generation: 0,
                 revision: 0,
@@ -202,6 +213,7 @@ impl StructureClient {
         state.latest = Some(request_id);
         state.event = None;
         state.pending = Some(Request {
+            format: self.shared.format,
             generation,
             id: request_id,
             revision,
@@ -411,7 +423,7 @@ impl Connection {
             std::env::current_exe().map_err(|_| (StructureFailure::WorkerExited, true))?;
         let mut command = Command::new(executable);
         command
-            .arg("--toml-worker")
+            .arg("--structure-worker")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
@@ -435,6 +447,7 @@ impl Connection {
         let mut output = child.stdout.take().unwrap();
         let (send, receive) = mpsc::sync_channel(1);
         let source = request.source.clone();
+        let format = request.format;
         let generation = request.generation;
         let id = request.id;
         let io = thread::Builder::new()
@@ -463,6 +476,7 @@ impl Connection {
                     };
                     ack(
                         Message::Init {
+                            format,
                             bytes: source.len() as u32,
                         },
                         0,
@@ -663,7 +677,8 @@ fn receive_model(
         }
         _ => return Err(invalid()),
     };
-    if counts.nodes == 0
+    if counts.format != request.format
+        || counts.nodes == 0
         || counts.nodes as usize + counts.entries as usize > MAX_STRUCTURE_ITEMS
         || counts.cooked as usize > MAX_STRUCTURE_BYTES
         || counts.declarations as usize > MAX_STRUCTURE_BYTES / 24

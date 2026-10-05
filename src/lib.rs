@@ -28,3 +28,7 @@ pub mod worker_process;
 pub mod structure;
 mod structure_protocol;
 pub mod toml_worker;
+
+pub mod json_worker;
+
+pub mod structure_worker;

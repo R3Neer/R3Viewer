@@ -17,7 +17,9 @@ fn main() -> ExitCode {
             Some(arg) if arg == "--syntax-worker" => {
                 Some(r3viewer::syntax_worker::run_private_stdio())
             }
-            Some(arg) if arg == "--toml-worker" => Some(r3viewer::toml_worker::run_private_stdio()),
+            Some(arg) if arg == "--structure-worker" => {
+                Some(r3viewer::structure_worker::run_private_stdio())
+            }
             _ => None,
         };
         if let Some(result) = worker {
@@ -107,10 +109,20 @@ fn main() -> ExitCode {
     if let Some(diagnostic) = structure.diagnostic() {
         eprintln!("r3viewer: {}", text::safe_text(diagnostic));
     }
-    let structured = if cli.structure && structure.is_toml() {
+    let structured = if cli.structure && structure.format().is_some() {
         let original = Arc::new(std::mem::take(&mut source.text));
-        match r3viewer::structure_output::prepare(original.clone(), cancelled.clone()) {
-            Ok(r3viewer::structure_output::PreparedStructure::Rendered(content)) => {
+        match r3viewer::structure_output::prepare(
+            original.clone(),
+            structure.format().unwrap(),
+            cancelled.clone(),
+        ) {
+            Ok(r3viewer::structure_output::PreparedStructure::Rendered {
+                content,
+                diagnostic,
+            }) => {
+                if let Some(diagnostic) = diagnostic {
+                    eprintln!("r3viewer: {}", text::safe_text(&diagnostic));
+                }
                 // This labelled human representation has its own ordinal lines;
                 // source line numbers and source grammar do not describe it.
                 source.typed = None;

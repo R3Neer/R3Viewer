@@ -12,6 +12,21 @@ pub const MAX_STRUCTURE_DEPTH: usize = 64;
 pub const MAX_STRUCTURE_ITEMS: usize = 1_000_000;
 pub const MAX_STRUCTURE_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_STRUCTURE_SOURCE: usize = 128 * 1024 * 1024;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum StructureFormat {
+    Toml,
+    Json,
+}
+impl StructureFormat {
+    pub(crate) fn decode(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Toml),
+            1 => Some(Self::Json),
+            _ => None,
+        }
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -46,6 +61,8 @@ pub enum StructureKind {
     LocalDateTime,
     LocalDate,
     LocalTime,
+    Null,
+    JsonNumber,
 }
 impl StructureKind {
     pub fn is_container(self) -> bool {
@@ -118,6 +135,11 @@ impl fmt::Display for ModelError {
     }
 }
 impl std::error::Error for ModelError {}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DuplicateSummary {
+    pub extra_occurrences: usize,
+    pub first_key_span: Option<SourceSpan>,
+}
 #[derive(Debug)]
 pub struct Structure {
     source: Arc<String>,
@@ -128,8 +150,20 @@ pub struct Structure {
     declarations: Vec<Declaration>,
     parts: Vec<DeclarationPart>,
     cooked: Vec<u8>,
+    duplicates: DuplicateSummary,
 }
 impl Structure {
+    pub fn duplicate_diagnostic(&self) -> Option<String> {
+        (self.duplicates.extra_occurrences > 0).then(|| {
+            format!(
+                "{} repeticiones de claves; se conservan todas las entradas",
+                self.duplicates.extra_occurrences
+            )
+        })
+    }
+    pub fn duplicates(&self) -> DuplicateSummary {
+        self.duplicates
+    }
     pub fn generation(&self) -> u64 {
         self.generation
     }
@@ -155,7 +189,8 @@ impl Structure {
         })
     }
     pub fn persistent_bytes(&self) -> usize {
-        self.nodes.capacity() * size_of::<Node>()
+        size_of::<DuplicateSummary>()
+            + self.nodes.capacity() * size_of::<Node>()
             + self.entries.capacity() * size_of::<Entry>()
             + self.declarations.capacity() * size_of::<Declaration>()
             + self.parts.capacity() * size_of::<DeclarationPart>()
@@ -218,6 +253,7 @@ impl<'a> NodeRef<'a> {
             .map(move |(ordinal, index)| EntryRef {
                 structure: self.structure,
                 id: EntryId(index as u32),
+                parent: self.id,
                 ordinal,
                 entry: &self.structure.entries[index],
             })
@@ -229,6 +265,7 @@ impl<'a> NodeRef<'a> {
             EntryRef {
                 structure: self.structure,
                 id: EntryId(index as u32),
+                parent: self.id,
                 ordinal,
                 entry: &self.structure.entries[index],
             }
@@ -247,10 +284,32 @@ impl<'a> NodeRef<'a> {
 pub struct EntryRef<'a> {
     structure: &'a Structure,
     id: EntryId,
+    parent: NodeId,
     ordinal: usize,
     entry: &'a Entry,
 }
 impl<'a> EntryRef<'a> {
+    /// A contiguous raw member range only when its enclosing container has one.
+    /// This does not fabricate a TOML declaration for dispersed/implicit tables.
+    pub fn source_location(self) -> Option<SourceSpan> {
+        let parent = self.structure.node(self.parent)?.source_location()?;
+        let value = self.value().source_location()?;
+        let key = match self.key() {
+            Some(key) => key.source_location()?,
+            None => value,
+        };
+        if key.start < parent.start
+            || value.end > parent.end
+            || key.start > value.end
+            || (self.key().is_some() && key.end > value.start)
+        {
+            return None;
+        }
+        Some(SourceSpan {
+            start: key.start,
+            end: value.end,
+        })
+    }
     pub fn id(self) -> EntryId {
         self.id
     }
@@ -366,6 +425,7 @@ impl StructureBuilder {
                 declarations: Vec::new(),
                 parts: Vec::new(),
                 cooked: Vec::new(),
+                duplicates: DuplicateSummary::default(),
             },
         })
     }
@@ -380,6 +440,15 @@ impl StructureBuilder {
             return Err(ModelError::Budget);
         }
         self.scratch_bytes = bytes;
+        Ok(())
+    }
+    pub(crate) fn set_location(&mut self, id: NodeId, span: SourceSpan) -> Result<(), ModelError> {
+        self.model
+            .nodes
+            .get_mut(id.0 as usize)
+            .ok_or(ModelError::Invalid)?
+            .spec
+            .location = Some(span);
         Ok(())
     }
     pub fn push_node(&mut self, spec: NodeSpec) -> Result<NodeId, ModelError> {
@@ -762,17 +831,225 @@ impl StructureBuilder {
         if visited_parts != self.model.parts.len() {
             return Err(ModelError::Invalid);
         }
+        let other =
+            self.model.persistent_bytes() + self.scratch_bytes + seen.capacity() + STACK_BYTES;
+        let mut ids = Vec::<usize>::new();
+        let mut duplicates = DuplicateSummary::default();
+        for (n, node) in self.model.nodes.iter().enumerate() {
+            if n % 1024 == 0 && cancelled() {
+                return Err(ModelError::Cancelled);
+            }
+            if node.spec.kind != StructureKind::Mapping || node.entries.len() < 2 {
+                continue;
+            }
+            ids.clear();
+            reserve(&mut ids, node.entries.len(), other)?;
+            for (i, id) in node.entries.clone().enumerate() {
+                if i % 1024 == 0 && cancelled() {
+                    return Err(ModelError::Cancelled);
+                }
+                ids.push(id);
+            }
+            let key_text = |entry: usize| -> &str {
+                let key = self.model.entries[entry].spec.key.expect("validated key");
+                self.model.node(key).unwrap().leaf().unwrap().text()
+            };
+            heap_sort(&mut ids, |a, b| {
+                Ok(compare_text(key_text(a), key_text(b), &mut cancelled)?.then(a.cmp(&b)))
+            })?;
+            for pair in ids.windows(2) {
+                if compare_text(key_text(pair[0]), key_text(pair[1]), &mut cancelled)?
+                    == std::cmp::Ordering::Equal
+                {
+                    duplicates.extra_occurrences += 1;
+                    let key = self.model.entries[pair[1]].spec.key.unwrap();
+                    let span = self.model.nodes[key.0 as usize]
+                        .spec
+                        .location
+                        .ok_or(ModelError::Invalid)?;
+                    if duplicates
+                        .first_key_span
+                        .is_none_or(|old| span.start < old.start)
+                    {
+                        duplicates.first_key_span = Some(span);
+                    }
+                }
+            }
+        }
+        if cancelled() {
+            return Err(ModelError::Cancelled);
+        }
+        self.model.duplicates = duplicates;
         self.model.root = root;
         Ok(self.model)
     }
+}
+/// Byte-lexicographic comparison with a cancellation checkpoint per bounded block.
+fn compare_text(
+    a: &str,
+    b: &str,
+    cancelled: &mut impl FnMut() -> bool,
+) -> Result<std::cmp::Ordering, ModelError> {
+    use std::cmp::Ordering;
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let mut at = 0;
+    let common = a.len().min(b.len());
+    while at < common {
+        if cancelled() {
+            return Err(ModelError::Cancelled);
+        }
+        let end = (at + 4096).min(common);
+        let order = a[at..end].cmp(&b[at..end]);
+        if order != Ordering::Equal {
+            return Ok(order);
+        }
+        at = end;
+    }
+    if cancelled() {
+        return Err(ModelError::Cancelled);
+    }
+    Ok(a.len().cmp(&b.len()))
+}
+/// Fallible in-place heapsort of IDs; no sorting allocation or cloned key text.
+fn heap_sort(
+    ids: &mut [usize],
+    mut compare: impl FnMut(usize, usize) -> Result<std::cmp::Ordering, ModelError>,
+) -> Result<(), ModelError> {
+    fn sift(
+        ids: &mut [usize],
+        mut root: usize,
+        end: usize,
+        compare: &mut impl FnMut(usize, usize) -> Result<std::cmp::Ordering, ModelError>,
+    ) -> Result<(), ModelError> {
+        loop {
+            let left = root * 2 + 1;
+            if left >= end {
+                return Ok(());
+            }
+            let mut child = left;
+            if left + 1 < end && compare(ids[left], ids[left + 1])?.is_lt() {
+                child += 1;
+            }
+            if !compare(ids[root], ids[child])?.is_lt() {
+                return Ok(());
+            }
+            ids.swap(root, child);
+            root = child;
+        }
+    }
+    for root in (0..ids.len() / 2).rev() {
+        sift(ids, root, ids.len(), &mut compare)?;
+    }
+    for end in (1..ids.len()).rev() {
+        ids.swap(0, end);
+        sift(ids, 0, end, &mut compare)?;
+    }
+    Ok(())
 }
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
+    fn decoded_duplicates_keep_every_ordinal_and_raw_key_span() {
+        let source = Arc::new(r#"{"a":0,"\u0061":1,"a":2}"#.to_owned());
+        let mut b = StructureBuilder::new(source.clone(), 1).unwrap();
+        let root = b
+            .push_node(NodeSpec {
+                kind: StructureKind::Mapping,
+                text: None,
+                location: Some(SourceSpan {
+                    start: 0,
+                    end: source.len() as u32,
+                }),
+            })
+            .unwrap();
+        let cooked = b.append_cooked(b"a").unwrap();
+        let mut at = 0;
+        let mut entries = Vec::new();
+        let mut locations = Vec::new();
+        for (ordinal, raw_key) in [r#""a""#, r#""\u0061""#, r#""a""#].into_iter().enumerate() {
+            let start = at + source[at..].find(raw_key).unwrap();
+            let span = SourceSpan {
+                start: start as u32,
+                end: (start + raw_key.len()) as u32,
+            };
+            let key = b
+                .push_node(NodeSpec {
+                    kind: StructureKind::String,
+                    text: Some(TextRef::Cooked {
+                        start: cooked.start,
+                        end: cooked.end,
+                    }),
+                    location: Some(span),
+                })
+                .unwrap();
+            let value_at = start + raw_key.len() + 1;
+            let value_span = SourceSpan {
+                start: value_at as u32,
+                end: value_at as u32 + 1,
+            };
+            let value = b
+                .push_node(NodeSpec {
+                    kind: StructureKind::JsonNumber,
+                    text: Some(TextRef::Source(value_span)),
+                    location: Some(value_span),
+                })
+                .unwrap();
+            assert_eq!(source[value_span.range()], ordinal.to_string());
+            entries.push(EntrySpec {
+                key: Some(key),
+                value,
+            });
+            locations.push(span);
+            at = value_at + 1;
+        }
+        b.set_entries(root, entries).unwrap();
+        let model = b.finish(root, 1, 0, &AtomicBool::new(false)).unwrap();
+        assert_eq!(
+            model.duplicates(),
+            DuplicateSummary {
+                extra_occurrences: 2,
+                first_key_span: Some(locations[1])
+            }
+        );
+        assert_eq!(
+            model
+                .root()
+                .entries()
+                .map(|e| e.value().leaf().unwrap().text())
+                .collect::<Vec<_>>(),
+            ["0", "1", "2"]
+        );
+    }
+    #[test]
+    fn long_common_key_prefix_comparison_checks_cancellation_between_blocks() {
+        let a = "a".repeat(32_768);
+        let mut checks = 0;
+        assert_eq!(
+            compare_text(&a, &a, &mut || {
+                checks += 1;
+                checks >= 3
+            })
+            .unwrap_err(),
+            ModelError::Cancelled
+        );
+        assert_eq!(checks, 3);
+        let mut ids = [3, 1, 2, 0];
+        heap_sort(&mut ids, |a, b| Ok(a.cmp(&b))).unwrap();
+        assert_eq!(ids, [0, 1, 2, 3]);
+        let mut ids = [3, 1, 2, 0];
+        assert_eq!(
+            heap_sort(&mut ids, |_, _| Err(ModelError::Cancelled)).unwrap_err(),
+            ModelError::Cancelled
+        );
+    }
+
+    #[test]
     fn live_scratch_prevents_arena_growth_before_allocation() {
         let mut builder = StructureBuilder::new(Arc::new(String::new()), 1).unwrap();
-        builder.set_scratch_bytes(MAX_STRUCTURE_BYTES).unwrap();
+        builder
+            .set_scratch_bytes(MAX_STRUCTURE_BYTES - builder.persistent_bytes())
+            .unwrap();
         let leaf = NodeSpec {
             kind: StructureKind::String,
             text: Some(TextRef::Source(SourceSpan { start: 0, end: 0 })),
