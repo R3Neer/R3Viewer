@@ -194,3 +194,6 @@ XML G4 observación de recursos: [evidencia NT acotada](research/S03_XML_OBSERVA
 
 
 YAML Y09: [aceptación deadline/exclusión/Job](reviews/S03-YAML-lifecycle-y09.md) cierra los casos pendientes de timeoutTUI y exclusión real en dos transiciones bajo fallo. Job observado por handle propio confirma configuración512MiB por proceso; aplicación por estrés/arena total64MiB/items1M/visual/runtimeUnix siguen pendientes. No cerrar RV-106 ni S03.
+
+
+XML [vista B R2](sprints/S03-D4-vista.md) revisada independientemente sin críticas; [informe](reviews/S03-D4-vista.md) fija unidades buscables por tipo y conserva SourceSafeText. Implementación A/B en paralelo con ownership coordinado; G5/G6/G7/candidato/AE aún pendientes. No cerrar RV-106/S03.
