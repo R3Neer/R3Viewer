@@ -197,3 +197,6 @@ YAML Y09: [aceptación deadline/exclusión/Job](reviews/S03-YAML-lifecycle-y09.m
 
 
 XML [vista B R2](sprints/S03-D4-vista.md) revisada independientemente sin críticas; [informe](reviews/S03-D4-vista.md) fija unidades buscables por tipo y conserva SourceSafeText. Implementación A/B en paralelo con ownership coordinado; G5/G6/G7/candidato/AE aún pendientes. No cerrar RV-106/S03.
+
+
+Gráficos [experimento de backends](research/GRAFICOS_BACKENDS_SPIKE.md) y [revisión parcial](reviews/GRAFICOS-backends-spike.md) sin críticas pendientes: cuatro constructores sin Picker, PNG/cabecera/alpha y cancelación propios. Kitty16M excede presupuesto; cuotas preencode/snapshot/inline/visual/cache yG1–G7 permanecen abiertos según evidencia. No adopción de APIs ni nuevo sprint; RV-201/202/203/205 intactos.
