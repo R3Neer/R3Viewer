@@ -438,15 +438,25 @@ impl<'a> Text<'a> {
     }
     /// Translate domain bytes to presentation bytes without copying the domain.
     pub fn visible_range(&self, range: HitRange, cancel: &AtomicBool) -> Result<HitRange, Error> {
+        self.project_range(range, |_| check(cancel))
+    }
+    /// The byte threshold is crossed even when UTF8 character starts never align.
+    fn project_range(
+        &self,
+        range: HitRange,
+        mut poll: impl FnMut(usize) -> Result<(), Error>,
+    ) -> Result<HitRange, Error> {
         let mut raw: usize = 0;
         let mut visible = 0;
         let mut start = None;
         let mut end = None;
         for piece in &self.pieces[..self.count] {
             let text = piece.text();
+            let mut next_check = 0;
             for (index, ch) in text.char_indices() {
-                if index.is_multiple_of(1024) {
-                    check(cancel)?;
+                if index >= next_check {
+                    poll(raw)?;
+                    next_check = index.saturating_add(1024);
                 }
                 if raw == range.start {
                     start = Some(visible);
@@ -474,7 +484,7 @@ impl<'a> Text<'a> {
         if raw == range.end {
             end = Some(visible);
         }
-        check(cancel)?;
+        poll(raw)?;
         match (start, end) {
             (Some(start), Some(end)) => Ok(HitRange { start, end }),
             _ => Err(Error::Invalid),
@@ -1088,5 +1098,46 @@ mod tests {
             Pane::prepare(&structure, state, nav.budget(), &AtomicBool::new(true)),
             Err(Error::Cancelled)
         ));
+    }
+    #[test]
+    fn active_projection_cancel_does_not_require_aligned_utf8_byte_indices() {
+        for ch in ['é', '\u{009b}'] {
+            let value = format!("a{}", ch.to_string().repeat(5000));
+            let mut text = Text::empty();
+            text.add(Piece::Text(&value));
+            let range = HitRange {
+                start: value.len() - ch.len_utf8(),
+                end: value.len(),
+            };
+            let cancel = AtomicBool::new(false);
+            let mut checkpoints = Vec::new();
+            let projected = text.project_range(range, |offset| {
+                checkpoints.push(offset);
+                if offset > 0 {
+                    cancel.store(true, Ordering::Relaxed);
+                }
+                check(&cancel)
+            });
+            assert_eq!(projected, Err(Error::Cancelled));
+            // Cancellation switches on inside traversal, at the first crossed byte
+            // threshold. A final-only poll would be 10001, and fails this oracle.
+            assert_eq!(checkpoints, [0, 1025]);
+            assert!(checkpoints[1] < range.start);
+            cancel.store(false, Ordering::Relaxed);
+            let visible = text.visible_range(range, &cancel).unwrap();
+            let end = if ch == 'é' {
+                value.len()
+            } else {
+                1 + 5000 * 8
+            };
+            let size = if ch == 'é' { 2 } else { 8 };
+            assert_eq!(
+                visible,
+                HitRange {
+                    start: end - size,
+                    end
+                }
+            );
+        }
     }
 }
