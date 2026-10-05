@@ -24,3 +24,10 @@ scripting_enabled cambia el parsing de noscript aunque no exista motor JavaScrip
 4. Comprobar from html opt-in en Nu0.115.1: open/http get nativos y raw; ningún cambio de perfiles. El conversor y el visor comparten parser, sin confundir DOM con vista documental.
 
 HTTP, bases/redirecciones, cobertura visual/formularios pasivos, navegación, integración, ejecución multiplataforma y RV-402/404 permanecen abiertos. Estos gates refinan el alcance confirmado, no incorporan MathML, JavaScript/CSS ni modo artículo por inferencia.
+
+
+## Probe nativo de descubrimiento Nu
+
+Nu0.115.1 ejecutado con -n y módulo dummy temporal privado, sin instalación/perfiles ni parser HTML. open sample.html sin import devuelve string exacto; tras importar from html devuelve el record del dummy; open --raw conserva string exacto. sample.htm sigue string: no se deduce alias from html por esa extensión. Invocación directa del conversor temporal también conserva entrada. Para cobertura .htm del conversor opcional habrá que exportar alias explícito y comprobarlo.
+
+El primer control de ausencia era inválido: use en el mismo scope se resuelve al parsear y afectaba la expresión anterior. Se conservó intento1 y se corrigió sólo el control con una invocación fresca independiente sin import; no se atribuye ese resultado a fallo de Nushell/producto. Evidencia privada html-nu-converter-probe-r1/PREOUTPUT-MANIFEST.json, OWN-OUTPUT-attempt1.log, OWN-ABSENT-attempt2.log y OWN-RECEIPT.json, entradas verificadas antes/después. No prueba HTTP, metadatos, árbol HTML, integración del companion, visual ni RV-404 completo.
