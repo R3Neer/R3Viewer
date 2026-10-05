@@ -1,6 +1,6 @@
 # PDF UTF16/mapping — revisión final del contrato R4
 
-Adversario root, distinto del autor unix_r3_review. Candidato efectivo: R3 SHA256 0CDBA3171F996584B6D1D753856E20FC1B3F77DB98319E03AF3A8AFE833A4BEA más delta R4 SHA256 B3C74B5B2D41245FCDA87079967548EC082283967AFA8FEC9FECF9DAB1EB29A3. Las propuestas previas y la revisión R3 se conservan fuera de Git; los textos finales canónicos mantienen esos bytes y sus estados históricos de entrega.
+Adversario root, distinto del autor unix_r3_review. Candidato efectivo: R3 SHA256 0CDBA3171F996584B6D1D753856E20FC1B3F77DB98319E03AF3A8AFE833A4BEA más delta R4 SHA256 B3C74B5B2D41245FCDA87079967548EC082283967AFA8FEC9FECF9DAB1EB29A3. Las propuestas previas y la revisión R3 se conservan fuera de Git; los textos finales canónicos mantienen su contenido y estados históricos de entrega. Los SHA256 citados corresponden a las entregas privadas originales; Git normaliza los finales de línea a LF. HEAD se ha comparado con los originales normalizando únicamente CRLF a LF, sin otros cambios.
 
 Veredicto: **SIN_CRITICAS_PENDIENTES para el contrato operacional revisado**. Autoriza construir el gate privado, no demuestra runtime, ABI, memoria efectiva, cobertura semántica del PDF ni producto integrado.
 
