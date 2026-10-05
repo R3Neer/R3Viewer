@@ -40,3 +40,5 @@ Fuentes primarias consultadas:
 ## Cierre canónico del criterio existente
 
 La revisión independiente posterior distingue este monitor NT del experimento ETW no disponible: el criterio G4 canónico no exige ETW kernel y queda cumplido para el prototipo exacto y siete inputs observados. [Revisión y hashes](../reviews/S03-XML-gate-recursos.md). Las expresiones anteriores de G4 kernel-observation pendiente se conservan como investigación opcional, sin extender ni alterar el criterio canónico. No hay garantía universal, sandbox, aceptación de producción ni cierre G5–G7. Cambiar parser/features/resolutor requiere renovar comprobaciones de recursos.
+
+Ubicación original de scripts/JSON mencionados como «esta carpeta» en el informe: C:\Users\Usuario\.codex\visualizations\2026\10\04\01a10823-9b5a-78d3-8c6a-c64ff5709d5f. No se copian ni instalan herramientas de captura en el producto; hashes de sus bytes en la revisión final. Las instrucciones de reproducción se refieren a esa evidencia original, no al directorio docs/research.

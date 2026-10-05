@@ -33,3 +33,7 @@ Esto supera IsProcessInJob genérico: identifica un handle retenido por el app c
 - verified.py añadió FILETIME de exclusión y Job; PASS2,055069s. Su segundo miembroJob29504 no fue identificado en aquella ejecución; complete.py añadió metadata Toolhelp de miembros y transición inversa para resolver la ambigüedad en una ejecución nueva. No reconstruye identidad pasada ni la presenta como confirmada.
 
 No se detectaron defectos de producto en Y09. Arena persistent+ownscratch64MiB total e items1M exactos siguen pendientes; configuraciónJob no sustituye dichas comprobaciones. También pendientes estrés de aplicación del límite, QA visual WT/WezTerm, runtime/contención Unix y resto de backlog. Y09 se limita al camino exe/ConPTY; la aceptación Nu previa sigue siendo evidencia separada.
+
+## Procedencia de esta copia
+
+Informe original SHA87F7F302609C7581735C671FCEFDB54F5219A3C0BAB83F4778FFECD4AFDBCC25; scripts/JSON/transcript originales en C:\Users\Usuario\.codex\visualizations\2026\10\04\01a10823-9b5a-78d3-8c6a-c64ff5709d5f\yaml-lifecycle-y09. ARTIFACTS.json SHA427634245C92319E4A0576A647FAB81752B16DA905F6A4E127F0103F0A36082B. Los nombres de scripts anteriores se refieren a esa carpeta, no a docs/reviews. No reproducir contra el candidato integrado nuevo sin registrar hashes y diferenciar la ejecución anterior.
