@@ -59,3 +59,6 @@ Crosscheck Linux x86_64 y macOS arm64 del lector pasa, no ejecución runtime. Si
 
 
 Medición independiente del candidato C release4a3fa9d: [informe](research/S03_RENDIMIENTO_RELEASE.md), tabla1000/100000 primera vista181/940ms y40movimientos63/58ms. Una ejecución por tamaño, incluye productor/transporte/preparación; memoria Nu/app separada sin incluir companion. No comparación causal con debug histórico ni QA visual ni cierre de límites/matriz.
+
+
+D1 TOML R1 en validación: [candidato y hashes](sprints/S03-D1.md), fmt/Clippy/145tests/build y crosschecks Linux/macOS del snapshot pasan. [Lifecycle del autor](research/S03_TOML_CICLO_VIDA.md)8/8casos no sustituye AE independiente, revisión adversaria ni visual/matriz; ambas revisiones funcionales están en curso.

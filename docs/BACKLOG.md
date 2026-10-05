@@ -161,3 +161,6 @@ Actualización D1: diseño core y recurso TOML-R4 aprobados por adversario, impl
 
 
 Refinamiento paralelo preparado: [delta JSON D2](sprints/S03-D2-JSON.md) y [revisión](reviews/S03-D2-plan.md) sin críticas pendientes del contrato observable. Elección de parser y candidato de producto siguen abiertos; TOML D1 permanece en implementación. [Inspección de API gráfica](research/GRAFICOS_API_PREPARACION.md) identifica adaptación de stdin/teclado, geometría y ausencia de efectos de configuración; no es soporte gráfico implementado ni probado visualmente.
+
+
+Estado D1 TOML R1: candidato integrado en validación,145tests/build/fmt/Clippy y crosschecks Linux/macOS pasan. Adversario y AE independientes ejecutan el mismo snapshot; el ciclo de vida8casos del autor es evidencia separada. Ningún cierre de D1/S03/RV106 por estas pruebas; visual, contención Unix, resto de formatos y distribución siguen pendientes.
