@@ -203,3 +203,6 @@ Gráficos [experimento de backends](research/GRAFICOS_BACKENDS_SPIKE.md) y [revi
 
 
 XML D4 R1 tiene [revisión y aceptación funcional parcial Windows](reviews/S03-XML-producto.md): 213 tests/fmt/Clippy/build, revisión independiente sin críticas, 89 CLI/Nu, 28 spans, ocho sesiones ConPTY y StringStream SDK real. Fuente original/visible y cancelación Unicode YAML también revisadas. Nueva observación G4 de producción y addendum independiente sin críticas incorporados, dentro del alcance NT observado. Estrés exhaustivo, inline deadline real, visual/Unix/gramáticas/distribución y formatos enriquecidos siguen abiertos. No cerrar RV-105/106/107 ni S03 por este incremento.
+
+
+Gráficos: [propuesta G2 R2](refinement/GRAFICOS-G2.md) revisada sin críticas de diseño tras dos rondas. Experimento privado de raster visible/encoders acotados iniciado; implementación/producción, G1–G7 y RV-201/202/203/205 continúan pendientes. No nuevo sprint ni reducción del alcance final de imágenes/animación.
