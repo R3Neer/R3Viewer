@@ -249,3 +249,9 @@ Gate Unicode R1 rechazado en revisión/AE independientes: UROOT-01 reproduce fal
 PDF Rust R2 rechazado por PRUST-AE01: una espera transitoria deja sin reap/handle cerrado al hijo y requiere rescate. Poll y carryUTF16 pasan controles acotados; cobertura semántica continúa sin acreditar. Candidato R3 con reintentos y autoridad Pending entregado para nueva revisión/AE; no adopción ni cierre de RV-204.
 
 Markdown privado R2 ejecutó21casos sobre expectativas anteriores a outputs y7controles del supervisor sin rescate externo, con fmt/clippy/build; cinco casos mantienen observaciones exploratorias explícitas. Parser reconoce wikiembedPDF y conserva pagefragment, pero resolución/render/composición no están implementados. Freeze691entradas entregado para revisión/AE distintas del coordinador autor; no aceptación automática, producción ni cierre de RV-301/302/303/305.
+
+Unicode gate privado R2: [viabilidad](research/S03_UNICODE_GATE.md) con revisión de código y AE independientes sin críticas pendientes. Quedan cerrados los fallos del experimento UROOT01/UG-AE01/02; S03-UNICODE01 sigue abierto hasta integración y aceptación en todas las rutas reales. Sin cierre RV-105/504/S03.
+
+Markdown R2 rechazado por MD-AE01 (stream.close fallido pierde autoridad Pending) y MD-AE02 (cuota de bytes corta UTF8 y presenta error equivocado). R3 separado corrige ambos, repite21casos y7controles anteriores, añade4controles y está congelado para revisión/AE independientes; sin adopción ni cierre de formatos.
+
+PDF Rust R3 rechazado por PRUST-ROOT02: error del reader al EOF posterior a comprobación inicial podía publicar validated_response tras join. R4 separado mueve validación IO después de joins e incorpora errores de cierre del writer; candidato pendiente de revisión/AE. Cobertura semántica nativa continúa sin acreditar, RV-204 abierto.
