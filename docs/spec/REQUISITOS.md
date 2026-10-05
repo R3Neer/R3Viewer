@@ -136,7 +136,7 @@ No se han fijado métricas numéricas de rendimiento. Se definirán con document
 
 ## Integración propuesta
 
-Ejemplos de semántica, todavía no implementados:
+Ejemplos del contrato. Archivos textuales, --inline/-i y valores Nu ya tienen comprobaciones funcionales en Windows; formatos enriquecidos, distribución y matriz completa siguen pendientes según BACKLOG.md:
 
 ```nu
 viewer documento.md          # ruta de archivo
@@ -146,7 +146,7 @@ ls | viewer                 # tabla tipada
 viewer --inline documento.md # también viewer -i documento.md
 ```
 
-La integración debe conservar tipos relevantes de Nushell. Una conversión universal a JSON requiere evaluar pérdidas de tipos. Un plugin nativo requiere estudiar compatibilidad de versiones y cómo el visor obtiene acceso al terminal.
+La integración debe conservar tipos relevantes de Nushell. El corte S02 utiliza un companion fijado a Nu0.115.1 y transporte tipado propio, sin conversión universal a JSON. El lector accede al terminal de control separado de stdin; S02/S03 registran evidencia funcional Windows y límites de compatibilidad todavía pendientes.
 
 open --pretty queda retirado por decisión Q02. No adaptar ni ocultar open o explore.
 
