@@ -41,3 +41,6 @@ Spike de Jiter pendiente antes detalle final: verificar `finish()`rejects traili
 Referencias primarias consultadas: [RFC8259 secciones2/4/6/8.2](https://www.rfc-editor.org/rfc/rfc8259.txt) y [Jiter0.17 API](https://docs.rs/jiter/latest/jiter/struct.Jiter.html). La elección de orden documental, conservación de duplicados, modelo/fallback/budgets es política de R3Viewer; JSONnorma no exige una implementaciónfirst/lastwins. Nada aquí modifica producción ni acredita ejecución. Sigo disponible para AE TOML cuando Root congele candidato.
 
 Cierre del contrato en [revisión del plan](../reviews/S03-D2-plan.md). El spike de Jiter y su adaptación rawOnly se revisan por separado; no cerrar RV-106 ni comenzar integración del siguiente corte antes de disponer del núcleo D1 revisado.
+
+
+Gate del parser refinado: [spike](../research/S03_JSON_PARSER_SPIKE.md) y [revisión](../reviews/S03-D2-parser.md) cierran adaptación mínima NumberRange de Jiter0.17.0, que elimina su límite artificial4300 para lexemas. Solo fuente temporal; integración/vendoring/presupuestos/AE del producto siguen pendientes. La proyección en arena y extensión del controlador se especifican sobre D1 integrado, sin nueva infraestructura paralela.
