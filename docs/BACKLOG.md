@@ -290,3 +290,6 @@ PDF texto: [reinspección de fuentes fijadas](research/PDF_TEXTO_INVESTIGACION.m
 
 
 RV-404: prueba nativa HTTP identifica que Nu0.115.1 Windows llama Command.run y rechaza un conversor custom escrito en Nu, aunque open sí lo ejecuta. Se preservan dos FAIL y cuatro controles PASS; [fuentes y evidencia](research/HTML_PARSER_API.md). Propuesta privada de companion opcional PluginCommand pendiente de revisión/spike; Q25, árbol y comandos nativos intactos siguen obligatorios, sin cierre de RV-404.
+
+
+GIPC privado R2: [evidencia final](research/GRAFICOS_IPC_GATE.md), [revisión de código](reviews/GRAFICOS-ipc-code-r2.md) y [aceptación independiente](reviews/GRAFICOS-ipc-aceptacion-r2.md) sin críticas pendientes dentro del alcance probado. ROOT01 cerrado para el experimento mediante consulta nativa de tres handles originales;383 registros candidato y63 evidencias AE verificados.149 casos exact-bins y cuatro grupos propios nativos; seis cierres persistentes siguen FailedPending, teardown externo no cuenta como reap. R1/fallos conservados. Pendientes integración, cuotas completas, terminal/visual/Unix/cache/SLA/distribución; sin cierre G2/RV ni adopción en producción.

@@ -75,3 +75,8 @@ G2IPC01 ownership duplicado remoto: retirado por completo push C→H. H hace pul
 ## Cierre de revisión de diseño
 
 R3 SHA5438FBA7523650C082EA33C5B7D296F8191B4E2A26050BDB6951EF5DA6BE2B3E revisada independientemente sin críticas pendientes. Informe ../reviews/GRAFICOS-ipc-plan-r3.md. Tres propuestas preservadas temporalmente: ownership externo/handoff y recibos finales se concretaron sin cambiar aceptación. Fijar wire/cotas agregadas e implementar gate privado antes de adoptar producto. Este cierre no acredita código ni terminal ni memoria ni QA.
+
+
+## Estado posterior del experimento R2
+
+2026-10-05. R1 rechazado por GIPC-ROOT01, evidencia preservada. R2 corrige ownership/cierre; [investigación y evidencia final](../research/GRAFICOS_IPC_GATE.md) enlazan revisión de código y aceptación independientes sin críticas pendientes para ese corte privado. No cambia este contrato ni implica integración o aceptación G2/RV; Pending persistente no se cuenta como cierre por el teardown externo.
