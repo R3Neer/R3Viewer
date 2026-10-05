@@ -164,3 +164,6 @@ Refinamiento paralelo preparado: [delta JSON D2](sprints/S03-D2-JSON.md) y [revi
 
 
 Estado D1 TOML R1: candidato integrado en validación,145tests/build/fmt/Clippy y crosschecks Linux/macOS pasan. Adversario y AE independientes ejecutan el mismo snapshot; el ciclo de vida8casos del autor es evidencia separada. Ningún cierre de D1/S03/RV106 por estas pruebas; visual, contención Unix, resto de formatos y distribución siguen pendientes.
+
+
+Estado D1 actualizado: revisiónR1 detectó dosP2 (presupuesto previo agregado e IPC trasSourceEnd), corregidos en candidatoR2 con147tests/build/Clippy. Revisión y AE del delta pendientes. AE independienteR1:69CLI/Nu+26semánticas y controles/cancel/reintento ConPTY pasan; límites exhaustivos y visual/matriz permanecen. Véase S03-D1.md. No cerrar RV106 ni eliminar JSON/YAML/XML ni los otros formatos del backlog.
