@@ -216,3 +216,6 @@ Contención [Unix R2](refinement/CONTENCION-UNIX.md) revisada sin críticas de d
 Gramáticas shell: [diseño R2](refinement/GRAMATICAS-SHELL.md) revisado sin críticas pendientes tras resolver retokenización y regex incompatibles; inventario exacto y review conservados. Prototipo privado y oracle independiente en preparación. No soporte Nu/PowerShell acreditado todavía ni cambios de producción; RV-105/106/107 y S03 continúan abiertos.
 
 Gráficos: [raster por filas R2](research/GRAFICOS_FILAS_SPIKE.md) revisado independientemente sin críticas dentro del corte, tras corregir tres errores PNG de R1. 204 invocaciones de autor y250 del adversario (no corpus único sumado); AE R2 independiente completa171casos y cuatro Jobs Windows, dentro del corte. PNG16M→viewport evita RGBA completo; Sixel/IPC/cache/agregado/terminal/inline/visual/nativos siguen abiertos, sin adopción ni cierre de RV/G2/S03.
+
+PDF: [contrato G0 R2](refinement/PDF-G0.md) revisado sin críticas de diseño; gate binario/ABI/corpus, implementación y aceptación siguen pendientes. No cerrar RV-204 ni demás capacidades. Unix: [harness R4](research/S03_UNIX_PROBES.md) revisado sin críticas en preparación, corrige UP-04; no ejecución nativa. Solo Windows disponible confirmado por el usuario; futura matriz GitHub Actions pendiente. No cierre U-G1–5/S03 ni soporte Linux/macOS por este resultado.
+
