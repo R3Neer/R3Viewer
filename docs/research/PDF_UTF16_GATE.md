@@ -1,6 +1,6 @@
 # Gate privado PDF UTF16: candidato R1 rechazado
 
-2026-10-06. Contrato [R3+deltaR4+V](../refinement/PDF-TEXTO-UTF16.md); candidato privado congelado, no integración ni aceptación. Revisión de código de raíz: **NO APROBADO**, PDF-U16-ROOT01. AE independiente corroboró el fallo y continúa sus contrastes; su informe final todavía pendiente. RV-204/G1 y SourceUnverified permanecen abiertos.
+2026-10-06. Contrato [R3+deltaR4+V](../refinement/PDF-TEXTO-UTF16.md); candidato privado congelado, no integración ni aceptación. Revisión de código de raíz: **NO APROBADO**, PDF-U16-ROOT01. AE independiente finalizada: **NO APROBADO**, PDF-U16-AE-EOF01 corrobora el fallo con peer propio. Raíz verificó los 53 registros de evidencia sin discrepancias. RV-204/G1 y SourceUnverified permanecen abiertos.
 
 ## Identidad y comprobación
 
@@ -19,3 +19,9 @@ Revisión privada de raíz PDF-UTF16-root-review-r1.md EA3325E0B1B0899A08504FA41
 R2 debe acreditar cierre real de stdin y retener cualquier error/autoridad; Failure observada antes de EOF no admite V/publicación. Afinar ordering sin tratar flag local como prueba de consumo del peer y repetir controles de cierre atrasado/fallido y positivos posteriores a EOF. Candidato separado, nueva revisión y AE de bytes exactos; no modificar R1 ni goldens.
 
 Una llamada GetText, decoding UTF16, asociaciones/geometry/wire y ledger no eliminan los FAIL de ligaduras24B→22B, singleTJ32767 ni CMap0000. Semántica de fuente sigue Unverified, NativeEmpty no significa SourceNoText. Contención nativa/margen externo, producto completo, PDF gráfico, terminal/QA visual, Unix y distribución siguen pendientes.
+
+## Aceptación independiente R1 finalizada
+
+Informe temporal PDF-UTF16-independent-acceptance-r1.md SHA256 7819C0F275F41FBA075B98B2CD1B8AC09CDA6A28E850AC023D5F5B74FEDAE08A; manifiesto OWN-AE-EVIDENCE-MANIFEST.json F491DC6DA0789F0E07BE86A913ABB04E8249D4815517CA8FBCC5C743C03B299C, 53 registros verificados por raíz. Recibo privado PDF-UTF16-root-verification-independent-r1.json conserva el contraste. Informes del candidato rechazado permanecen fuera de Git.
+
+Cobertura positiva delimitada: cuatro PDFs propios, tres rechazos preflight, 23 modelos wire propios (13 aceptados y diez rechazados), máximo lógico sintético V N=U=S=65536 y cuatro contrastes nativos conservando discrepancias. No demuestra máximo agregado real H+D, lifecycle completo, semántica de fuente, integración ni QA visual/Unix. El control de EOF propio produce validated=true y spawn V con stdin todavía abierto: FAIL preservado, sin rescate externo. R2 debe superar código y aceptación independientes antes de adoptar el helper.
