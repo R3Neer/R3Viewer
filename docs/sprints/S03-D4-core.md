@@ -124,4 +124,3 @@ No se ejecutaron esos gates en esta redacción. G1–G4 preceden integración de
 ## 12. Evidencia y siguiente entrega
 
 Lectura del informe canónico y código local confirmó la separación actual de YAML metadata, reserva UI, IPC Begin y budget. No se hizo Cargo build/test, modificación del repo, commit, descarga ni apertura de recursos del corpus. La propuesta necesita evaluación adversaria y experimentos enumerados; no hay resultado de arquitectura aprobado ni parser aceptado todavía. Próxima entrega: gate privado medido, con hashes, oráculos y deltas por G1–G6, después diseño R2 si cambian fronteras. X01–X09 y RV-106 conservan todos sus pendientes.
-
