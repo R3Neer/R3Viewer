@@ -1,6 +1,6 @@
 # PDF semántica — investigación R1
 
-**Resultado:** hay dos causas distintas confirmadas en fuentes fijadas y concordantes con la AE Windows existente. Se conserva `semantic_state=Unverified` y todos los FAIL originales. Esto propone un gate separado; no modifica ni aprueba PDF G0, Rust R4 o producción.
+**Resultado:** hay causas confirmadas en fuentes fijadas y concordantes con la AE Windows existente; la normalización de ligaturas se distingue además de la truncación y la representación UTF16. Se conserva `semantic_state=Unverified` y todos los FAIL originales. Esto propone un gate separado; no modifica ni aprueba PDF G0, Rust R4 o producción.
 
 ## Fuentes y alcance
 
@@ -21,6 +21,14 @@ Cambiar a `GetText`, `GetBoundedText` o otra vista del mismo texto ya parseado n
 [ToUnicode](https://pdfium.googlesource.com/pdfium/+/91b9d569b34be4f38eed7b3c49b227356c3aadad/core/fpdfapi/font/cpdf_tounicodemap.cpp), 115–141, convierte cada grupo hexadecimal de cuatro dígitos en un `wchar_t`. [ProcessTextObject](https://pdfium.googlesource.com/pdfium/+/91b9d569b34be4f38eed7b3c49b227356c3aadad/core/fpdftext/cpdf_textpage.cpp), 1413–1466, emite un `CharInfo` por unidad, conservando la caja/origen del glyph. [GetUnicode/GetText](https://pdfium.googlesource.com/pdfium/+/91b9d569b34be4f38eed7b3c49b227356c3aadad/fpdfsdk/fpdf_text.cpp), 69–76 y 341–372, devuelve directamente esa unidad como unsigned int en la primera API y texto UCS2LE en la segunda. El tipo u32 de ABI no garantiza scalar Unicode. Para 😀 se observaron D83D/DE00 (55357/56832) como dos índices. Rechazarlos mediante `char::from_u32` no demuestra que el PDF contenga Unicode inválido: demuestra que el contrato scalar-por-índice elegido no representa esta capa.
 
 R4 sólo reparó carry del contraste UTF16 en 1023/1024; la ruta primaria conserva agujeros y Unverified. También existen expansión de ligaturas, índices excluidos y texto generado: no asumir igualdad entre índice native, unidad UTF16, scalar y byte UTF8.
+
+## Ligaduras: transformación anterior a ambas APIs
+
+Reinspección de la misma fuente inmutable `cpdf_textpage.cpp`, SHA256 `17AD48AA9DD9B187CD082410F2EFDC4C4FADD021DCDFB43B9CDC10C27265CBC8`, sin ejecutar nuevos PDFs. `AddCharInfoByLRDirection` (786–810) normaliza U+FB00..U+FB06 mediante `GetUnicodeNormalization`, marca los caracteres derivados como `kPiece` y modifica su Unicode antes de añadirlos a `char_list_` y `text_buf_`. `AddCharInfoByRLDirection` (813–835) aplica espejo y normalización por su propia ruta. [Fuente fijada](https://pdfium.googlesource.com/pdfium/+/91b9d569b34be4f38eed7b3c49b227356c3aadad/core/fpdftext/cpdf_textpage.cpp).
+
+Por ello, igualdad entre `GetUnicode`, `GetText` e índices recíprocos no acredita igualdad con los códigos Unicode de la fuente: las APIs pueden estar observando la misma capa ya transformada. `IsGenerated`, `IsHyphen` y `HasUnicodeMapError` consultan respectivamente `kGenerated`, `kHyphen` y `kNotUnicode`; no exponen por esos flags el estado `kPiece`. Flags cero tampoco prueban ausencia de normalización. [Implementación de las APIs](https://pdfium.googlesource.com/pdfium/+/91b9d569b34be4f38eed7b3c49b227356c3aadad/fpdfsdk/fpdf_text.cpp).
+
+Esta lectura explica una vía de expansión de ligaturas; la tabla concreta y cada fixture requieren su propio contraste. No atribuye automáticamente normalización a toda diferencia ni atesta el build de la DLL. Se mantienen separados fidelidad a la capa nativa, equivalencia semántica y reproducción exacta de la fuente. La nueva implementación privada UTF16 sigue pendiente de freeze/revisión/aceptación; no se cambia ningún oráculo para igualar ligaduras ni se declara SourceComplete.
 
 ## Propuesta a revisión, antes de implementación
 
