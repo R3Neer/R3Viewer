@@ -64,3 +64,6 @@ Medición independiente del candidato C release4a3fa9d: [informe](research/S03_R
 D1 TOML R1 en validación: [candidato y hashes](sprints/S03-D1.md), fmt/Clippy/145tests/build y crosschecks Linux/macOS del snapshot pasan. [Lifecycle del autor](research/S03_TOML_CICLO_VIDA.md)8/8casos no sustituye AE independiente, revisión adversaria ni visual/matriz; ambas revisiones funcionales están en curso.
 
 D1R2: [revisión final TOML](reviews/S03-TOML-producto.md) sin críticas;147tests workspace, AE69CLI/Nu+26semánticas+2anidados y controles Building pasan. Presupuestos/matriz/QA visual siguen pendientes.
+
+
+Disponibilidad confirmada por el usuario2026-10-05: sólo Windows local. Preparar ejecución futura nativa macOS/Linux mediante GitHub Actions cuando el repositorio se conecte y se autorice su ejecución. Mantener pendientes runtime/contención nativos hasta logs reales de candidato exacto; pruebas headless de CI y ConPTY no sustituyen QA visual de protocolos/scrollback/DPI. [Decisión](spec/DECISIONES.md).

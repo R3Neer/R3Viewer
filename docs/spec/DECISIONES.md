@@ -92,3 +92,8 @@ SHA-256 del plan general revisado/copiado: AC56D44929F4D158D143136DE1B594A7BFF93
 ## Desarrollo y metodología vigentes
 
 El 2026-10-04 el usuario sustituye D01 (solo análisis) y las restricciones históricas de implementación: autoriza desarrollar todo R3Viewer y continuar hasta completar aceptación del backlog. Confirma Scrum por objetivos sin cadencia temporal fija, adaptación explícita. Metodología canónica: ../process/METODOLOGIA.md. Publicación e instalación en perfiles personales siguen fuera del encargo. Los estados antiguos documentan su fecha y no revocan esta autorización posterior.
+
+
+## Plataformas disponibles para validación: 2026-10-05
+
+El usuario confirma que actualmente sólo dispone de este Windows. GitHub Actions puede servir más adelante para ejecutar pruebas nativas macOS/Linux. Se conserva la matriz objetivo multiplataforma: preparación local y compilación cruzada no equivalen a ejecución nativa; CI futura no acredita apariencia real de terminales. Registrar ejecuciones por plataforma/candidato cuando exista acceso. Esta respuesta no crea remoto ni publica el proyecto ahora.
