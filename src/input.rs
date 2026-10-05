@@ -27,7 +27,16 @@ impl InputError {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SourceOrigin {
+    LocalFile(std::path::PathBuf),
+    Literal,
+    StandardInput,
+    Nushell,
+}
+
 pub struct TextSource {
+    pub origin: SourceOrigin,
     pub title: String,
     pub text: String,
     pub typed: Option<r3viewer_wire::TypedInput>,
@@ -117,7 +126,7 @@ pub fn load(
             "elige un único origen: argumento o contenido de stdin",
         ));
     }
-    let (title, bytes) = match &cli.source {
+    let (title, bytes, origin) = match &cli.source {
         Some(source) if cli.value => {
             if source.len() > INPUT_LIMIT {
                 return Err(InputError::new(
@@ -125,7 +134,11 @@ pub fn load(
                     "contenido literal excede el límite de 128 MiB",
                 ));
             }
-            ("Contenido literal".to_owned(), source.as_bytes().to_vec())
+            (
+                "Contenido literal".to_owned(),
+                source.as_bytes().to_vec(),
+                SourceOrigin::Literal,
+            )
         }
         Some(source) => {
             if !cli.path && (source.starts_with("https://") || source.starts_with("http://")) {
@@ -144,9 +157,17 @@ pub fn load(
                 },
                 &cancelled,
             )?;
-            (source.clone(), bytes)
+            (
+                source.clone(),
+                bytes,
+                SourceOrigin::LocalFile(source.into()),
+            )
         }
-        None => ("Entrada estándar".to_owned(), piped),
+        None => (
+            "Entrada estándar".to_owned(),
+            piped,
+            SourceOrigin::StandardInput,
+        ),
     };
     let text = String::from_utf8(bytes).map_err(|err| {
         InputError::new(
@@ -158,6 +179,7 @@ pub fn load(
         )
     })?;
     Ok(TextSource {
+        origin,
         title,
         text,
         typed: None,

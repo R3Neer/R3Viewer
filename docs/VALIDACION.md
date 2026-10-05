@@ -50,3 +50,9 @@ ConPTY propia es prueba funcional de procesos/teclas/modos. No sustituye revisi�
 
 
 Actualización R4 A/B: revisión independiente sin críticas y aceptación funcional Windows; 89 pruebas workspace y dos pruebas parser controlado, formato/Clippy/build. Compilación Linux pasa; advertencia cosmética upstream de paréntesis en Crossterm Unix, sin cambio de su código. Las validaciones de apariencia, ejecución macOS/Linux, resaltado, demás adaptadores y distribución conservan estado pendiente.
+
+## S03 C R1: evidencias diferenciadas
+
+114tests/fmt/Clippy/build Windows del autor; core R3 e integración R1 con adversarios independientes sin críticas; AE funcional parcial Windows. Informes finales en reviews/S03-sintaxis-*.md y resumen en sprints/S03.md. Candidato permite código TUI/inline y string_stream explícito, conserva origen/estados y degrada todo documento ante fallos expuestos. WorkerExit y timeout reales comprobados, fuente íntegra/latch/reap; no equivalen a toda la matriz de fallos/estado/estrés ni QA visual.
+
+Crosscheck Linux x86_64 y macOS arm64 del lector pasa, no ejecución runtime. Sintaxis Unix sigue gate provisional; resolver contención nativa/semánticas de memoria antes de certificarla. Fuente Onig/Syntect inspeccionada distingue errores expuestos de internos que se convierten en no-match; spike específico pendiente. Mínimos de SO, gramáticas adicionales, apariencia y bundle final siguen en sus historias.

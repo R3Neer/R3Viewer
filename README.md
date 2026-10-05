@@ -75,4 +75,14 @@ La TUI permite Enter para inspeccionar una celda/hoja, r para la fila completa, 
 
 Opciones de presentación: --colour auto|always|never, --theme auto|dark|light, --line-numbers/-n y --no-line-numbers. --config indica TOML de lectura, máximo64KiB. Flags prevalecen sobre configuración; auto respeta NO_COLOR/TERM=dumb. Redirección siempre plana. Esquema y rutas estándar en [S03](docs/sprints/S03.md). No crear perfiles ni archivos de configuración implícitamente.
 
-El corte A/B llega a R4 con 89 pruebas del workspace, dos pruebas del backend controlado, revisión independiente sin críticas y aceptación funcional Windows. Las revisiones anteriores detectaron y corrigieron problemas de teclado Unicode, posición/búsqueda y override de NO_COLOR. El resaltado aislado sigue en integración y todavía no se anuncia como capacidad disponible. Compilación Linux comprobada; ejecución Linux/macOS y QA visual aún pendientes.
+A/B tiene aceptación funcional Windows en R4. C añade resaltado en TUI e inline con 114 pruebas, revisión independiente sin críticas y aceptación funcional parcial Windows. Código, lectura y datos son de solo lectura; los formatos enriquecidos siguen pendientes. Compilación cruzada del lector comprobada para Linux x86_64 y macOS arm64; ejecución en ambos y QA visual todavía pendientes.
+
+Resaltado: --format auto|text|code y --language por nombre/extensión integrada. Auto deduce únicamente la extensión del archivo realmente abierto; pipeline/literal necesita --language. Text con --language es error2; lenguaje desconocido o code sin lenguaje deducible conserva fuente completa plana con diagnóstico. Plain Text, colour never y redirección evitan iniciar el motor. String y string_stream Nu explícitos son textuales; Unknown/Binary mantienen su tipo. No cargar gramáticas arbitrarias ni reabrir metadata.
+
+```nu
+viewer archivo.rs
+"let saludo = \"hola\";" | viewer --language rs
+viewer -i -n archivo.rs
+```
+
+Un fallo detectado o presupuesto excedido del motor deja el documento entero plano; no bloquea navegación/búsqueda. Inline espera el resultado completo antes de imprimir. El aislamiento de sintaxis está validado funcionalmente en Windows; en Unix el lector compila como candidato con sintaxis plana y diagnóstico hasta validar su contención y ejecución. Catálogo real en src/language_catalog.rs: no incluye aún TOML, Nushell ni PowerShell; la cobertura adicional sigue abierta. Detalles y límites en [S03](docs/sprints/S03.md), [revisión](docs/reviews/S03-sintaxis-integracion-r1.md) y [aceptación](docs/reviews/S03-sintaxis-aceptacion-r1.md).

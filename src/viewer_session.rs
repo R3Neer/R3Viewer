@@ -1,16 +1,21 @@
 //! Manual Ratatui session over the existing exact-state terminal guard.
 use crate::{
     config::{PresentationConfig, Role},
-    data::{Cell, Navigator, PathMember},
+    data::{Cell, DataRef, Navigator, PathMember},
     inspect_text::primitive_text,
     presentation::{SafeTextModel, cell_width, slice_cells},
     search::{
         Direction, QUERY_LIMIT, SearchHit, SearchOutcome, SearchWorker, find_data, find_visible,
     },
     session::{TerminalGuard, control_terminal},
+    syntax::{
+        FallbackReason, RoleSpan, SyntaxClient, SyntaxEvent, SyntaxLimits, SyntaxRole,
+        SyntaxShutdown, Viewport,
+    },
+    syntax_selection::{SyntaxSelection, fallback_diagnostic},
 };
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use r3viewer_wire::TypedInput;
+use r3viewer_wire::{ByteStreamKind, TypedInput, Value};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
@@ -136,11 +141,115 @@ struct Position {
     top: usize,
     left: usize,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NodeIdentity {
+    Value(usize),
+    StringStream { pointer: usize, length: usize },
+}
 struct TextPane {
     model: Arc<SafeTextModel>,
     position: Position,
     hit: Option<Range<usize>>,
     key: bool,
+    node_identity: Option<NodeIdentity>,
+}
+/// Only the most recent viewport is retained. A current-generation fallback
+/// dominates every request, including requests replaced while parsing.
+#[derive(Default)]
+struct SyntaxView {
+    generation: u64,
+    document: Option<Arc<SafeTextModel>>,
+    viewport: Option<Viewport>,
+    request: u64,
+    spans: Vec<RoleSpan>,
+    plain: Option<FallbackReason>,
+}
+impl SyntaxView {
+    fn select(&mut self, document: Option<Arc<SafeTextModel>>) -> bool {
+        let same = match (&self.document, &document) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        };
+        if same {
+            return false;
+        }
+        self.generation = self
+            .generation
+            .checked_add(1)
+            .expect("syntax generation exhausted");
+        self.document = document;
+        self.viewport = None;
+        self.request = 0;
+        self.spans.clear();
+        self.plain = None;
+        true
+    }
+    fn desired_viewport(&self, top: usize, rows: usize) -> Option<Viewport> {
+        let document = self.document.as_ref()?;
+        if self.plain.is_some() || top >= document.line_count() || rows == 0 {
+            return None;
+        }
+        Some(Viewport {
+            first_line: top as u32,
+            line_count: rows.min(256).min(document.line_count() - top) as u16,
+        })
+    }
+    fn requested(&mut self, viewport: Viewport, request: u64) {
+        self.viewport = Some(viewport);
+        self.request = request;
+        self.spans.clear();
+    }
+    fn apply(&mut self, event: SyntaxEvent) -> bool {
+        match event {
+            SyntaxEvent::Plain { generation, reason }
+                if generation == self.generation && self.document.is_some() =>
+            {
+                self.spans.clear();
+                self.plain = Some(reason);
+                true
+            }
+            SyntaxEvent::Styles {
+                generation,
+                request,
+                viewport,
+                spans,
+            } if generation == self.generation
+                && self.document.is_some()
+                && self.plain.is_none()
+                && request != 0
+                && request == self.request
+                && viewport.is_some()
+                && viewport == self.viewport =>
+            {
+                self.spans = spans;
+                true
+            }
+            _ => false,
+        }
+    }
+}
+/// Declared before TerminalGuard, so even unwind restores the terminal before
+/// joining the controller. stop() only hands cancellation to that controller.
+struct SyntaxOwner {
+    client: Option<SyntaxClient>,
+    shutdown: Option<SyntaxShutdown>,
+}
+impl SyntaxOwner {
+    fn stop(&mut self) {
+        if let Some(client) = self.client.take() {
+            self.shutdown = Some(client.shutdown());
+        }
+    }
+    fn join(&mut self) -> io::Result<()> {
+        self.stop();
+        self.shutdown.take().map_or(Ok(()), SyntaxShutdown::join)
+    }
+}
+impl Drop for SyntaxOwner {
+    fn drop(&mut self) {
+        let _ = self.join();
+    }
 }
 struct App<'a> {
     source: Arc<SafeTextModel>,
@@ -156,6 +265,8 @@ struct App<'a> {
     message: String,
     searching: bool,
     viewport: (usize, usize),
+    syntax: SyntaxView,
+    syntax_diagnostic: String,
 }
 fn prepare_error(error: impl std::fmt::Debug) -> io::Error {
     io::Error::other(format!("no se puede preparar vista: {error:?}"))
@@ -202,13 +313,90 @@ impl<'a> App<'a> {
             message: String::new(),
             searching: false,
             viewport: (1, 1),
+            syntax: SyntaxView::default(),
+            syntax_diagnostic: String::new(),
         };
         app.refresh_pane(cancel)?;
         Ok(app)
     }
+    fn syntax_document(&self) -> Option<Arc<SafeTextModel>> {
+        let pane = self.pane.as_ref()?;
+        if pane.key {
+            return None;
+        }
+        if self.typed.is_none()
+            || self.navigator.as_ref().is_some_and(|nav| {
+                matches!(
+                    nav.current().node(),
+                    DataRef::Value(Value::String(_))
+                        | DataRef::ByteStream {
+                            kind: ByteStreamKind::String,
+                            ..
+                        }
+                )
+            })
+        {
+            Some(pane.model.clone())
+        } else {
+            None
+        }
+    }
+    fn sync_syntax(&mut self, client: &SyntaxClient, language: &str) {
+        if self.syntax.select(self.syntax_document()) {
+            self.syntax_diagnostic.clear();
+            if let Some(document) = &self.syntax.document {
+                client.set_document(
+                    document.original_handle(),
+                    language.to_owned(),
+                    self.syntax.generation,
+                );
+            } else {
+                client.clear_document(self.syntax.generation);
+            }
+        }
+    }
+    fn request_syntax(&mut self, client: &SyntaxClient, rows: usize) {
+        let top = self.pane.as_ref().map_or(0, |pane| pane.position.top);
+        if let Some(viewport) = self.syntax.desired_viewport(top, rows)
+            && self.syntax.viewport != Some(viewport)
+        {
+            let request = client.request_viewport(self.syntax.generation, viewport);
+            self.syntax.requested(viewport, request);
+        }
+    }
+    fn apply_syntax(&mut self, event: SyntaxEvent) -> bool {
+        let changed = self.syntax.apply(event);
+        if changed && let Some(reason) = self.syntax.plain {
+            self.syntax_diagnostic = fallback_diagnostic(reason);
+        }
+        changed
+    }
     fn refresh_pane(&mut self, cancel: &AtomicBool) -> io::Result<()> {
         if let Some(nav) = &self.navigator {
             let node = nav.current().node();
+            let identity = match node {
+                DataRef::Value(value) => Some(NodeIdentity::Value(value as *const Value as usize)),
+                DataRef::ByteStream {
+                    kind: ByteStreamKind::String,
+                    bytes,
+                } => Some(NodeIdentity::StringStream {
+                    pointer: bytes.as_ptr() as usize,
+                    length: bytes.len(),
+                }),
+                _ => None,
+            };
+            if let Some(pane) = &mut self.pane
+                && !pane.key
+                && identity.is_some()
+                && pane.node_identity == identity
+            {
+                let cursor = nav.current().cursor;
+                pane.position = Position {
+                    top: cursor.top,
+                    left: cursor.left,
+                };
+                return Ok(());
+            }
             self.pane = if node.is_container() {
                 None
             } else {
@@ -223,6 +411,7 @@ impl<'a> App<'a> {
                     },
                     hit: None,
                     key: false,
+                    node_identity: identity,
                 })
             };
         } else {
@@ -231,6 +420,7 @@ impl<'a> App<'a> {
                 position: Position::default(),
                 hit: None,
                 key: false,
+                node_identity: None,
             });
         }
         Ok(())
@@ -242,6 +432,7 @@ impl<'a> App<'a> {
             position: Position::default(),
             hit: None,
             key: true,
+            node_identity: None,
         });
         Ok(())
     }
@@ -653,11 +844,25 @@ fn label(text: &str, width: usize) -> String {
         .collect();
     slice_cells(&head, 0, width)
 }
+struct TextDecoration<'a> {
+    hit: Option<&'a Range<usize>>,
+    syntax: &'a [RoleSpan],
+}
+fn syntax_role(role: SyntaxRole) -> Role {
+    match role {
+        SyntaxRole::Value => Role::Value,
+        SyntaxRole::Secondary => Role::Secondary,
+        SyntaxRole::Accent => Role::Accent,
+        SyntaxRole::Success => Role::Success,
+        SyntaxRole::Process => Role::Process,
+        SyntaxRole::Heading => Role::Heading,
+    }
+}
 fn text_line(
     model: &SafeTextModel,
     line: usize,
     window: Range<usize>,
-    hit: Option<&Range<usize>>,
+    decoration: TextDecoration<'_>,
     config: &PresentationConfig,
     cancel: &AtomicBool,
     stats: &mut RenderStats,
@@ -669,6 +874,8 @@ fn text_line(
     let right = window.end;
     let (start, mut column) = model.viewport_start(line, left).unwrap();
     let mut spans = Vec::new();
+    let mut provenance = model.provenance_cursor(start);
+    let mut role_index = None;
     for (index, (byte, grapheme)) in model.visible()[start..range.end]
         .grapheme_indices(true)
         .enumerate()
@@ -680,15 +887,31 @@ fn text_line(
         let end = column.saturating_add(cell_width(grapheme, column));
         if end > column && end > left {
             let source_range = start + byte..start + byte + grapheme.len();
-            let matched =
-                hit.is_some_and(|hit| hit.start < source_range.end && hit.end > source_range.start);
-            let style = if matched {
-                config
-                    .style(Role::Accent)
-                    .add_modifier(Modifier::REVERSED | Modifier::BOLD)
-            } else {
-                config.style(Role::Value)
-            };
+            let matched = decoration
+                .hit
+                .is_some_and(|hit| hit.start < source_range.end && hit.end > source_range.start);
+            let raw = provenance.source_range(source_range);
+            let index = role_index.get_or_insert_with(|| {
+                decoration
+                    .syntax
+                    .partition_point(|span| span.end as usize <= raw.start)
+            });
+            while *index < decoration.syntax.len()
+                && decoration.syntax[*index].end as usize <= raw.start
+            {
+                *index += 1;
+            }
+            // The first original scalar determines the whole visible cluster.
+            // Later combining/ZWJ scalars never supply a missing initial role.
+            let role = decoration
+                .syntax
+                .get(*index)
+                .filter(|span| span.start as usize <= raw.start)
+                .map_or(Role::Value, |span| syntax_role(span.role));
+            let mut style = config.style(role);
+            if matched {
+                style = style.add_modifier(Modifier::REVERSED | Modifier::BOLD);
+            }
             let piece = if grapheme == "\t" || column < left || end > right {
                 " ".repeat(end.min(right) - column.max(left))
             } else {
@@ -774,7 +997,20 @@ fn render(
                         .position
                         .left
                         .saturating_add(usize::from(width) - number_width),
-                pane.hit.as_ref(),
+                TextDecoration {
+                    hit: pane.hit.as_ref(),
+                    syntax: if app.syntax.plain.is_none()
+                        && app
+                            .syntax
+                            .document
+                            .as_ref()
+                            .is_some_and(|document| Arc::ptr_eq(document, &pane.model))
+                    {
+                        &app.syntax.spans
+                    } else {
+                        &[]
+                    },
+                },
                 config,
                 cancel,
                 &mut stats,
@@ -899,7 +1135,19 @@ fn render(
                 String::new()
             },
             if app.searching { "buscando… " } else { "" },
-            label(&app.message, usize::from(width) / 2)
+            label(
+                &format!(
+                    "{}{}{}",
+                    app.message,
+                    if app.message.is_empty() || app.syntax_diagnostic.is_empty() {
+                        ""
+                    } else {
+                        " | "
+                    },
+                    app.syntax_diagnostic
+                ),
+                usize::from(width) / 2
+            )
         )
     };
     if area.height > 1 {
@@ -918,6 +1166,7 @@ pub fn run(
     typed: Option<Arc<TypedInput>>,
     title: &str,
     config: &PresentationConfig,
+    selection: &SyntaxSelection,
     cancelled: Arc<AtomicBool>,
 ) -> io::Result<bool> {
     if cancelled.load(Ordering::Relaxed) {
@@ -931,6 +1180,26 @@ pub fn run(
         ));
     }
     crossterm::style::force_color_output(config.coloured);
+    let language = match selection {
+        SyntaxSelection::Language(language) if config.coloured => Some(language.as_str()),
+        _ => None,
+    };
+    let client = language.map(|_| SyntaxClient::new(SyntaxLimits::default(), cancelled.clone()));
+    let mut syntax_diagnostic = match selection {
+        SyntaxSelection::Plain { diagnostic } => diagnostic.clone().unwrap_or_default(),
+        _ => String::new(),
+    };
+    let mut syntax_owner = SyntaxOwner {
+        client: match client {
+            Some(Ok(client)) => Some(client),
+            Some(Err(_)) => {
+                syntax_diagnostic = fallback_diagnostic(FallbackReason::WorkerExited);
+                None
+            }
+            None => None,
+        },
+        shutdown: None,
+    };
     let mut guard = TerminalGuard::enter(&stdout, control_terminal()?)?;
     // Declaration order and the inner scope keep reader/worker alive during
     // cancellable preparation, and drop both before the owning guard.
@@ -943,6 +1212,7 @@ pub fn run(
             config,
             &cancelled,
         )?;
+        app.syntax_diagnostic = syntax_diagnostic;
         let mut terminal = Terminal::new(CrosstermBackend::new(&mut guard.output))?;
         let mut redraw = true;
         let mut last_dropped = 0;
@@ -957,6 +1227,12 @@ pub fn run(
                 app.apply_search(outcome, &cancelled)?;
                 redraw = true;
             }
+            if let Some(client) = &mut syntax_owner.client {
+                app.sync_syntax(client, language.unwrap());
+                if let Some(event) = client.poll() {
+                    redraw |= app.apply_syntax(event);
+                }
+            }
             let lost = keyboard.dropped.load(Ordering::Relaxed);
             if lost != last_dropped {
                 last_dropped = lost;
@@ -969,6 +1245,9 @@ pub fn run(
                         usize::from(size.height.saturating_sub(3)),
                         usize::from(size.width.saturating_sub(1)),
                     );
+                    if let Some(client) = &syntax_owner.client {
+                        app.request_syntax(client, usize::from(size.height.saturating_sub(2)));
+                    }
                     render(frame, &app, title, config, lost, &cancelled);
                 })?;
                 redraw = false;
@@ -1020,7 +1299,10 @@ pub fn run(
     } else {
         result
     };
+    syntax_owner.stop();
     let restored = guard.restore();
+    // Syntax failure is a presentation fallback, never a document exit error.
+    let _ = syntax_owner.join();
     match result {
         Err(error) => Err(error),
         Ok(value) => {
@@ -1077,6 +1359,311 @@ mod tests {
         let buffer = terminal.backend().buffer();
         let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
         text.contains(needle)
+    }
+    fn styled_event(
+        generation: u64,
+        request: u64,
+        viewport: Viewport,
+        spans: Vec<RoleSpan>,
+    ) -> SyntaxEvent {
+        SyntaxEvent::Styles {
+            generation,
+            request,
+            viewport: Some(viewport),
+            spans,
+        }
+    }
+    #[test]
+    fn syntax_generation_request_and_plain_arbitration_never_revives_obsolete_styles() {
+        let mut state = SyntaxView::default();
+        let document = model("one\ntwo\nthree");
+        assert!(state.select(Some(document.clone())));
+        let generation = state.generation;
+        let viewport = state.desired_viewport(0, 4096).unwrap();
+        assert_eq!(viewport.line_count, 3);
+        let spans = vec![RoleSpan {
+            start: 0,
+            end: 3,
+            role: SyntaxRole::Accent,
+        }];
+        state.requested(viewport, 1);
+        assert!(state.apply(styled_event(generation, 1, viewport, spans.clone())));
+        assert_eq!(state.spans.len(), 1);
+        let next_view = state.desired_viewport(1, 2).unwrap();
+        state.requested(next_view, 2);
+        assert!(state.spans.is_empty());
+        assert!(!state.apply(styled_event(generation, 1, viewport, spans.clone())));
+        assert!(!state.apply(styled_event(generation, 2, viewport, spans.clone())));
+        assert!(state.apply(styled_event(generation, 2, next_view, spans.clone())));
+        assert!(!state.apply(SyntaxEvent::Plain {
+            generation: generation - 1,
+            reason: FallbackReason::LongLine
+        }));
+        assert_eq!(state.spans.len(), 1);
+        // Plain has no request gate: a failure from replaced viewport 1 wins.
+        assert!(state.apply(SyntaxEvent::Plain {
+            generation,
+            reason: FallbackReason::RequestTimeout
+        }));
+        assert!(state.spans.is_empty());
+        assert!(!state.apply(styled_event(generation, 2, next_view, spans.clone())));
+        assert!(!state.apply(SyntaxEvent::Ready { generation }));
+        assert!(state.desired_viewport(0, 30).is_none());
+        assert!(!state.select(Some(document)));
+        assert_eq!(state.plain, Some(FallbackReason::RequestTimeout));
+        assert!(state.select(Some(model("new"))));
+        assert_eq!(state.generation, generation + 1);
+        assert!(state.plain.is_none());
+        assert!(!state.apply(SyntaxEvent::Plain {
+            generation,
+            reason: FallbackReason::LongLine
+        }));
+        let huge = model(&"x\n".repeat(1000));
+        assert!(state.select(Some(huge)));
+        assert_eq!(state.desired_viewport(10, 1000).unwrap().line_count, 256);
+        assert!(state.select(None));
+        assert!(!state.apply(styled_event(state.generation, 2, next_view, spans)));
+    }
+    #[test]
+    fn syntax_applies_only_to_string_panes_and_same_leaf_search_preserves_generation() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let typed = Arc::new(TypedInput {
+            start: Start {
+                version: VERSION,
+                cwd: "irrelevant.rs".into(),
+                origin: Origin::SingleValue,
+            },
+            payload: Payload::SingleValue(Value::Record(vec![
+                ("a".into(), Value::String("x x".into())),
+                ("b".into(), Value::String("second".into())),
+                ("number".into(), Value::Int(7)),
+            ])),
+        });
+        let mut app = App::new(
+            model(""),
+            Some(typed.clone()),
+            Some(&typed),
+            &config,
+            &cancel,
+        )
+        .unwrap();
+        assert!(app.syntax_document().is_none());
+        app.key(key(KeyCode::Enter), 8, 40, &cancel).unwrap();
+        assert!(app.pane.as_ref().unwrap().key);
+        assert!(app.syntax_document().is_none());
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        let first = SearchHit {
+            path: Some(LogicalPath(vec![PathMember::Key("a".into())])),
+            key: false,
+            visit_index: 1,
+            range: 0..1,
+        };
+        app.apply_search(SearchOutcome::Found(first.clone()), &cancel)
+            .unwrap();
+        let document = app.syntax_document().unwrap();
+        assert!(app.syntax.select(Some(document.clone())));
+        let generation = app.syntax.generation;
+        app.apply_syntax(SyntaxEvent::Plain {
+            generation,
+            reason: FallbackReason::LongLine,
+        });
+        let mut second = first;
+        second.range = 2..3;
+        app.apply_search(SearchOutcome::Found(second), &cancel)
+            .unwrap();
+        assert!(Arc::ptr_eq(&document, &app.syntax_document().unwrap()));
+        assert!(!app.syntax.select(app.syntax_document()));
+        assert_eq!(app.syntax.generation, generation);
+        assert!(app.syntax.plain.is_some());
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        assert!(app.syntax.select(app.syntax_document()));
+        app.navigator.as_mut().unwrap().current_mut().cursor.row = 2;
+        app.navigator.as_mut().unwrap().current_mut().cursor.column = 1;
+        app.key(key(KeyCode::Enter), 8, 40, &cancel).unwrap();
+        assert_eq!(app.pane.as_ref().unwrap().model.original(), "int(7)");
+        assert!(app.syntax_document().is_none());
+        let plain = App::new(model("fn main() {}"), None, None, &config, &cancel).unwrap();
+        assert!(plain.syntax_document().is_some());
+    }
+    #[test]
+    fn explicit_string_stream_is_textual_but_unknown_and_binary_remain_descriptors() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        for kind in [
+            ByteStreamKind::String,
+            ByteStreamKind::Unknown,
+            ByteStreamKind::Binary,
+        ] {
+            let typed = Arc::new(TypedInput {
+                start: Start {
+                    version: VERSION,
+                    cwd: "irrelevant.rs".into(),
+                    origin: Origin::ByteStream(kind),
+                },
+                payload: Payload::ByteStream {
+                    kind,
+                    bytes: b"fn main() {}\n".to_vec(),
+                },
+            });
+            assert_eq!(
+                crate::syntax_selection::textual_input(Some(&typed)),
+                kind == ByteStreamKind::String
+            );
+            let mut app = App::new(
+                model(""),
+                Some(typed.clone()),
+                Some(&typed),
+                &config,
+                &cancel,
+            )
+            .unwrap();
+            if kind == ByteStreamKind::String {
+                let original = app.syntax_document().unwrap();
+                assert_eq!(original.original(), "fn main() {}\n");
+                app.syntax.select(Some(original.clone()));
+                let generation = app.syntax.generation;
+                app.apply_syntax(SyntaxEvent::Plain {
+                    generation,
+                    reason: FallbackReason::LongLine,
+                });
+                app.apply_search(
+                    SearchOutcome::Found(SearchHit {
+                        path: Some(LogicalPath(vec![])),
+                        key: false,
+                        visit_index: 0,
+                        range: 0..2,
+                    }),
+                    &cancel,
+                )
+                .unwrap();
+                assert!(Arc::ptr_eq(&original, &app.syntax_document().unwrap()));
+                assert!(!app.syntax.select(app.syntax_document()));
+                assert!(app.syntax.plain.is_some());
+            } else {
+                assert!(app.syntax_document().is_none());
+            }
+        }
+    }
+    #[test]
+    fn syntax_roles_follow_first_original_scalar_and_search_composes_on_clusters() {
+        let mut config = config();
+        config.coloured = true;
+        let cancel = AtomicBool::new(false);
+        let document = model("e\u{301}👩‍💻\u{009b}␛\x1bTOKEN\r\n\t界");
+        let spans = vec![
+            RoleSpan {
+                start: 0,
+                end: 1,
+                role: SyntaxRole::Accent,
+            },
+            RoleSpan {
+                start: 1,
+                end: 3,
+                role: SyntaxRole::Success,
+            },
+            RoleSpan {
+                start: 3,
+                end: 7,
+                role: SyntaxRole::Secondary,
+            },
+            RoleSpan {
+                start: 7,
+                end: 10,
+                role: SyntaxRole::Accent,
+            },
+            RoleSpan {
+                start: 10,
+                end: 14,
+                role: SyntaxRole::Success,
+            },
+            RoleSpan {
+                start: 14,
+                end: 16,
+                role: SyntaxRole::Process,
+            },
+            RoleSpan {
+                start: 16,
+                end: 19,
+                role: SyntaxRole::Heading,
+            },
+            RoleSpan {
+                start: 19,
+                end: 20,
+                role: SyntaxRole::Secondary,
+            },
+            RoleSpan {
+                start: 20,
+                end: 25,
+                role: SyntaxRole::Success,
+            },
+        ];
+        let mut app = App::new(document.clone(), None, None, &config, &cancel).unwrap();
+        app.syntax.select(Some(document.clone()));
+        let viewport = Viewport {
+            first_line: 0,
+            line_count: 2,
+        };
+        app.syntax.requested(viewport, 9);
+        assert!(app.apply_syntax(styled_event(
+            app.syntax.generation,
+            9,
+            viewport,
+            spans.clone()
+        )));
+        app.pane.as_mut().unwrap().hit = Some(1..3);
+        let (terminal, _) = plain(&app, 40, 6, &config);
+        let cells = terminal.backend().buffer();
+        assert_eq!(cells[(0, 1)].symbol(), "e\u{301}");
+        assert_eq!(cells[(0, 1)].fg, config.style(Role::Accent).fg.unwrap());
+        assert!(
+            cells[(0, 1)]
+                .modifier
+                .contains(Modifier::REVERSED | Modifier::BOLD)
+        );
+        assert_eq!(cells[(1, 1)].symbol(), "👩‍💻");
+        assert_eq!(cells[(1, 1)].fg, config.style(Role::Secondary).fg.unwrap());
+        for x in 3..11 {
+            assert_eq!(cells[(x, 1)].fg, config.style(Role::Process).fg.unwrap());
+        }
+        assert_eq!(cells[(11, 1)].fg, config.style(Role::Heading).fg.unwrap());
+        assert_eq!(cells[(12, 1)].fg, config.style(Role::Secondary).fg.unwrap());
+        assert_eq!(cells[(13, 1)].fg, config.style(Role::Success).fg.unwrap());
+        // Cropping inside a C1 placeholder still maps every visible scalar to C1.
+        app.pane.as_mut().unwrap().position.left = 6;
+        let (cropped, _) = plain(&app, 7, 4, &config);
+        for x in 0..5 {
+            assert_eq!(
+                cropped.backend().buffer()[(x, 1)].fg,
+                config.style(Role::Process).fg.unwrap()
+            );
+        }
+        let generation = app.syntax.generation;
+        assert!(app.apply_syntax(SyntaxEvent::Plain {
+            generation,
+            reason: FallbackReason::LongLine
+        }));
+        app.pane.as_mut().unwrap().position = Position::default();
+        let (fallback, _) = plain(&app, 40, 6, &config);
+        let first = &fallback.backend().buffer()[(0, 1)];
+        assert_eq!(first.fg, config.style(Role::Value).fg.unwrap());
+        assert!(first.modifier.contains(Modifier::REVERSED | Modifier::BOLD));
+        // A role only on a later combining/ZWJ scalar must not color its cluster.
+        let late = [spans[1], spans[3], spans[4]];
+        let line = text_line(
+            &document,
+            0,
+            0..20,
+            TextDecoration {
+                hit: None,
+                syntax: &late,
+            },
+            &config,
+            &cancel,
+            &mut RenderStats::default(),
+        );
+        assert_eq!(line.spans[0].style.fg, config.style(Role::Value).fg);
+        assert_eq!(line.spans[1].style.fg, config.style(Role::Value).fg);
     }
     #[test]
     fn unicode_highlights_use_safe_bytes_whole_graphemes_and_resize_anchor() {

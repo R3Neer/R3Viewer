@@ -11,3 +11,11 @@ pub mod nu_input;
 pub mod presentation;
 pub mod search;
 pub mod viewer_session;
+
+mod language_catalog;
+pub mod syntax;
+mod syntax_process;
+pub mod syntax_selection;
+pub mod syntax_worker;
+
+pub mod inline;

@@ -156,6 +156,7 @@ pub fn load(cli: &Cli, cancelled: Arc<AtomicBool>) -> Result<TextSource, InputEr
                     return input::load(&plain, true, cancelled);
                 }
                 return Ok(TextSource {
+                    origin: input::SourceOrigin::Nushell,
                     title: "Datos Nushell".into(),
                     text,
                     typed: Some(typed),

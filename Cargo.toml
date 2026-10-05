@@ -21,6 +21,10 @@ ratatui = { version = "=0.30.2", default-features = false, features = ["crosster
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 
+[target.'cfg(windows)'.dependencies]
+syntect = { version = "=5.3.0", default-features = false, features = ["default-syntaxes", "regex-onig"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+
 [workspace]
 members = [".", "crates/wire", "crates/nu-plugin"]
 exclude = ["vendor/nushell", "vendor/crossterm", ".tmp/*"]

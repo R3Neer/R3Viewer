@@ -1,6 +1,6 @@
 # Investigación técnica inicial
 
-Fecha: 2026-10-04. Investigación documental y de entorno completada para preparar la arquitectura. Las pruebas de ejecución descritas en ../VALIDACION.md quedan pendientes: no existe implementación, no se ha instalado un toolchain ni validado gráficos en una terminal real.
+Registro inicial histórico: 2026-10-04, preparación de arquitectura antes de implementar. Sus snapshots de entorno y afirmaciones de ausencia de código/toolchain no son el estado vigente. Implementación y validación posteriores se registran en ../VALIDACION.md y ../sprints; gráficos y certificación visual siguen pendientes.
 
 ## Resumen de resultados
 
@@ -99,3 +99,11 @@ Inspección local adicional: README/diseño/licencia de D:\Tools\R3CLI; dependen
 ## Estado tras la revisión de arquitectura general
 
 Este documento conserva investigación y candidatos técnicos, no impone detalles a todos los sprints. La referencia vigente es ../architecture/ARQUITECTURA.md. RV-008 coordina spikes por capacidad; APIs/versiones/límites/seguridad detallada se refinan con el trabajo dependiente. La revisión general no acredita runtime.
+
+## Actualización técnica S03 C, 2026-10-05
+
+Syntect5.3.0 default-syntaxes+regex-onig, Onig6.5.3/onig_sys69.9.3, sin temas ni YAML de usuario. Worker recibe snapshot/idioma integrado; fuente/caches/operaciones/tiempos bajo presupuesto y Job Windows committed512MiB. Catálogo real no incluye TOML/Nu/PowerShell, por lo que cobertura adicional permanece abierta. Revisión, AE funcional y fronteras en ../sprints/S03.md. Las licencias MIT de wrappers no sustituyen el COPYING de Oniguruma; avisos de esta incorporación en ../../third-party/README.md, sin cerrar revisión transitiva de distribución.
+
+[Linux setrlimit](https://www.man7.org/linux/man-pages/man2/getrlimit.2.html) limita espacio virtual y mantiene límites entre fork/exec; no es RSS/commit. [XNU kern_resource](https://github.com/apple-oss-distributions/xnu/blob/xnu-12377.121.6/bsd/kern/kern_resource.c) delega RLIMIT_AS en vm_map_set_size_limit y rechaza un límite por debajo del mapa actual; regiones compartidas grandes en ARM64 impiden asumir512MiB absolutos. Candidato macOS requiere probe en host real y semántica declarada, no portar el número Windows por analogía. Gate Unix provisional se mantiene; crosscheck Linux/macOS no lo valida.
+
+[Syntect5.3 regex.rs](https://docs.rs/syntect/5.3.0/src/syntect/parsing/regex.rs.html) convierte errores internos de búsqueda Onig en no-match. GrammarError cubre errores expuestos por parser/scope; no prometer detección de cada fallo interno. Investigación pendiente: corpus retry-limit antes del watchdog y hook de propagación controlado; Fancy no elimina por sí solo esta limitación. Observación documental, no defecto reproducido ni reducción del alcance.

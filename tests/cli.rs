@@ -179,3 +179,57 @@ fn configuration_limit_and_missing_explicit_file_are_cli_errors() {
         Some(2)
     );
 }
+
+#[test]
+fn syntax_options_validate_before_any_configuration_or_document_read() {
+    for options in [
+        vec!["--format", "text", "--language", "rs"],
+        vec!["--language", "   "],
+    ] {
+        let mut args = options;
+        args.extend([
+            "--config",
+            "r3viewer-config-that-does-not-exist.toml",
+            "nonexistent-source.rs",
+        ]);
+        let result = invoke(&args, None);
+        assert_eq!(result.status.code(), Some(2));
+        let error = String::from_utf8(result.stderr).unwrap();
+        assert!(error.contains("--language"));
+        assert!(!error.contains("no se puede abrir"));
+        assert!(result.stdout.is_empty());
+    }
+}
+#[test]
+fn redirected_code_retains_complete_safe_source_despite_colour_and_numbers() {
+    let source = "/* é界 */\r\nlet s = \"👩‍💻e\u{301}\";\n\n";
+    let file = Fixture::new(source.as_bytes());
+    let result = invoke(
+        &[
+            "-i",
+            "--format",
+            "code",
+            "--language",
+            "rs",
+            "--colour",
+            "always",
+            "-n",
+            file.path(),
+        ],
+        None,
+    );
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert_eq!(result.stdout, source.as_bytes());
+    assert!(result.stderr.is_empty());
+    let unknown = invoke(
+        &["--language", "r3viewer-no-such-grammar", "--value", source],
+        None,
+    );
+    assert!(unknown.status.success());
+    assert_eq!(unknown.stdout, source.as_bytes());
+    assert!(
+        String::from_utf8(unknown.stderr)
+            .unwrap()
+            .contains("desconocido")
+    );
+}

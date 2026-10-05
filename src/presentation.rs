@@ -134,6 +134,22 @@ impl SafeTextModel {
             cell_checkpoints,
         })
     }
+    /// Monotonic renderer cursor; one bounded checkpoint scan per visible row.
+    pub fn provenance_cursor(&self, visible_offset: usize) -> ProvenanceCursor<'_> {
+        let target = visible_offset.min(self.visible.len());
+        let index = self
+            .checkpoints
+            .partition_point(|(_, safe)| *safe <= target)
+            .saturating_sub(1);
+        let (raw, safe) = self.checkpoints[index];
+        ProvenanceCursor {
+            chars: self.original[raw..].char_indices().peekable(),
+            base: raw,
+            safe,
+            source_end: self.original.len(),
+            previous_end: 0,
+        }
+    }
     pub fn original_handle(&self) -> std::sync::Arc<String> {
         self.original.clone()
     }
@@ -260,6 +276,46 @@ impl SafeTextModel {
     }
 }
 
+/// Maps adjoining visible intervals without rescanning a source prefix.
+pub struct ProvenanceCursor<'a> {
+    chars: std::iter::Peekable<std::str::CharIndices<'a>>,
+    base: usize,
+    safe: usize,
+    source_end: usize,
+    previous_end: usize,
+}
+impl ProvenanceCursor<'_> {
+    fn boundary(&mut self, target: usize, end: bool) -> usize {
+        loop {
+            let Some(&(relative, ch)) = self.chars.peek() else {
+                return self.source_end;
+            };
+            let raw = self.base + relative;
+            if self.safe == target {
+                return raw;
+            }
+            let mut lookahead = self.chars.clone();
+            lookahead.next();
+            let length = replacement_len(ch, lookahead.peek().map(|(_, ch)| *ch));
+            if self.safe + length > target {
+                return if end { raw + ch.len_utf8() } else { raw };
+            }
+            self.safe += length;
+            self.chars.next();
+        }
+    }
+    pub fn source_range(&mut self, visible: Range<usize>) -> Range<usize> {
+        assert!(
+            visible.start >= self.previous_end && visible.end >= visible.start,
+            "provenance intervals must be monotonic"
+        );
+        let start = self.boundary(visible.start, false);
+        let end = self.boundary(visible.end, true);
+        self.previous_end = visible.end;
+        start..end
+    }
+}
+
 pub fn cell_width(grapheme: &str, column: usize) -> usize {
     if grapheme == "\t" {
         8 - column % 8
@@ -360,6 +416,20 @@ mod tests {
         let target = text.visible().rfind("end").unwrap();
         assert_eq!(text.cell_for_offset(target), 40003);
         assert_eq!(text.line_for_offset(offset), 1);
+    }
+    #[test]
+    fn monotonic_cursor_matches_control_and_unicode_provenance() {
+        let text = model(&format!(
+            "{}\u{009b}e\u{301}👩‍💻\x1b界\r\nend",
+            "á".repeat(5000)
+        ));
+        for start in [0, 4090, text.visible().find("009b").unwrap()] {
+            let mut cursor = text.provenance_cursor(start);
+            for (byte, grapheme) in text.visible()[start..].grapheme_indices(true) {
+                let range = start + byte..start + byte + grapheme.len();
+                assert_eq!(cursor.source_range(range.clone()), text.source_range(range));
+            }
+        }
     }
     #[test]
     fn empty_and_cancelled() {

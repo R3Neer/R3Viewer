@@ -36,10 +36,35 @@ pub struct Cli {
     /// Formato explícito; auto selecciona una presentación compatible.
     #[arg(long, value_enum, default_value = "auto")]
     pub format: Format,
+    /// Gramática integrada por nombre o extensión; nunca una ruta.
+    #[arg(long)]
+    pub language: Option<String>,
 }
 
-#[derive(Clone, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum, PartialEq, Eq)]
 pub enum Format {
     Auto,
     Text,
+    Code,
+}
+
+impl Cli {
+    /// Validate option semantics before configuration or document I/O.
+    pub fn validate(&self) -> Result<(), crate::input::InputError> {
+        if let Some(language) = &self.language {
+            if self.format == Format::Text {
+                return Err(crate::input::InputError::new(
+                    2,
+                    "elige --format text o --language; no pueden coexistir",
+                ));
+            }
+            if language.trim().is_empty() || language.len() > 256 {
+                return Err(crate::input::InputError::new(
+                    2,
+                    "--language requiere un nombre no vacío de hasta 256 bytes",
+                ));
+            }
+        }
+        Ok(())
+    }
 }

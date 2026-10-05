@@ -130,7 +130,7 @@ Registro histórico de preparación, sustituido por la metodología por objetivo
 Los detalles de transporte, APIs, locks, límites y UX se refinan con cada historia. La revisión macro no cierra RV-003/004/006/008 runtime ni modifica las decisiones funcionales confirmadas.
 ## Autoridad y proceso vigentes
 
-Implementación completa autorizada el 2026-10-04. Scrum por objetivos sin cadencia fija según process/METODOLOGIA.md. Estados anteriores conservan evidencia histórica; S01 se refina ahora. No cerrar RV por una entrega parcial ni sustituir QA pendiente por documentación. El backlog sigue abierto hasta satisfacer toda su aceptación.
+Implementación completa autorizada el 2026-10-04. Scrum por objetivos sin cadencia fija según process/METODOLOGIA.md. Estados anteriores conservan evidencia histórica; el corte activo se indica en el seguimiento posterior. No cerrar RV por una entrega parcial ni sustituir QA pendiente por documentación. El backlog sigue abierto hasta satisfacer toda su aceptación.
 
 ## Seguimiento de desarrollo por objetivos
 
@@ -147,4 +147,8 @@ S01 código revisado iterativamente hasta R2 SIN_CRITICAS_PENDIENTES; aceptació
 Registro histórico R2/R3, sustituido por el estado R4 posterior: S03 activo con A/B y configuración en validación; resaltado aislado en integración. R2A/B pasa86pruebas y revisión adversaria; aceptación independiente detecta AltGr/Alt-code Windows y override NO_COLOR. R3 se corrige y vuelve a revisión/AE. RV-105/106/107 siguen abiertos, incluyendo estructura de archivos de datos, paleta Nu condicionada y QA visual/matriz. No se cancela el objetivo por terminar un corte.
 
 
-S03 A/B alcanza aceptación funcional Windows en R4 y revisión sin críticas; quedan pendientes resaltado C04–07, estructuras de archivos de datos y QA visual/matriz. Las correcciones de las revisiones R1–R3 se conservan como evidencia en sprints/S03.md. Este resultado parcial no cierra RV-105/106/107 ni el objetivo S03 completo.
+Registro histórico A/B R4, ampliado por C R1 posterior: aceptación funcional Windows y revisión sin críticas; entonces quedaban resaltado C04–07, estructuras de archivos de datos y QA visual/matriz. Las correcciones de las revisiones R1–R3 se conservan como evidencia en sprints/S03.md. Este resultado parcial no cierra RV-105/106/107 ni el objetivo S03 completo.
+
+## Estado vigente tras C R1
+
+S03 C04–07 implementado/revisado sin críticas con AE funcional parcial Windows;114pruebas del workspace, CLI/Nu/ConPTY y fallbacks reales WorkerExit/RequestTimeout/SpanBudget. Linux x86_64 y macOS arm64 tienen crosscheck del lector, sin ejecución nativa ni contención sintáctica Unix. Evidencias y pendientes en sprints/S03.md y reviews/S03-sintaxis-aceptacion-r1.md. RV105/106/107 siguen abiertos: estructuras de JSON/YAML/TOML/XML, cobertura de gramáticas (defaults no TOML/Nu/PowerShell), paleta Nu condicionada, criterios de estrés/presupuestos independientes y QA visual/matriz. No cerrar sprints/tareas por esta aceptación parcial; el siguiente refinamiento trabaja estructuras de archivos conservando fuente original.
