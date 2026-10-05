@@ -206,3 +206,6 @@ XML D4 R1 tiene [revisión y aceptación funcional parcial Windows](reviews/S03-
 
 
 Gráficos: [propuesta G2 R2](refinement/GRAFICOS-G2.md) revisada sin críticas de diseño tras dos rondas. Experimento privado de raster visible/encoders acotados iniciado; implementación/producción, G1–G7 y RV-201/202/203/205 continúan pendientes. No nuevo sprint ni reducción del alcance final de imágenes/animación.
+
+
+XML R1: [addendum inline](reviews/S03-XML-inline-r1.md) aporta timeout del controlador real bajo suspensión propia y Fuente completa, exit0 y reap/residuos correctos, con inspección independiente. Tiempo final observado incluye escritura/drenaje; medición aislada, carreras adicionales/estrés y visual/Unix siguen pendientes. No cierre de RV ni modificación de código por esta evidencia.
