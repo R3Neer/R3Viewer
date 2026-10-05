@@ -158,3 +158,6 @@ Corte siguiente en refinamiento: [S03 D1 TOML](sprints/S03-D1.md), plan revisado
 
 
 Actualización D1: diseño core y recurso TOML-R4 aprobados por adversario, implementación A/B iniciada. Gate de viabilidad del índice físico/profundidad cerrado por15pruebas independientes; aceptación y candidato de producto pendientes. Plan/recurso aprobados no cierran RV-106 ni QA.
+
+
+Refinamiento paralelo preparado: [delta JSON D2](sprints/S03-D2-JSON.md) y [revisión](reviews/S03-D2-plan.md) sin críticas pendientes del contrato observable. Elección de parser y candidato de producto siguen abiertos; TOML D1 permanece en implementación. [Inspección de API gráfica](research/GRAFICOS_API_PREPARACION.md) identifica adaptación de stdin/teclado, geometría y ausencia de efectos de configuración; no es soporte gráfico implementado ni probado visualmente.
