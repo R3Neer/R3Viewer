@@ -1,4 +1,6 @@
-# Gate privado PDF UTF16: candidato R1 rechazado
+# Gate privado PDF UTF16: R2 revisado; producto pendiente
+
+Estado vigente: R2 final tiene revisión y aceptación independientes sin críticas pendientes **en el delta EOF/observación/retención**. El rechazo R1 siguiente permanece como historia y evidencia. Integración y PDF completo siguen pendientes; no se convierte Unverified en completitud.
 
 2026-10-06. Contrato [R3+deltaR4+V](../refinement/PDF-TEXTO-UTF16.md); candidato privado congelado, no integración ni aceptación. Revisión de código de raíz: **NO APROBADO**, PDF-U16-ROOT01. AE independiente finalizada: **NO APROBADO**, PDF-U16-AE-EOF01 corrobora el fallo con peer propio. Raíz verificó los 53 registros de evidencia sin discrepancias. RV-204/G1 y SourceUnverified permanecen abiertos.
 
@@ -25,3 +27,13 @@ Una llamada GetText, decoding UTF16, asociaciones/geometry/wire y ledger no elim
 Informe temporal PDF-UTF16-independent-acceptance-r1.md SHA256 7819C0F275F41FBA075B98B2CD1B8AC09CDA6A28E850AC023D5F5B74FEDAE08A; manifiesto OWN-AE-EVIDENCE-MANIFEST.json F491DC6DA0789F0E07BE86A913ABB04E8249D4815517CA8FBCC5C743C03B299C, 53 registros verificados por raíz. Recibo privado PDF-UTF16-root-verification-independent-r1.json conserva el contraste. Informes del candidato rechazado permanecen fuera de Git.
 
 Cobertura positiva delimitada: cuatro PDFs propios, tres rechazos preflight, 23 modelos wire propios (13 aceptados y diez rechazados), máximo lógico sintético V N=U=S=65536 y cuatro contrastes nativos conservando discrepancias. No demuestra máximo agregado real H+D, lifecycle completo, semántica de fuente, integración ni QA visual/Unix. El control de EOF propio produce validated=true y spawn V con stdin todavía abierto: FAIL preservado, sin rescate externo. R2 debe superar código y aceptación independientes antes de adoptar el helper.
+
+## R2 final: cierre del defecto EOF dentro del experimento
+
+Candidato privado pdf-utf16-mapping-candidate-r2-final, MANIFEST E3FA1AED161E589A448E250ED12C01E0952B2B2CA67618353A76824A9DA9D435,1112 entradas; helper BB36465CED2EA1BAADF8D68F85D6BDFBF41347799DEAD61C56A030CB479EBA18. Bin/Rust/DLL/wire conservan identidad R1; sólo helper cambia comportamiento. [Revisión de código](../reviews/PDF-texto-utf16-code-r2.md) y [aceptación independiente](../reviews/PDF-texto-utf16-aceptacion-r2.md) SIN_CRITICAS_PENDIENTES dentro del delta descrito, no del producto PDF completo.
+
+Raíz repitió exactamente su oracle/driver original de EOF: stdin observado abierto con94B/Failure15, ahora validated=false y ceroV, Reaped/streams/handles/joins cerrados, sin Pending/rescate. En la copia se preserva resultado propio separado del baseline del autor; comprobaciones posterior originales/copia1112 sin discrepancias. La primera verificación detectó sólo una colisión de nombre del output, registrada sin alterar código/oracle/candidato.
+
+AE de un tercer agente ejecutó doce familias propias: PDF real/corrupto, peer EOF y fragmentación, READY+wire y primer byte temprano, close sin cerrar/que lanza, físicoClosedInFlight conservador, observer previo al lock, V temprano y tres solicitudes GCdisabled sin captura Native retenida. Fuente/expectativas previas y fallos propios de comprobación se conservan. Todos actores propios Reaped/allclosed, un hilo, cero rescates, Pendingfalse. Raíz verificó los19 registros del manifiesto de evidencia102DB24581BEC898C9809D0F16514989769B8D42BE252A64BD4D45DB2104A996, y doce PASS de resultados7F94836DB658C77EFD312D66DE05CFF819EC2168252675DF51909839DCB61F1A.
+
+PDF-U16-ROOT01/AE-EOF01 quedan resueltos para este helper congelado y casos probados. La aceptación del delta no amplía garantías de Rust ni máximos agregados, transmisión remota, llamada nativa bloqueada, semántica de fuente, geometría, integración, gráficos, Unix o QA visual. SourceUnverified y todos FAIL semánticos se mantienen. RV-204/G1 abiertos hasta aceptación de producto.
