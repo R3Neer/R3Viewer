@@ -36,6 +36,7 @@ pub(crate) fn output(
             key_components: key_max as u32,
             metadata: model.raw_metadata().len() as u32,
             alias_edges: model.alias_edges() as u32,
+            xml_metadata: model.raw_xml_metadata().len() as u32,
         }),
     )?;
     let mut batch = Vec::new();
@@ -103,6 +104,15 @@ pub(crate) fn output(
         send(
             out,
             Message::Metadata {
+                offset: (offset * ipc::BATCH) as u32,
+                records: records.to_vec(),
+            },
+        )?;
+    }
+    for (offset, records) in model.raw_xml_metadata().chunks(ipc::BATCH).enumerate() {
+        send(
+            out,
+            Message::XmlMetadata {
                 offset: (offset * ipc::BATCH) as u32,
                 records: records.to_vec(),
             },
@@ -206,6 +216,7 @@ pub fn run_private_stdio() -> io::Result<()> {
         StructureFormat::Toml => crate::toml_worker::project(source, generation, &cancel),
         StructureFormat::Json => crate::json_worker::project(source, generation, &cancel),
         StructureFormat::Yaml => crate::yaml_worker::project(source, generation, &cancel),
+        StructureFormat::Xml => crate::xml_worker::project(source, generation, &cancel),
     };
     match result {
         Ok((model, syntax, key_max)) => output(

@@ -200,3 +200,6 @@ XML [vista B R2](sprints/S03-D4-vista.md) revisada independientemente sin críti
 
 
 Gráficos [experimento de backends](research/GRAFICOS_BACKENDS_SPIKE.md) y [revisión parcial](reviews/GRAFICOS-backends-spike.md) sin críticas pendientes: cuatro constructores sin Picker, PNG/cabecera/alpha y cancelación propios. Kitty16M excede presupuesto; cuotas preencode/snapshot/inline/visual/cache yG1–G7 permanecen abiertos según evidencia. No adopción de APIs ni nuevo sprint; RV-201/202/203/205 intactos.
+
+
+XML D4 R1 tiene [revisión y aceptación funcional parcial Windows](reviews/S03-XML-producto.md): 213 tests/fmt/Clippy/build, revisión independiente sin críticas, 89 CLI/Nu, 28 spans, ocho sesiones ConPTY y StringStream SDK real. Fuente original/visible y cancelación Unicode YAML también revisadas. Nueva observación G4 de producción y addendum independiente sin críticas incorporados, dentro del alcance NT observado. Estrés exhaustivo, inline deadline real, visual/Unix/gramáticas/distribución y formatos enriquecidos siguen abiertos. No cerrar RV-105/106/107 ni S03 por este incremento.

@@ -13,3 +13,7 @@ Procedencia: paquetes exactos de Cargo.lock, registry descargado por toolchain p
 YAML serialization parser, MIT OR Apache-2.0. Vendored exact reviewed R2 candidate under vendor/saphyr-parser; UPSTREAM.json records 39 original files, published crate/VCS, modified parser/scanner hashes and packaging manifest. LICENSE plus .licenses/ChenYuheng-MIT, ChenYuheng-Apache, Ethiraric-MIT, Ethiraric-Apache are retained verbatim. Local patches and upstream source copies preserve derivation. No constructors or alias expansion.
 
 ArrayDeque0.5.1, dependencia del parser: Cargo declara MIT/Apache-2.0; LICENSE completo original conservado en licenses/arraydeque-0.5.1-LICENSE.txt (Andy Lok). Fuente registry exacta fijada en Cargo.lock, sin modificación.
+
+## quick-xml 0.42.0
+
+XML slice event reader, MIT (Johann Tuffe, 2016), registry package pinned in Cargo.lock. Default features disabled; memchr dependency shared. Published crate SHA256 41B1177FDF999D2321D3FB46FF47159D9C1FB9AD66A4879F8C50A0B504615E9B, VCS 36a2c52a4f6c90878c3f60c3c3b5c62efaef28a9 as recorded in XML research. Original license retained verbatim under licenses. No upstream patches, serde DOM, external resource resolver or NsReader semantic authority. Upstream: https://github.com/tafia/quick-xml. This entry is not a complete distribution inventory.

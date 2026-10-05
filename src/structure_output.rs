@@ -193,6 +193,11 @@ pub fn render(
             .checked_sub(structure.persistent_bytes())
             .ok_or(OutputError::Limit)?;
         render_yaml(structure, cancel, OUTPUT_LIMIT.min(available))
+    } else if structure.format() == crate::structure_model::StructureFormat::Xml {
+        let available = crate::structure_model::MAX_STRUCTURE_BYTES
+            .checked_sub(structure.persistent_bytes())
+            .ok_or(OutputError::Limit)?;
+        render_xml(structure, cancel, OUTPUT_LIMIT.min(available))
     } else {
         render_with_limit(structure, cancel, OUTPUT_LIMIT)
     }
@@ -533,5 +538,83 @@ mod yaml_output_tests {
         assert_eq!(output.append(&"y".repeat(2000)), Err(OutputError::Limit));
         assert_eq!(output.text.len(), 3000);
         assert_eq!(output.text.capacity(), capacity);
+    }
+}
+
+fn render_xml(
+    structure: &crate::structure_model::Structure,
+    cancel: &AtomicBool,
+    limit: usize,
+) -> Result<String, OutputError> {
+    let mut output = Builder::new(cancel, limit);
+    output.strict_growth = true;
+    for id in crate::xml_view::Visits::new(structure, cancel) {
+        let id = id.map_err(|e| {
+            if e == crate::xml_view::Error::Cancelled {
+                OutputError::Cancelled
+            } else {
+                OutputError::InvalidModel
+            }
+        })?;
+        let node = structure.node(id).ok_or(OutputError::InvalidModel)?;
+        let mut depth = 0;
+        let mut at = id;
+        while let Some(parent) = structure.parent(at) {
+            depth += 1;
+            if depth > 66 {
+                return Err(OutputError::InvalidModel);
+            }
+            at = parent.owner;
+        }
+        output.indent(depth)?;
+        output.append(crate::data::file_kind_name(node.kind()))?;
+        for domain in crate::xml_view::SEARCH_DOMAINS {
+            if let Some(value) = crate::xml_view::unit(structure, id, domain) {
+                output.append(" ")?;
+                output.append(match domain {
+                    crate::xml_view::Domain::QName => "QName=",
+                    crate::xml_view::Domain::LocalName => "LocalName=",
+                    crate::xml_view::Domain::NamespaceUri => "NamespaceUri=",
+                    crate::xml_view::Domain::ValueDecoded => "ValueDecoded=",
+                    _ => "Metadata=",
+                })?;
+                output.quoted(value)?;
+            }
+        }
+        if let Some(meta) = node.xml_metadata() {
+            if meta.empty_form {
+                output.append(" empty=true")?;
+            }
+            if meta.has_doctype {
+                output.append(" DOCTYPE=inerte(sin-recursos-externos)")?;
+            }
+        }
+        output.append("\n")?;
+    }
+    Ok(output.text)
+}
+
+#[cfg(test)]
+mod xml_output_tests {
+    use super::*;
+    #[test]
+    fn xml_inspection_is_complete_safe_ordered_and_locally_bounded() {
+        let cancel = AtomicBool::new(false);
+        let s = crate::xml_worker::project(
+            std::sync::Arc::new("<r b='true' a='12'>\u{009b}&amp;<!--x--></r>".into()),
+            1,
+            &cancel,
+        )
+        .unwrap()
+        .0;
+        let output = render(&s, &cancel).unwrap();
+        assert!(output.find("QName=\"b\"").unwrap() < output.find("QName=\"a\"").unwrap());
+        assert!(output.contains("ValueDecoded=\"true\""));
+        assert!(output.contains("ValueDecoded=\"12\""));
+        assert!(!output.contains('\u{009b}'));
+        assert!(output.contains("\\u{009b}"));
+        assert_eq!(render_xml(&s, &cancel, 32), Err(OutputError::Limit));
+        cancel.store(true, Ordering::Relaxed);
+        assert_eq!(render(&s, &cancel), Err(OutputError::Cancelled));
     }
 }

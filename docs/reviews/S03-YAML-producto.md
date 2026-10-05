@@ -20,3 +20,6 @@ Actualización Y08 independiente: [ciclo de vida y fronteras](S03-YAML-lifecycle
 
 
 Y09 aceptación independiente Windows: [timeout y exclusión](S03-YAML-lifecycle-y09.md) pasan para R3 exacto, ~2,07s observados; FILETIME acredita fin antes de creación en ambas transiciones sintaxis/estructura. Consulta del Job por handle del app confirma worker propio y configuración por proceso512MiB/kill-on-close; no prueba aplicación por allocation ni memoria global. q0 sin cleanup forzado. Arena total64MiB/items1M/estrésJob/visual/Unix siguen pendientes.
+
+
+Actualización de integración XML R1: [revisión conjunta](S03-XML-producto.md) incluye dos cambios compartidos YAML: admisión de pico old+new antes de realocación y XBCANCEL01, cancelación durante proyección Unicode mediante umbrales cruzados. La suite heredada pasa y el adversario ejecuta el caso activo; no se atribuye la evidencia antigua a los hashes nuevos. Se conserva la aceptación YAML previa en su alcance y los pendientes de estrés/matriz/visual.

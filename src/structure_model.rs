@@ -18,6 +18,7 @@ pub enum StructureFormat {
     Toml,
     Json,
     Yaml,
+    Xml,
 }
 impl StructureFormat {
     pub(crate) fn decode(value: u8) -> Option<Self> {
@@ -25,6 +26,7 @@ impl StructureFormat {
             0 => Some(Self::Toml),
             1 => Some(Self::Json),
             2 => Some(Self::Yaml),
+            3 => Some(Self::Xml),
             _ => None,
         }
     }
@@ -69,6 +71,17 @@ pub enum StructureKind {
     YamlDocument,
     Alias,
     YamlTaggedScalar,
+    XmlDocument,
+    XmlElement,
+    XmlAttribute,
+    XmlNamespaceDeclaration,
+    XmlText,
+    XmlReference,
+    XmlCData,
+    XmlComment,
+    XmlPi,
+    XmlDeclaration,
+    XmlDocType,
 }
 impl StructureKind {
     pub fn is_container(self) -> bool {
@@ -79,6 +92,8 @@ impl StructureKind {
                 | Self::ArrayOfTables
                 | Self::YamlStream
                 | Self::YamlDocument
+                | Self::XmlDocument
+                | Self::XmlElement
         )
     }
 }
@@ -157,6 +172,7 @@ pub struct DuplicateSummary {
 pub struct Structure {
     format: StructureFormat,
     metadata: Vec<YamlMetadata>,
+    xml_metadata: Vec<XmlMetadata>,
     parents: Vec<Option<ParentLink>>,
     session_bytes: usize,
     yaml_edges: usize,
@@ -179,6 +195,42 @@ impl Structure {
             .binary_search_by_key(&node.0, |m| m.node.0)
             .ok()
             .map(|i| &self.metadata[i])
+    }
+    pub fn xml_metadata(&self, node: NodeId) -> Option<&XmlMetadata> {
+        self.xml_metadata
+            .get(node.0 as usize)
+            .filter(|m| m.node == node)
+    }
+    pub(crate) fn xml_projected_bytes(
+        nodes: usize,
+        entries: usize,
+        cooked: usize,
+    ) -> Option<usize> {
+        nodes
+            .checked_mul(
+                size_of::<Node>()
+                    + size_of::<XmlMetadata>()
+                    + size_of::<Option<ParentLink>>()
+                    + size_of::<u32>()
+                    + 1,
+            )
+            .and_then(|n| {
+                entries
+                    .checked_mul(size_of::<Entry>() + 1)
+                    .and_then(|e| n.checked_add(e))
+            })
+            .and_then(|n| n.checked_add(cooked))
+            .and_then(|n| {
+                n.checked_add(
+                    1024 * 1024
+                        + 4 * crate::structure_protocol::MAX_FRAME
+                        + 64 * 1024
+                        + size_of::<DuplicateSummary>(),
+                )
+            })
+    }
+    pub(crate) fn raw_xml_metadata(&self) -> &[XmlMetadata] {
+        &self.xml_metadata
     }
     pub fn parent(&self, node: NodeId) -> Option<ParentLink> {
         self.parents.get(node.0 as usize).copied().flatten()
@@ -246,6 +298,7 @@ impl Structure {
         size_of::<DuplicateSummary>()
             + self.session_bytes
             + self.metadata.capacity() * size_of::<YamlMetadata>()
+            + self.xml_metadata.capacity() * size_of::<XmlMetadata>()
             + self.parents.capacity() * size_of::<Option<ParentLink>>()
             + self.nodes.capacity() * size_of::<Node>()
             + self.entries.capacity() * size_of::<Entry>()
@@ -296,6 +349,9 @@ impl<'a> NodeRef<'a> {
     pub fn metadata(self) -> Option<&'a YamlMetadata> {
         self.structure.metadata(self.id)
     }
+    pub fn xml_metadata(self) -> Option<&'a XmlMetadata> {
+        self.structure.xml_metadata(self.id)
+    }
     pub fn parent(self) -> Option<ParentLink> {
         self.structure.parent(self.id)
     }
@@ -307,6 +363,9 @@ impl<'a> NodeRef<'a> {
     }
     pub fn id(self) -> NodeId {
         self.id
+    }
+    pub(crate) fn raw_text_ref(self) -> Option<TextRef> {
+        self.structure.nodes[self.id.0 as usize].spec.text
     }
     pub fn kind(self) -> StructureKind {
         self.structure.nodes[self.id.0 as usize].spec.kind
@@ -460,8 +519,13 @@ pub(crate) fn reserve<T>(
     if needed <= vector.capacity() {
         return Ok(());
     }
+    let old_bytes = vector
+        .capacity()
+        .checked_mul(size_of::<T>())
+        .ok_or(ModelError::Budget)?;
     let max = MAX_STRUCTURE_BYTES
         .checked_sub(other)
+        .and_then(|n| n.checked_sub(old_bytes))
         .ok_or(ModelError::Budget)?
         / size_of::<T>();
     if needed > max {
@@ -495,8 +559,9 @@ impl StructureBuilder {
             model: Structure {
                 format,
                 metadata: Vec::new(),
+                xml_metadata: Vec::new(),
                 parents: Vec::new(),
-                session_bytes: if format == StructureFormat::Yaml {
+                session_bytes: if matches!(format, StructureFormat::Yaml | StructureFormat::Xml) {
                     1024 * 1024
                 } else {
                     0
@@ -598,6 +663,14 @@ impl StructureBuilder {
         self.model.nodes[parent.0 as usize].entries = start..self.model.entries.len();
         self.model.nodes[parent.0 as usize].assigned = true;
         Ok(())
+    }
+    pub(crate) fn reserve_cooked(&mut self, additional: usize) -> Result<(), ModelError> {
+        let other = self.model.persistent_bytes() - self.model.cooked.capacity();
+        reserve(
+            &mut self.model.cooked,
+            additional,
+            other + self.scratch_bytes,
+        )
     }
     /// Chunks may split UTF-8; complete text is validated by finish.
     pub fn append_cooked(&mut self, bytes: &[u8]) -> Result<Range<u32>, ModelError> {
@@ -738,6 +811,14 @@ impl StructureBuilder {
         key_components: usize,
         mut cancelled: impl FnMut() -> bool,
     ) -> Result<Structure, ModelError> {
+        if self.model.format == StructureFormat::Xml {
+            return self.finish_xml(root, syntax_depth, key_components, cancelled);
+        }
+        if !self.model.xml_metadata.is_empty()
+            || self.model.nodes.iter().any(|n| n.spec.kind.is_xml())
+        {
+            return Err(ModelError::Invalid);
+        }
         if self.model.format == StructureFormat::Yaml {
             return self.finish_yaml(root, syntax_depth, key_components, cancelled);
         }
@@ -1414,3 +1495,76 @@ pub struct YamlMetadata {
 }
 #[path = "yaml_model.rs"]
 mod yaml_model;
+
+/// Names retain lexical identity; namespace is the normalized URI, never dereferenced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct XmlName {
+    pub qname: SourceSpan,
+    pub local: SourceSpan,
+    pub prefix: Option<SourceSpan>,
+    pub namespace: Option<TextRef>,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum XmlReferenceKind {
+    Predefined,
+    Decimal,
+    Hexadecimal,
+}
+/// A fixed-size row per XML node. Incompatible fields are forbidden by finish_xml.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct XmlMetadata {
+    pub node: NodeId,
+    pub name: Option<XmlName>,
+    pub attribute_count: u32,
+    pub empty_form: bool,
+    pub open_span: Option<SourceSpan>,
+    pub close_span: Option<SourceSpan>,
+    pub quoted_value: Option<SourceSpan>,
+    pub value_content: Option<SourceSpan>,
+    pub binding_prefix: Option<SourceSpan>,
+    pub reference_kind: Option<XmlReferenceKind>,
+    pub target: Option<SourceSpan>,
+    pub root_element: Option<NodeId>,
+    pub has_doctype: bool,
+}
+impl XmlMetadata {
+    pub(crate) fn new(node: NodeId) -> Self {
+        Self {
+            node,
+            name: None,
+            attribute_count: 0,
+            empty_form: false,
+            open_span: None,
+            close_span: None,
+            quoted_value: None,
+            value_content: None,
+            binding_prefix: None,
+            reference_kind: None,
+            target: None,
+            root_element: None,
+            has_doctype: false,
+        }
+    }
+}
+#[path = "xml_model.rs"]
+mod xml_validation;
+
+#[cfg(test)]
+mod peak_admission_tests {
+    use super::*;
+    #[test]
+    fn realloc_peak_rejection_preserves_content_len_and_capacity() {
+        let mut v = Vec::<u32>::new();
+        v.try_reserve_exact(16).unwrap();
+        v.extend(0..16);
+        let before = (v.clone(), v.len(), v.capacity());
+        let old = v.capacity() * size_of::<u32>();
+        // There is room for the final 17-element buffer, but not old+new simultaneously.
+        let other = MAX_STRUCTURE_BYTES - (old + 4);
+        assert_eq!(reserve(&mut v, 1, other).unwrap_err(), ModelError::Budget);
+        assert_eq!(v, before.0);
+        assert_eq!(v.len(), before.1);
+        assert_eq!(v.capacity(), before.2);
+    }
+}

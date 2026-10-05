@@ -36,3 +36,7 @@ pub mod structure_worker;
 pub mod yaml_worker;
 
 pub mod yaml_view;
+
+pub mod xml_worker;
+
+pub mod xml_view;

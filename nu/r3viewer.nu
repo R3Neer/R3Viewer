@@ -8,6 +8,7 @@ export def viewer [
     --inline(-i)
     --path(-p)
     --value(-v)
+    # auto/text/code/toml/json/yaml/xml; xml requires textual data or a real path.
     --format: string = 'auto'
     --language: string
     --structure

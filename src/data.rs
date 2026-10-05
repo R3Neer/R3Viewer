@@ -1228,6 +1228,17 @@ pub fn file_kind_name(kind: crate::structure_model::StructureKind) -> &'static s
         YamlDocument => "yaml_document",
         Alias => "alias",
         YamlTaggedScalar => "tagged_scalar (categoría no resuelta)",
+        XmlDocument => "xml_document",
+        XmlElement => "xml_element",
+        XmlAttribute => "xml_attribute",
+        XmlNamespaceDeclaration => "xml_namespace",
+        XmlText => "xml_text",
+        XmlReference => "xml_reference",
+        XmlCData => "xml_cdata",
+        XmlComment => "xml_comment",
+        XmlPi => "xml_pi",
+        XmlDeclaration => "xml_declaration",
+        XmlDocType => "xml_doctype",
     }
 }
 #[derive(Clone, Copy)]

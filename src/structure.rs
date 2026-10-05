@@ -38,10 +38,22 @@ pub enum StructureFailure {
     UnsupportedYamlVersion,
     InvalidYamlCoreTag,
     YamlRepresentation,
+    InvalidXml,
+    UnsupportedXmlVersion,
+    UnsupportedXmlEncoding,
+    UnsupportedXmlEntity,
+    XmlRepresentation,
 }
 impl StructureFailure {
     pub fn description(self) -> &'static str {
         match self {
+            Self::InvalidXml => "XML no válido; se conserva la fuente",
+            Self::UnsupportedXmlVersion => "versión XML no soportada; se requiere 1.0",
+            Self::UnsupportedXmlEncoding => "codificación XML no soportada; se requiere UTF-8",
+            Self::UnsupportedXmlEntity => "entidad XML no procesada; se conserva la fuente",
+            Self::XmlRepresentation => {
+                "rango o representación XML no acreditado; se conserva la fuente"
+            }
             Self::InvalidYaml => "YAML no válido; se conserva la fuente",
             Self::UnsupportedYamlVersion => "versión YAML explícita no soportada; se requiere 1.2",
             Self::InvalidYamlCoreTag => {
@@ -84,6 +96,11 @@ impl StructureFailure {
             12 => Self::UnsupportedYamlVersion,
             13 => Self::InvalidYamlCoreTag,
             14 => Self::YamlRepresentation,
+            15 => Self::InvalidXml,
+            16 => Self::UnsupportedXmlVersion,
+            17 => Self::UnsupportedXmlEncoding,
+            18 => Self::UnsupportedXmlEntity,
+            19 => Self::XmlRepresentation,
             _ => return None,
         })
     }
@@ -719,6 +736,15 @@ fn receive_sequence(
         || counts.parts as usize > MAX_STRUCTURE_BYTES / 12
         || counts.syntax_depth as usize > MAX_STRUCTURE_DEPTH
         || counts.key_components as usize > MAX_STRUCTURE_DEPTH
+        || counts.xml_metadata > counts.nodes
+        || (format == StructureFormat::Xml
+            && (counts.xml_metadata != counts.nodes
+                || counts.metadata != 0
+                || counts.alias_edges != 0
+                || counts.declarations != 0
+                || counts.parts != 0
+                || counts.key_components != 0))
+        || (format != StructureFormat::Xml && counts.xml_metadata != 0)
         || counts.metadata > counts.nodes
         || counts.alias_edges > counts.nodes
         || (counts.format != StructureFormat::Yaml
@@ -728,10 +754,20 @@ fn receive_sequence(
     {
         return Err(invalid());
     }
+    if format == StructureFormat::Xml
+        && Structure::xml_projected_bytes(
+            counts.nodes as usize,
+            counts.entries as usize,
+            counts.cooked as usize,
+        )
+        .is_none_or(|n| n > MAX_STRUCTURE_BYTES)
+    {
+        return Err(WorkError::Failure(StructureFailure::ArenaBudget));
+    }
     let mut builder = StructureBuilder::new_for_format(source.clone(), generation, format)
         .map_err(model_error)?;
     let mut expected = Vec::<u32>::new();
-    let transport_headroom = if format == StructureFormat::Yaml {
+    let transport_headroom = if matches!(format, StructureFormat::Yaml | StructureFormat::Xml) {
         4 * ipc::MAX_FRAME
     } else {
         0
@@ -759,6 +795,7 @@ fn receive_sequence(
     let mut declarations = 0u32;
     let mut parts = 0u32;
     let mut metadata = 0u32;
+    let mut xml_metadata = 0u32;
     let mut aliases = 0u32;
     let mut phase = 0u8;
     loop {
@@ -769,7 +806,7 @@ fn receive_sequence(
             Message::Entries { .. } => 2,
             Message::Cooked { .. } => 3,
             Message::Declaration { .. } => 4,
-            Message::Metadata { .. } => 5,
+            Message::Metadata { .. } | Message::XmlMetadata { .. } => 5,
             Message::End => 6,
             Message::Failure(_) => phase,
             _ => return Err(invalid()),
@@ -791,15 +828,19 @@ fn receive_sequence(
                 }
                 for node in batch {
                     let valid_kind = match format {
-                        StructureFormat::Yaml => !matches!(
-                            node.spec.kind,
-                            StructureKind::ArrayOfTables
-                                | StructureKind::JsonNumber
-                                | StructureKind::OffsetDateTime
-                                | StructureKind::LocalDateTime
-                                | StructureKind::LocalDate
-                                | StructureKind::LocalTime
-                        ),
+                        StructureFormat::Xml => node.spec.kind.is_xml(),
+                        StructureFormat::Yaml => {
+                            !node.spec.kind.is_xml()
+                                && !matches!(
+                                    node.spec.kind,
+                                    StructureKind::ArrayOfTables
+                                        | StructureKind::JsonNumber
+                                        | StructureKind::OffsetDateTime
+                                        | StructureKind::LocalDateTime
+                                        | StructureKind::LocalDate
+                                        | StructureKind::LocalTime
+                                )
+                        }
                         StructureFormat::Json => matches!(
                             node.spec.kind,
                             StructureKind::Mapping
@@ -809,15 +850,18 @@ fn receive_sequence(
                                 | StructureKind::Null
                                 | StructureKind::JsonNumber
                         ),
-                        StructureFormat::Toml => !matches!(
-                            node.spec.kind,
-                            StructureKind::Null
-                                | StructureKind::JsonNumber
-                                | StructureKind::YamlStream
-                                | StructureKind::YamlDocument
-                                | StructureKind::Alias
-                                | StructureKind::YamlTaggedScalar
-                        ),
+                        StructureFormat::Toml => {
+                            !node.spec.kind.is_xml()
+                                && !matches!(
+                                    node.spec.kind,
+                                    StructureKind::Null
+                                        | StructureKind::JsonNumber
+                                        | StructureKind::YamlStream
+                                        | StructureKind::YamlDocument
+                                        | StructureKind::Alias
+                                        | StructureKind::YamlTaggedScalar
+                                )
+                        }
                     };
                     if !valid_kind {
                         return Err(invalid());
@@ -903,6 +947,22 @@ fn receive_sequence(
                     metadata += 1;
                 }
             }
+            Message::XmlMetadata { offset, records } => {
+                if format != StructureFormat::Xml
+                    || nodes != counts.nodes
+                    || entries != counts.entries
+                    || cooked != counts.cooked
+                    || offset != xml_metadata
+                    || records.is_empty()
+                    || xml_metadata as usize + records.len() > counts.xml_metadata as usize
+                {
+                    return Err(invalid());
+                }
+                for record in records {
+                    builder.push_xml_metadata(record).map_err(model_error)?;
+                    xml_metadata += 1;
+                }
+            }
             Message::Failure(n) => {
                 return Err(WorkError::Failure(
                     StructureFailure::decode(n).ok_or_else(invalid)?,
@@ -915,6 +975,7 @@ fn receive_sequence(
                     || cooked != counts.cooked
                     || declarations != counts.declarations
                     || parts != counts.parts
+                    || xml_metadata != counts.xml_metadata
                     || metadata != counts.metadata
                     || aliases != counts.alias_edges
                 {
@@ -1144,6 +1205,175 @@ mod receiver_tests {
         assert!(matches!(
             receive(source, frames),
             Err(WorkError::Failure(StructureFailure::InvalidYaml))
+        ));
+    }
+}
+
+#[cfg(test)]
+mod xml_transport_tests {
+    use super::*;
+    fn frames() -> (Arc<String>, Vec<Frame>) {
+        let source =
+            Arc::new("<r xmlns:p='urn:a&amp;b' a='x&#xD;y'><p:x/>text&amp;</r>".to_owned());
+        let (m, d, k) =
+            crate::xml_worker::project(source.clone(), 31, &AtomicBool::new(false)).unwrap();
+        let mut bytes = Vec::new();
+        crate::structure_worker::output(&m, StructureFormat::Xml, d, k, 31, 9, &mut bytes).unwrap();
+        let mut input = bytes.as_slice();
+        let mut out = Vec::new();
+        while let Some(f) = ipc::read_frame(&mut input).unwrap() {
+            out.push(f)
+        }
+        (source, out)
+    }
+    fn receive(source: Arc<String>, frames: Vec<Frame>) -> Result<Structure, WorkError> {
+        let mut frames = frames.into_iter();
+        receive_sequence(
+            source,
+            31,
+            9,
+            StructureFormat::Xml,
+            || Ok(frames.next()),
+            || Ok(()),
+        )
+    }
+    #[test]
+    fn xml_roundtrip_source_semantics_and_parent_identity() {
+        let (s, f) = frames();
+        let m = receive(s.clone(), f).unwrap();
+        assert!(Arc::ptr_eq(&s, &m.source_handle()));
+        let r = m.root().entry(0).unwrap().value();
+        assert_eq!(r.xml_metadata().unwrap().attribute_count, 2);
+        assert_eq!(r.entry(1).unwrap().value().decoded(), Some("x\ry"));
+        assert_eq!(r.entry(2).unwrap().value().parent().unwrap().owner, r.id());
+    }
+    #[test]
+    fn forged_xml_counts_phases_metadata_ranges_namespaces_and_tail_rejected() {
+        for alteration in 0..13 {
+            let (s, mut f) = frames();
+            match alteration {
+                0 => {
+                    if let Message::Begin(c) = &mut f[0].message {
+                        c.nodes = 1_000_000;
+                        c.entries = 0;
+                        c.xml_metadata = c.nodes
+                    }
+                }
+                1 => {
+                    if let Message::Begin(c) = &mut f[0].message {
+                        c.xml_metadata -= 1
+                    }
+                }
+                2 => {
+                    if let Message::Begin(c) = &mut f[0].message {
+                        c.metadata = 1
+                    }
+                }
+                3 => {
+                    let at = f
+                        .iter()
+                        .position(|f| matches!(f.message, Message::XmlMetadata { .. }))
+                        .unwrap();
+                    f.swap(1, at)
+                }
+                4 => {
+                    let at = f
+                        .iter()
+                        .position(|f| matches!(f.message, Message::XmlMetadata { .. }))
+                        .unwrap();
+                    if let Message::XmlMetadata { records, .. } = &mut f[at].message {
+                        records[1].has_doctype = true
+                    }
+                }
+                5 => {
+                    let at = f
+                        .iter()
+                        .position(|f| matches!(f.message, Message::XmlMetadata { .. }))
+                        .unwrap();
+                    if let Message::XmlMetadata { records, .. } = &mut f[at].message {
+                        records[1].attribute_count = 0
+                    }
+                }
+                6 => {
+                    let at = f
+                        .iter()
+                        .position(|f| matches!(f.message, Message::XmlMetadata { .. }))
+                        .unwrap();
+                    if let Message::XmlMetadata { records, .. } = &mut f[at].message {
+                        records[1].name.as_mut().unwrap().local.start += 1
+                    }
+                }
+                7 => {
+                    let at = f
+                        .iter()
+                        .position(|f| matches!(f.message, Message::XmlMetadata { .. }))
+                        .unwrap();
+                    if let Message::XmlMetadata { records, .. } = &mut f[at].message {
+                        records[4].name.as_mut().unwrap().namespace = None
+                    }
+                }
+                8 => {
+                    let at = f
+                        .iter()
+                        .position(|f| matches!(f.message, Message::Cooked { .. }))
+                        .unwrap();
+                    if let Message::Cooked { bytes, .. } = &mut f[at].message {
+                        bytes[0] = b'z'
+                    }
+                }
+                9 => {
+                    let at = f
+                        .iter()
+                        .position(|f| matches!(f.message, Message::XmlMetadata { .. }))
+                        .unwrap();
+                    if let Message::XmlMetadata { offset, .. } = &mut f[at].message {
+                        *offset = 1
+                    }
+                }
+                10 => f.push(Frame::new(31, 9, Message::End)),
+                11 => {
+                    f.pop();
+                }
+                12 => f[1].generation += 1,
+                _ => unreachable!(),
+            }
+            assert!(receive(s, f).is_err(), "alteration {alteration}");
+        }
+    }
+    #[test]
+    fn xml_aggregate_budget_rejected_before_reading_payload() {
+        let s = Arc::new("<r/>".into());
+        let c = ipc::Counts {
+            format: StructureFormat::Xml,
+            nodes: 1_000_000,
+            entries: 0,
+            declarations: 0,
+            parts: 0,
+            cooked: 0,
+            root: NodeId(0),
+            syntax_depth: 1,
+            key_components: 0,
+            metadata: 0,
+            alias_edges: 0,
+            xml_metadata: 1_000_000,
+        };
+        let mut first = Some(Frame::new(31, 9, Message::Begin(c)));
+        let result = receive_sequence(
+            s,
+            31,
+            9,
+            StructureFormat::Xml,
+            || {
+                Ok(first
+                    .take()
+                    .expect("payload read after rejected Begin")
+                    .into())
+            },
+            || Ok(()),
+        );
+        assert!(matches!(
+            result,
+            Err(WorkError::Failure(StructureFailure::ArenaBudget))
         ));
     }
 }

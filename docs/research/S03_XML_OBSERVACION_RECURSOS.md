@@ -42,3 +42,8 @@ Fuentes primarias consultadas:
 La revisión independiente posterior distingue este monitor NT del experimento ETW no disponible: el criterio G4 canónico no exige ETW kernel y queda cumplido para el prototipo exacto y siete inputs observados. [Revisión y hashes](../reviews/S03-XML-gate-recursos.md). Las expresiones anteriores de G4 kernel-observation pendiente se conservan como investigación opcional, sin extender ni alterar el criterio canónico. No hay garantía universal, sandbox, aceptación de producción ni cierre G5–G7. Cambiar parser/features/resolutor requiere renovar comprobaciones de recursos.
 
 Ubicación original de scripts/JSON mencionados como «esta carpeta» en el informe: C:\Users\Usuario\.codex\visualizations\2026\10\04\01a10823-9b5a-78d3-8c6a-c64ff5709d5f. No se copian ni instalan herramientas de captura en el producto; hashes de sus bytes en la revisión final. Las instrucciones de reproducción se refieren a esa evidencia original, no al directorio docs/research.
+
+
+## Renovación sobre producción XML R1
+
+2026-10-05. [Aceptación independiente](../reviews/S03-XML-aceptacion-r1.md) ejecutó siete nuevos casos sobre wrapper del parser de producción exacto, con controles de archivo y loopback propios antes/después. [Addendum adversario](../reviews/S03-XML-g4-produccion-r1.md) sin críticas verifica 62 artefactos y 355 entradas de fuente; cierra G4 para ese alcance observado. PRODUCTION-OBSERVATION SHA256 `38C3B0A9CE16FC7332CDA43F62D89FDE3E209ACFA18E4A96F13145D6A9EEFEFF`. No extrapola el prototipo, no es kernel/ETW, no certifica todos los inputs ni el lifecycle/Job del worker. [Integración y pendientes](../reviews/S03-XML-producto.md).

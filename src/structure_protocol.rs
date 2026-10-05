@@ -17,6 +17,7 @@ pub(crate) struct Counts {
     pub key_components: u32,
     pub metadata: u32,
     pub alias_edges: u32,
+    pub xml_metadata: u32,
 }
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct WireNode {
@@ -58,6 +59,10 @@ pub(crate) enum Message {
     Metadata {
         offset: u32,
         records: Vec<YamlMetadata>,
+    },
+    XmlMetadata {
+        offset: u32,
+        records: Vec<XmlMetadata>,
     },
     End,
     Failure(u8),
@@ -112,6 +117,31 @@ impl Encode {
             }
         }
     }
+    fn xml(&mut self, m: &XmlMetadata) {
+        self.word(m.node.0);
+        self.byte(u8::from(m.name.is_some()));
+        if let Some(n) = m.name {
+            self.span(n.qname);
+            self.span(n.local);
+            self.location(n.prefix);
+            self.text(n.namespace);
+        }
+        self.word(m.attribute_count);
+        self.byte(u8::from(m.empty_form));
+        for s in [
+            m.open_span,
+            m.close_span,
+            m.quoted_value,
+            m.value_content,
+            m.binding_prefix,
+            m.target,
+        ] {
+            self.location(s);
+        }
+        self.byte(m.reference_kind.map_or(255, |r| r as u8));
+        self.word(m.root_element.map_or(u32::MAX, |n| n.0));
+        self.byte(u8::from(m.has_doctype));
+    }
     fn entries(&mut self, entries: &[EntrySpec]) -> io::Result<()> {
         if entries.len() > BATCH {
             return Err(invalid());
@@ -141,7 +171,7 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
         Message::Init { .. } => 5,
         Message::Ack { .. } => 4,
         Message::Failure(_) => 1,
-        Message::Begin(_) => 41,
+        Message::Begin(_) => 45,
         Message::Source { bytes, .. } | Message::Cooked { bytes, .. } => 8 + bytes.len(),
         Message::Nodes { nodes, .. } => {
             8 + nodes
@@ -151,6 +181,7 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
         }
         Message::Entries { entries, .. } => 8 + entries.len() * 8,
         Message::Declaration { spec, parts } => 25 + loc_len(spec.value_span) + parts.len() * 12,
+        Message::XmlMetadata { records, .. } => 8 + records.len() * 128,
         Message::Metadata { records, .. } => {
             8 + records
                 .iter()
@@ -192,6 +223,7 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
                 c.key_components,
                 c.metadata,
                 c.alias_edges,
+                c.xml_metadata,
             ] {
                 body.word(n);
             }
@@ -257,6 +289,17 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
             }
             12
         }
+        Message::XmlMetadata { offset, records } => {
+            if records.len() > BATCH {
+                return Err(invalid());
+            }
+            body.word(*offset);
+            body.word(records.len() as u32);
+            for m in records {
+                body.xml(m);
+            }
+            13
+        }
         Message::End => 10,
         Message::Failure(reason) => {
             body.byte(*reason);
@@ -268,7 +311,7 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
     }
     let mut header = [0u8; 28];
     header[..4].copy_from_slice(b"R3ST");
-    header[4] = 3;
+    header[4] = 4;
     header[6] = tag;
     header[8..16].copy_from_slice(&frame.generation.to_le_bytes());
     header[16..24].copy_from_slice(&frame.request.to_le_bytes());
@@ -318,6 +361,58 @@ impl<'a> Decode<'a> {
             _ => Err(invalid()),
         }
     }
+    fn boolean(&mut self) -> io::Result<bool> {
+        match self.byte()? {
+            0 => Ok(false),
+            1 => Ok(true),
+            _ => Err(invalid()),
+        }
+    }
+    fn xml(&mut self) -> io::Result<XmlMetadata> {
+        let node = NodeId(self.word()?);
+        let name = if self.boolean()? {
+            Some(XmlName {
+                qname: self.span()?,
+                local: self.span()?,
+                prefix: self.location()?,
+                namespace: self.text()?,
+            })
+        } else {
+            None
+        };
+        let attribute_count = self.word()?;
+        let empty_form = self.boolean()?;
+        let open_span = self.location()?;
+        let close_span = self.location()?;
+        let quoted_value = self.location()?;
+        let value_content = self.location()?;
+        let binding_prefix = self.location()?;
+        let target = self.location()?;
+        let reference_kind = match self.byte()? {
+            255 => None,
+            0 => Some(XmlReferenceKind::Predefined),
+            1 => Some(XmlReferenceKind::Decimal),
+            2 => Some(XmlReferenceKind::Hexadecimal),
+            _ => return Err(invalid()),
+        };
+        let root = self.word()?;
+        let has_doctype = self.boolean()?;
+        Ok(XmlMetadata {
+            node,
+            name,
+            attribute_count,
+            empty_form,
+            open_span,
+            close_span,
+            quoted_value,
+            value_content,
+            binding_prefix,
+            target,
+            reference_kind,
+            root_element: (root != u32::MAX).then_some(NodeId(root)),
+            has_doctype,
+        })
+    }
     fn count(&mut self, max: usize) -> io::Result<usize> {
         let n = self.word()? as usize;
         if n > max {
@@ -346,7 +441,7 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
         }
     }
     input.read_exact(&mut header[1..])?;
-    if &header[..4] != b"R3ST" || header[4] != 3 || header[5] != 0 || header[7] != 0 {
+    if &header[..4] != b"R3ST" || header[4] != 4 || header[5] != 0 || header[7] != 0 {
         return Err(invalid());
     }
     let len = u32::from_le_bytes(header[24..28].try_into().unwrap()) as usize;
@@ -362,6 +457,22 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
         at: 0,
     };
     let message = match header[6] {
+        13 => {
+            let offset = d.word()?;
+            let count = d.count(BATCH)?;
+            if count
+                .checked_mul(21)
+                .is_none_or(|n| n > d.bytes.len() - d.at)
+            {
+                return Err(invalid());
+            }
+            let mut records = Vec::new();
+            records.try_reserve_exact(count).map_err(|_| invalid())?;
+            for _ in 0..count {
+                records.push(d.xml()?);
+            }
+            Message::XmlMetadata { offset, records }
+        }
         0 => Message::Boot,
         1 => Message::Init {
             format: StructureFormat::decode(d.byte()?).ok_or_else(invalid)?,
@@ -385,6 +496,7 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
             key_components: d.word()?,
             metadata: d.word()?,
             alias_edges: d.word()?,
+            xml_metadata: d.word()?,
         }),
         6 => {
             let offset = d.word()?;
@@ -410,6 +522,17 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
                     14 => StructureKind::YamlDocument,
                     15 => StructureKind::Alias,
                     16 => StructureKind::YamlTaggedScalar,
+                    17 => StructureKind::XmlDocument,
+                    18 => StructureKind::XmlElement,
+                    19 => StructureKind::XmlAttribute,
+                    20 => StructureKind::XmlNamespaceDeclaration,
+                    21 => StructureKind::XmlText,
+                    22 => StructureKind::XmlReference,
+                    23 => StructureKind::XmlCData,
+                    24 => StructureKind::XmlComment,
+                    25 => StructureKind::XmlPi,
+                    26 => StructureKind::XmlDeclaration,
+                    27 => StructureKind::XmlDocType,
                     _ => return Err(invalid()),
                 };
                 nodes.push(WireNode {
@@ -545,7 +668,7 @@ mod tests {
             );
             bytes[4] = 1;
             assert!(read_frame(&mut bytes.as_slice()).is_err());
-            bytes[4] = 3;
+            bytes[4] = 4;
             bytes[28] = 255;
             assert!(read_frame(&mut bytes.as_slice()).is_err());
         }
@@ -572,7 +695,7 @@ mod tests {
     fn oversized_header_rejected_before_payload_allocation() {
         let mut bytes = [0u8; 28];
         bytes[..4].copy_from_slice(b"R3ST");
-        bytes[4] = 3;
+        bytes[4] = 4;
         bytes[24..].copy_from_slice(&((MAX_FRAME + 1) as u32).to_le_bytes());
         assert!(read_frame(&mut bytes.as_slice()).is_err());
     }
@@ -610,8 +733,51 @@ mod tests {
         }
         bytes[4] = 2;
         assert!(read_frame(&mut bytes.as_slice()).is_err());
-        bytes[4] = 3;
+        bytes[4] = 4;
         *bytes.last_mut().unwrap() = 4;
+        assert!(read_frame(&mut bytes.as_slice()).is_err());
+    }
+}
+
+#[cfg(test)]
+mod xml_tests {
+    use super::*;
+    #[test]
+    fn xml_metadata_exact_wire_and_old_schema_rejection() {
+        let mut m = XmlMetadata::new(NodeId(2));
+        m.name = Some(XmlName {
+            qname: SourceSpan { start: 3, end: 6 },
+            local: SourceSpan { start: 5, end: 6 },
+            prefix: Some(SourceSpan { start: 3, end: 4 }),
+            namespace: Some(TextRef::Cooked { start: 1, end: 8 }),
+        });
+        m.open_span = Some(SourceSpan { start: 2, end: 15 });
+        m.attribute_count = 2;
+        m.empty_form = true;
+        let mut bytes = Vec::new();
+        write_frame(
+            &mut bytes,
+            &Frame::new(
+                7,
+                8,
+                Message::XmlMetadata {
+                    offset: 2,
+                    records: vec![m],
+                },
+            ),
+        )
+        .unwrap();
+        match read_frame(&mut bytes.as_slice()).unwrap().unwrap().message {
+            Message::XmlMetadata { offset: 2, records } => assert_eq!(records, [m]),
+            _ => panic!("XML tag"),
+        }
+        bytes[4] = 3;
+        assert!(read_frame(&mut bytes.as_slice()).is_err());
+        bytes[4] = 4;
+        bytes[6] = 255;
+        assert!(read_frame(&mut bytes.as_slice()).is_err());
+        bytes[6] = 13;
+        bytes[32..36].copy_from_slice(&((BATCH + 1) as u32).to_le_bytes());
         assert!(read_frame(&mut bytes.as_slice()).is_err());
     }
 }

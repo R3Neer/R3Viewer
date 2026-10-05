@@ -67,3 +67,6 @@ D1R2: [revisión final TOML](reviews/S03-TOML-producto.md) sin críticas;147test
 
 
 Disponibilidad confirmada por el usuario2026-10-05: sólo Windows local. Preparar ejecución futura nativa macOS/Linux mediante GitHub Actions cuando el repositorio se conecte y se autorice su ejecución. Mantener pendientes runtime/contención nativos hasta logs reales de candidato exacto; pruebas headless de CI y ConPTY no sustituyen QA visual de protocolos/scrollback/DPI. [Decisión](spec/DECISIONES.md).
+
+
+XML D4 R1 tiene [revisión y aceptación funcional parcial Windows](reviews/S03-XML-producto.md): 213 tests/fmt/Clippy/build, revisión independiente sin críticas, 89 CLI/Nu, 28 spans, ocho sesiones ConPTY y StringStream SDK real. Fuente original/visible y cancelación Unicode YAML también revisadas. Nueva observación G4 de producción y addendum independiente sin críticas incorporados, dentro del alcance NT observado. Estrés exhaustivo, inline deadline real, visual/Unix/gramáticas/distribución y formatos enriquecidos siguen abiertos. No cerrar RV-105/106/107 ni S03 por este incremento.

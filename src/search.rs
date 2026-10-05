@@ -47,11 +47,25 @@ pub struct YamlSearchHit {
     pub original_range: crate::yaml_view::HitRange,
     pub range: crate::yaml_view::HitRange,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct XmlSearchHit {
+    pub generation: u64,
+    pub visit_index: usize,
+    pub node: crate::structure_model::NodeId,
+    pub domain: crate::xml_view::Domain,
+    pub original_range: crate::xml_view::HitRange,
+    pub range: crate::xml_view::HitRange,
+}
 #[derive(Debug)]
 pub enum SearchOutcome {
     Found(SearchHit),
     FileFound(FileSearchHit),
     YamlFound(YamlSearchHit),
+    XmlFound(XmlSearchHit),
+    SourceFound {
+        original: Range<usize>,
+        visible: Range<usize>,
+    },
     NotFound,
     Cancelled,
     Error(String),
@@ -909,6 +923,163 @@ pub fn find_yaml(
         Err(error) => SearchOutcome::Error(error.to_string()),
     }
 }
+pub fn find_xml(
+    structure: &crate::structure_model::Structure,
+    query: &str,
+    previous: Option<&XmlSearchHit>,
+    direction: Direction,
+    budget: &crate::xml_view::Budget,
+    cancel: &AtomicBool,
+) -> SearchOutcome {
+    use crate::xml_view::{Error, HitRange, Text, Visits};
+    let search = || -> Result<Option<XmlSearchHit>, Error> {
+        if previous.is_some_and(|last| last.generation != structure.generation()) {
+            return Err(Error::Invalid);
+        }
+        if query.is_empty() {
+            return Ok(None);
+        }
+        if query.len() > QUERY_LIMIT {
+            return Err(Error::Budget);
+        }
+        // KMP table + cloned query/editor strings, fixed DFS/fragments and staging.
+        let _charge = budget.charge(QUERY_LIMIT * std::mem::size_of::<usize>() + 65536)?;
+        let mut prefix = Vec::new();
+        prefix
+            .try_reserve_exact(query.len())
+            .map_err(|_| Error::Budget)?;
+        if prefix.capacity() > query.len() {
+            return Err(Error::Budget);
+        }
+        prefix.resize(query.len(), 0);
+        let needle = query.as_bytes();
+        let mut k = 0;
+        for i in 1..needle.len() {
+            if i.is_multiple_of(1024) && cancel.load(Ordering::Relaxed) {
+                return Err(Error::Cancelled);
+            }
+            while k > 0 && needle[k] != needle[i] {
+                k = prefix[k - 1]
+            }
+            if needle[k] == needle[i] {
+                k += 1
+            }
+            prefix[i] = k
+        }
+        for pass in 0..if previous.is_some() { 2 } else { 1 } {
+            let mut tentative = None;
+            let mut index = 0;
+            for node in Visits::new(structure, cancel) {
+                let node = node?;
+                for domain in crate::xml_view::SEARCH_DOMAINS {
+                    if crate::xml_view::unit(structure, node, domain).is_none() {
+                        continue;
+                    }
+                    let text = Text::new(structure, node, domain)?;
+                    for unit in text.search_ranges() {
+                        let Some(unit) = unit else { continue };
+                        let visit_index = index;
+                        index += 1;
+                        if let Some(last) = previous {
+                            let relevant = match (direction, pass) {
+                                (Direction::Forward, 0) | (Direction::Backward, 1) => {
+                                    visit_index >= last.visit_index
+                                }
+                                _ => visit_index <= last.visit_index,
+                            };
+                            if !relevant {
+                                continue;
+                            }
+                        }
+                        let mut from = unit.start;
+                        let mut to = unit.end;
+                        if let Some(last) = previous.filter(|last| last.visit_index == visit_index)
+                        {
+                            if last.generation != structure.generation()
+                                || last.node != node
+                                || last.domain != domain
+                                || last.original_range.end > unit.end - unit.start
+                                || last.original_range.start > last.original_range.end
+                            {
+                                return Err(Error::Invalid);
+                            }
+                            match (direction, pass) {
+                                (Direction::Forward, 0) => {
+                                    from = unit.start + last.original_range.end
+                                }
+                                (Direction::Backward, 0) => {
+                                    to = unit.start + last.original_range.start
+                                }
+                                (Direction::Forward, _) => {
+                                    to = unit.start + last.original_range.end
+                                }
+                                (Direction::Backward, _) => {
+                                    from = unit.start + last.original_range.start
+                                }
+                            }
+                        }
+                        let mut matched = 0;
+                        for (offset, byte) in text.raw_bytes().enumerate() {
+                            if offset.is_multiple_of(1024) {
+                                crate::xml_view::check_search(cancel)?;
+                            }
+                            if offset < from {
+                                continue;
+                            }
+                            if offset >= to {
+                                break;
+                            }
+                            while matched > 0 && needle[matched] != byte {
+                                matched = prefix[matched - 1]
+                            }
+                            if needle[matched] == byte {
+                                matched += 1
+                            }
+                            if matched == needle.len() {
+                                let range = HitRange {
+                                    start: offset + 1 - needle.len(),
+                                    end: offset + 1,
+                                };
+                                let hit = XmlSearchHit {
+                                    generation: structure.generation(),
+                                    visit_index,
+                                    node,
+                                    domain,
+                                    original_range: HitRange {
+                                        start: range.start - unit.start,
+                                        end: range.end - unit.start,
+                                    },
+                                    // Tentative backward matches retain pane-original bytes.
+                                    // Project only the chosen hit, never every prefix match.
+                                    range,
+                                };
+                                if direction == Direction::Forward {
+                                    let mut hit = hit;
+                                    hit.range = text.visible_range(hit.range, cancel)?;
+                                    return Ok(Some(hit));
+                                }
+                                tentative = Some(hit);
+                                matched = prefix[needle.len() - 1];
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(mut hit) = tentative {
+                let text = Text::new(structure, hit.node, hit.domain)?;
+                hit.range = text.visible_range(hit.range, cancel)?;
+                return Ok(Some(hit));
+            }
+        }
+        Ok(None)
+    };
+    match search() {
+        Ok(Some(hit)) => SearchOutcome::XmlFound(hit),
+        Ok(None) => SearchOutcome::NotFound,
+        Err(Error::Cancelled) => SearchOutcome::Cancelled,
+        Err(error) => SearchOutcome::Error(error.to_string()),
+    }
+}
 
 #[cfg(test)]
 mod yaml_search_tests {
@@ -1097,5 +1268,205 @@ mod yaml_search_tests {
             panic!()
         };
         assert_eq!((previous.range.start, previous.range.end), (1, 3));
+    }
+}
+
+#[cfg(test)]
+mod xml_search_tests {
+    use super::*;
+    use crate::xml_view::{Budget, Domain};
+    fn model(raw: &str) -> crate::structure_model::Structure {
+        crate::xml_worker::project(Arc::new(raw.into()), 4, &AtomicBool::new(false))
+            .unwrap()
+            .0
+    }
+    #[test]
+    fn original_controls_literal_and_domain_identity_remain_separate() {
+        let s = model("<same>\u{009b} \\u{009b}</same>");
+        let cancel = AtomicBool::new(false);
+        let budget = Budget::new(&s).unwrap();
+        let SearchOutcome::XmlFound(control) =
+            find_xml(&s, "\u{009b}", None, Direction::Forward, &budget, &cancel)
+        else {
+            panic!("control")
+        };
+        assert_eq!(control.domain, Domain::ValueDecoded);
+        assert_eq!(control.original_range.range(), 0..2);
+        assert_eq!(control.range.range(), 0..8);
+        let SearchOutcome::XmlFound(literal) =
+            find_xml(&s, "\\u{009b}", None, Direction::Forward, &budget, &cancel)
+        else {
+            panic!("literal")
+        };
+        assert_eq!(literal.original_range.range(), 3..11);
+        assert_eq!(literal.range.range(), 9..17);
+        let SearchOutcome::XmlFound(qname) =
+            find_xml(&s, "same", None, Direction::Forward, &budget, &cancel)
+        else {
+            panic!("qname")
+        };
+        assert_eq!(qname.domain, Domain::QName);
+        let SearchOutcome::XmlFound(local) = find_xml(
+            &s,
+            "same",
+            Some(&qname),
+            Direction::Forward,
+            &budget,
+            &cancel,
+        ) else {
+            panic!("local")
+        };
+        assert_eq!(local.domain, Domain::LocalName);
+        assert_eq!(local.node, qname.node);
+        assert!(matches!(
+            find_xml(&s, "inspector", None, Direction::Forward, &budget, &cancel),
+            SearchOutcome::NotFound
+        ));
+        let mut stale = local;
+        stale.generation += 1;
+        assert!(matches!(
+            find_xml(
+                &s,
+                "same",
+                Some(&stale),
+                Direction::Forward,
+                &budget,
+                &cancel
+            ),
+            SearchOutcome::Error(_)
+        ));
+        assert_eq!(budget.used(), 0);
+    }
+    #[test]
+    fn backward_selects_only_final_projection_and_does_not_cross_nodes() {
+        let s = model(&format!("<r>{}<a/>b</r>", "a".repeat(200_000)));
+        let budget = Budget::new(&s).unwrap();
+        let cancel = AtomicBool::new(false);
+        let SearchOutcome::XmlFound(last) =
+            find_xml(&s, "a", None, Direction::Backward, &budget, &cancel)
+        else {
+            panic!()
+        };
+        // QName/local name of child a follows the large text physically. Search text directly by resuming before child.
+        let mut previous = last;
+        while previous.domain != Domain::ValueDecoded {
+            let SearchOutcome::XmlFound(hit) = find_xml(
+                &s,
+                "a",
+                Some(&previous),
+                Direction::Backward,
+                &budget,
+                &cancel,
+            ) else {
+                panic!()
+            };
+            previous = hit;
+        }
+        assert_eq!(previous.original_range.range(), 199_999..200_000);
+        assert!(matches!(
+            find_xml(&s, "ab", None, Direction::Forward, &budget, &cancel),
+            SearchOutcome::NotFound
+        ));
+        cancel.store(true, Ordering::Relaxed);
+        assert!(matches!(
+            find_xml(&s, "a", None, Direction::Forward, &budget, &cancel),
+            SearchOutcome::Cancelled
+        ));
+        assert_eq!(budget.used(), 0);
+    }
+}
+
+/// Source identity remains original UTF8, while only presentation coordinates reach UI.
+pub fn find_source(
+    source: &crate::presentation::SafeTextModel,
+    query: &str,
+    previous: Option<&Range<usize>>,
+    direction: Direction,
+    cancel: &AtomicBool,
+) -> SearchOutcome {
+    let text = source.original();
+    if previous.is_some_and(|r| {
+        r.start > r.end
+            || r.end > text.len()
+            || !text.is_char_boundary(r.start)
+            || !text.is_char_boundary(r.end)
+    }) {
+        return SearchOutcome::Error("rango Fuente original no válido".into());
+    }
+    let offset = previous.map_or(
+        if direction == Direction::Forward {
+            0
+        } else {
+            text.len()
+        },
+        |r| {
+            if direction == Direction::Forward {
+                r.end
+            } else {
+                r.start
+            }
+        },
+    );
+    match find_visible(text, query, offset, direction, cancel) {
+        Ok(Some(original)) => SearchOutcome::SourceFound {
+            visible: source.visible_range(original.clone()),
+            original,
+        },
+        Ok(None) => SearchOutcome::NotFound,
+        Err(_) if cancel.load(Ordering::Relaxed) => SearchOutcome::Cancelled,
+        Err(e) => SearchOutcome::Error(e),
+    }
+}
+#[cfg(test)]
+mod source_original_tests {
+    use super::*;
+    #[test]
+    fn source_matches_original_not_control_placeholders_and_preserves_raw_resume() {
+        let cancel = AtomicBool::new(false);
+        let source = crate::presentation::SafeTextModel::new(
+            "\x1b␛\u{009b} \\u{009b}\r\n\t界e\u{301}end".into(),
+            &cancel,
+        )
+        .unwrap();
+        let get = |q: &str, previous: Option<&Range<usize>>, dir| {
+            let SearchOutcome::SourceFound { original, visible } =
+                find_source(&source, q, previous, dir, &cancel)
+            else {
+                panic!("{q:?}")
+            };
+            (original, visible)
+        };
+        let (esc, shown) = get("\x1b", None, Direction::Forward);
+        assert_eq!(esc, 0..1);
+        assert_eq!(shown, 0..3);
+        let (glyph, _) = get("␛", None, Direction::Forward);
+        assert_eq!(glyph, 1..4);
+        let (c1, _) = get("\u{009b}", None, Direction::Forward);
+        assert_eq!(c1, 4..6);
+        let (literal, _) = get("\\u{009b}", None, Direction::Forward);
+        assert_eq!(literal, 7..15);
+        assert_eq!(
+            get("\\u{009b}", Some(&literal), Direction::Forward).0,
+            literal
+        );
+        assert_eq!(get("\r\n", None, Direction::Forward).0, 15..17);
+        assert_eq!(get("\t", None, Direction::Forward).0, 17..18);
+        let (last, _) = get("end", None, Direction::Backward);
+        assert_eq!(last.end, source.original().len());
+        assert_eq!(get("end", Some(&last), Direction::Backward).0, last);
+        assert!(matches!(
+            find_source(&source, "e", Some(&(5..6)), Direction::Forward, &cancel),
+            SearchOutcome::Error(_)
+        ));
+        assert!(matches!(
+            find_source(
+                &source,
+                "end",
+                None,
+                Direction::Forward,
+                &AtomicBool::new(true)
+            ),
+            SearchOutcome::Cancelled
+        ));
     }
 }

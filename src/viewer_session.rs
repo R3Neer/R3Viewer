@@ -6,7 +6,7 @@ use crate::{
     presentation::{SafeTextModel, cell_width, slice_cells},
     search::{
         Direction, FileSearchHit, QUERY_LIMIT, SearchHit, SearchOutcome, SearchWorker, find_data,
-        find_structure, find_visible, find_yaml,
+        find_source, find_structure, find_xml, find_yaml,
     },
     session::{TerminalGuard, control_terminal},
     structure::{
@@ -18,6 +18,9 @@ use crate::{
     },
     syntax_selection::{StructureSelection, SyntaxSelection, fallback_diagnostic},
     worker_process::{ReapState, ReapTicket},
+    xml_view::{
+        self, Domain as XmlDomain, Navigator as XmlNavigator, Pane as XmlPane, State as XmlState,
+    },
     yaml_view::{
         self, Domain as YamlDomain, Navigator as YamlNavigator, Pane as YamlPane,
         State as YamlState,
@@ -47,7 +50,7 @@ use std::{
 use unicode_segmentation::UnicodeSegmentation;
 const TICK: Duration = Duration::from_millis(25);
 const EVENT_CAPACITY: usize = 256;
-const HELP: &str = "Flechas / h j k l: mover\nPageUp / PageDown: página; Home / End: extremos\nEnter: abrir celda; columna key: clave completa; r: abrir fila completa\nBackspace: cerrar clave / volver al padre\n/: búsqueda literal; Enter: confirmar; Esc: cancelar editor\nn / N: siguiente / anterior (vuelta al principio/final)\nK: clave completa de columna/campo; L: números de línea; ?: ayuda\nTab / Shift-Tab: Fuente/Estructura; o: span original completo\nYAML: inspector de serialización; m: metadatos; Enter alias: seguir target\nYAML: máximo 128 retornos previos (current aparte); Backspace conserva retorno\nq / Esc: salir; Ctrl-C: cancelar (130)";
+const HELP: &str = "Flechas / h j k l: mover\nPageUp / PageDown: página; Home / End: extremos\nEnter: abrir celda; columna key: clave completa; r: abrir fila completa\nBackspace: cerrar clave / volver al padre\n/: búsqueda literal; Enter: confirmar; Esc: cancelar editor\nn / N: siguiente / anterior (vuelta al principio/final)\nK: clave completa de columna/campo; L: números de línea; ?: ayuda\nTab / Shift-Tab: Fuente/Estructura; o: span original completo\nFuente: busca texto original; controles se muestran seguros\nXML: K QName; m inspector; dominios de búsqueda separados\nYAML: inspector de serialización; m: metadatos; Enter alias: seguir target\nYAML: máximo 128 retornos previos (current aparte); Backspace conserva retorno\nq / Esc: salir; Ctrl-C: cancelar (130)";
 
 fn is_cancel(key: &KeyEvent) -> bool {
     key.kind != KeyEventKind::Release
@@ -420,6 +423,7 @@ fn toggle_structure(
 struct DomainState {
     pane: Option<TextPane>,
     query: String,
+    source_hit: Option<std::ops::Range<usize>>,
     last_hit: Option<SearchHit>,
     file_hit: Option<FileSearchHit>,
     message: String,
@@ -428,6 +432,8 @@ struct FileWorkspace {
     source: Arc<String>,
     build: BuildSelection,
     navigator: Option<FileNavigator>,
+    xml: Option<XmlNavigator>,
+    xml_borrowed: Option<XmlPane>,
     yaml: Option<YamlNavigator>,
     borrowed: Option<YamlPane>,
     active: bool,
@@ -439,6 +445,8 @@ impl FileWorkspace {
             source,
             build: BuildSelection::new(generation),
             navigator: None,
+            xml: None,
+            xml_borrowed: None,
             yaml: None,
             borrowed: None,
             active: false,
@@ -454,6 +462,7 @@ struct App<'a> {
     worker: SearchWorker,
     query: String,
     editor: Option<String>,
+    source_hit: Option<std::ops::Range<usize>>,
     last_hit: Option<SearchHit>,
     help: bool,
     line_numbers: bool,
@@ -505,6 +514,7 @@ impl<'a> App<'a> {
             worker: SearchWorker::new(),
             query: String::new(),
             editor: None,
+            source_hit: None,
             last_hit: None,
             help: false,
             line_numbers: config.line_numbers,
@@ -523,6 +533,9 @@ impl<'a> App<'a> {
     fn yaml_active(&self) -> bool {
         self.file_active() && self.file.as_ref().is_some_and(|f| f.yaml.is_some())
     }
+    fn xml_active(&self) -> bool {
+        self.file_active() && self.file.as_ref().is_some_and(|f| f.xml.is_some())
+    }
     fn file_active(&self) -> bool {
         self.file.as_ref().is_some_and(|file| file.active)
     }
@@ -538,6 +551,7 @@ impl<'a> App<'a> {
         std::mem::swap(&mut self.pane, &mut file.inactive.pane);
         std::mem::swap(&mut self.query, &mut file.inactive.query);
         std::mem::swap(&mut self.last_hit, &mut file.inactive.last_hit);
+        std::mem::swap(&mut self.source_hit, &mut file.inactive.source_hit);
         std::mem::swap(&mut self.file_hit, &mut file.inactive.file_hit);
         std::mem::swap(&mut self.message, &mut file.inactive.message);
         file.active = !file.active;
@@ -564,7 +578,16 @@ impl<'a> App<'a> {
             return Ok(false);
         }
         let duplicate_diagnostic = structure.duplicate_diagnostic();
-        if structure.format() == crate::structure_model::StructureFormat::Yaml {
+        if structure.format() == crate::structure_model::StructureFormat::Xml {
+            match XmlNavigator::new(structure) {
+                Ok(nav) => file.xml = Some(nav),
+                Err(error) => {
+                    file.build.state = BuildState::Unavailable(error.to_string());
+                    self.structure_message = error.to_string();
+                    return Ok(true);
+                }
+            }
+        } else if structure.format() == crate::structure_model::StructureFormat::Yaml {
             match YamlNavigator::new(structure) {
                 Ok(nav) => file.yaml = Some(nav),
                 Err(error) => {
@@ -816,6 +839,248 @@ impl<'a> App<'a> {
         }
         Ok(true)
     }
+    fn refresh_xml(&mut self, cancel: &AtomicBool) -> io::Result<()> {
+        let file = self.file.as_mut().unwrap();
+        let nav = file.xml.as_ref().unwrap();
+        let state = nav.current();
+        if nav.node().kind().is_container() && state.domain == XmlDomain::Container {
+            file.xml_borrowed = None;
+            return Ok(());
+        }
+        if file
+            .xml_borrowed
+            .as_ref()
+            .is_some_and(|p| p.node == state.node && p.domain == state.domain)
+        {
+            return Ok(());
+        }
+        match XmlPane::prepare(nav.structure(), state, nav.budget(), cancel) {
+            Ok(pane) => file.xml_borrowed = Some(pane),
+            Err(xml_view::Error::Cancelled) => {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+            }
+            Err(error) => {
+                self.message = error.to_string();
+            }
+        }
+        Ok(())
+    }
+    /// Prepare first, then publish return/current/pane/hit in one UI operation.
+    fn navigate_xml(
+        &mut self,
+        mut next: XmlState,
+        back: bool,
+        cancel: &AtomicBool,
+    ) -> io::Result<bool> {
+        let file = self.file.as_mut().unwrap();
+        let nav = file.xml.as_mut().unwrap();
+        if !back && let Err(error) = nav.can_navigate() {
+            self.message = error.to_string();
+            return Ok(false);
+        }
+        let prepared = if nav
+            .structure()
+            .node(next.node)
+            .is_some_and(|n| n.kind().is_container())
+            && next.domain == XmlDomain::Container
+        {
+            Ok(None)
+        } else {
+            XmlPane::prepare(nav.structure(), next, nav.budget(), cancel).map(Some)
+        };
+        let pane = match prepared {
+            Ok(p) => p,
+            Err(xml_view::Error::Cancelled) => {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+            }
+            Err(error) => {
+                self.message = error.to_string();
+                return Ok(false);
+            }
+        };
+        if !back && let (Some(hit), Some(pane)) = (next.hit, &pane) {
+            match pane.position(nav.structure(), hit.start, cancel) {
+                Ok((top, left)) => {
+                    next.cursor.top = top;
+                    next.cursor.left = left
+                }
+                Err(error) => {
+                    self.message = error.to_string();
+                    return Ok(false);
+                }
+            }
+        }
+        if back {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+            }
+            if !nav.back() {
+                return Ok(false);
+            }
+        } else if let Err(error) = nav.commit(next, cancel) {
+            self.message = error.to_string();
+            return Ok(false);
+        }
+        file.xml_borrowed = pane;
+        self.pane = None;
+        self.cancel_pending();
+        Ok(true)
+    }
+    fn xml_key(
+        &mut self,
+        code: KeyCode,
+        rows: usize,
+        columns: usize,
+        cancel: &AtomicBool,
+    ) -> io::Result<bool> {
+        if !self.xml_active() {
+            return Ok(false);
+        }
+        if code == KeyCode::Char('o') {
+            let nav = self.file.as_ref().unwrap().xml.as_ref().unwrap();
+            let Some(span) = nav.selected_location() else {
+                self.message = "el nodo XML no tiene un span original contiguo".into();
+                return Ok(true);
+            };
+            let range = self.source.visible_range(span.range());
+            self.swap_file_domain(cancel)?;
+            if let Some(pane) = &mut self.pane {
+                pane.position.top = pane.model.line_for_offset(range.start);
+                pane.position.left = offset_cell(&pane.model, range.start, cancel)?;
+                pane.hit = Some(range)
+            }
+            self.message = "token/nodo XML original completo; consulta Fuente conservada".into();
+            return Ok(true);
+        }
+        if code == KeyCode::Backspace {
+            let previous = self
+                .file
+                .as_ref()
+                .unwrap()
+                .xml
+                .as_ref()
+                .unwrap()
+                .return_state();
+            if let Some(previous) = previous {
+                self.navigate_xml(previous, true, cancel)?;
+            }
+            return Ok(true);
+        }
+        if matches!(code, KeyCode::Enter | KeyCode::Char('K' | 'r' | 'm')) {
+            let nav = self.file.as_ref().unwrap().xml.as_ref().unwrap();
+            let current = nav.current();
+            let target = if nav.node().kind().is_container()
+                && current.domain == XmlDomain::Container
+                && code != KeyCode::Char('m')
+            {
+                let Some(child) = nav.child(current.cursor.row, current.cursor.column) else {
+                    return Ok(true);
+                };
+                child
+            } else {
+                current.node
+            };
+            let reference = nav.structure().node(target).unwrap();
+            let domain = if code == KeyCode::Char('K') {
+                if xml_view::unit(nav.structure(), target, XmlDomain::QName).is_none() {
+                    self.message = "este nodo XML no tiene nombre".into();
+                    return Ok(true);
+                }
+                XmlDomain::QName
+            } else if code == KeyCode::Char('m') {
+                if matches!(
+                    reference.kind(),
+                    crate::structure_model::StructureKind::XmlComment
+                        | crate::structure_model::StructureKind::XmlPi
+                        | crate::structure_model::StructureKind::XmlDeclaration
+                        | crate::structure_model::StructureKind::XmlDocType
+                ) {
+                    XmlDomain::Metadata
+                } else {
+                    XmlDomain::Inspector
+                }
+            } else {
+                xml_view::open_domain(reference)
+            };
+            let node = target;
+            if node == current.node && domain == current.domain {
+                return Ok(true);
+            }
+            let next = XmlState {
+                node,
+                cursor: Default::default(),
+                domain,
+                hit: None,
+                last_hit: current.last_hit,
+            };
+            self.navigate_xml(next, false, cancel)?;
+            return Ok(true);
+        }
+        if !matches!(
+            code,
+            KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Left
+                | KeyCode::Right
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+                | KeyCode::Home
+                | KeyCode::End
+                | KeyCode::Char('h' | 'j' | 'k' | 'l')
+        ) {
+            return Ok(false);
+        }
+        let file = self.file.as_mut().unwrap();
+        let nav = file.xml.as_mut().unwrap();
+        let before = nav.current();
+        if let Some(pane) = &file.xml_borrowed {
+            let mut position = Position {
+                top: before.cursor.top,
+                left: before.cursor.left,
+            };
+            move_text(
+                &mut position,
+                code,
+                pane.line_count(),
+                pane.max_width(),
+                rows,
+                columns,
+            );
+            nav.current_mut().cursor.top = position.top;
+            nav.current_mut().cursor.left = position.left;
+        } else {
+            let count = nav.node().entries().len();
+            let cursor = &mut nav.current_mut().cursor;
+            match code {
+                KeyCode::Up | KeyCode::Char('k') => cursor.row = cursor.row.saturating_sub(1),
+                KeyCode::Down | KeyCode::Char('j') => {
+                    cursor.row = cursor.row.saturating_add(1).min(count.saturating_sub(1))
+                }
+                KeyCode::Left | KeyCode::Char('h') => {
+                    cursor.column = cursor.column.saturating_sub(1)
+                }
+                KeyCode::Right | KeyCode::Char('l') => cursor.column = (cursor.column + 1).min(1),
+                KeyCode::PageUp => cursor.row = cursor.row.saturating_sub(rows.max(1)),
+                KeyCode::PageDown => {
+                    cursor.row = cursor
+                        .row
+                        .saturating_add(rows.max(1))
+                        .min(count.saturating_sub(1))
+                }
+                KeyCode::Home => {
+                    cursor.row = 0;
+                    cursor.column = 0
+                }
+                KeyCode::End => cursor.row = count.saturating_sub(1),
+                _ => (),
+            };
+            nav.frame(rows, columns)
+        }
+        if nav.current() != before {
+            self.cancel_pending()
+        }
+        Ok(true)
+    }
     fn file_key(
         &mut self,
         code: KeyCode,
@@ -823,6 +1088,9 @@ impl<'a> App<'a> {
         columns: usize,
         cancel: &AtomicBool,
     ) -> io::Result<bool> {
+        if self.xml_key(code, rows, columns, cancel)? {
+            return Ok(true);
+        }
         if self.yaml_key(code, rows, columns, cancel)? {
             return Ok(true);
         }
@@ -1009,6 +1277,11 @@ impl<'a> App<'a> {
         changed
     }
     fn refresh_pane(&mut self, cancel: &AtomicBool) -> io::Result<()> {
+        if self.xml_active() {
+            self.refresh_xml(cancel)?;
+            self.pane = None;
+            return Ok(());
+        }
         if self.yaml_active() {
             self.refresh_yaml(cancel)?;
             self.pane = None;
@@ -1121,7 +1394,22 @@ impl<'a> App<'a> {
         }
         let query = self.query.clone();
         let previous = self.last_hit.clone();
-        if self.yaml_active() {
+        if self.xml_active() {
+            let nav = self.file.as_ref().unwrap().xml.as_ref().unwrap();
+            let structure = nav.structure().clone();
+            let budget = nav.budget().clone();
+            let previous = nav.current().last_hit;
+            self.worker.submit(move |cancel| {
+                find_xml(
+                    &structure,
+                    &query,
+                    previous.as_ref(),
+                    direction,
+                    &budget,
+                    cancel,
+                )
+            });
+        } else if self.yaml_active() {
             let nav = self.file.as_ref().unwrap().yaml.as_ref().unwrap();
             let structure = nav.structure().clone();
             let budget = nav.budget().clone();
@@ -1157,37 +1445,9 @@ impl<'a> App<'a> {
             });
         } else {
             let source = self.source.clone();
+            let previous = self.source_hit.clone();
             self.worker.submit(move |cancel| {
-                let offset = previous.as_ref().map_or_else(
-                    || {
-                        if direction == Direction::Forward {
-                            0
-                        } else {
-                            source.visible().len()
-                        }
-                    },
-                    |hit| {
-                        if direction == Direction::Forward {
-                            hit.range.end
-                        } else {
-                            hit.range.start
-                        }
-                    },
-                );
-                match find_visible(source.visible(), &query, offset, direction, cancel) {
-                    Ok(Some(range)) => SearchOutcome::Found(SearchHit {
-                        path: None,
-                        key: false,
-                        visit_index: 0,
-                        range,
-                    }),
-                    Ok(None) => SearchOutcome::NotFound,
-                    Err(e) if cancel.load(Ordering::Relaxed) => {
-                        let _ = e;
-                        SearchOutcome::Cancelled
-                    }
-                    Err(e) => SearchOutcome::Error(e),
-                }
+                find_source(&source, &query, previous.as_ref(), direction, cancel)
             });
         }
         self.searching = true;
@@ -1196,6 +1456,18 @@ impl<'a> App<'a> {
     fn apply_search(&mut self, outcome: SearchOutcome, cancel: &AtomicBool) -> io::Result<()> {
         self.searching = false;
         match outcome {
+            SearchOutcome::SourceFound { original, visible } => {
+                self.source_hit = Some(original);
+                self.apply_search(
+                    SearchOutcome::Found(SearchHit {
+                        path: None,
+                        key: false,
+                        visit_index: 0,
+                        range: visible,
+                    }),
+                    cancel,
+                )?;
+            }
             SearchOutcome::Found(hit) => {
                 if let (Some(nav), Some(path)) = (&mut self.navigator, &hit.path) {
                     if hit.key {
@@ -1231,6 +1503,25 @@ impl<'a> App<'a> {
                 self.last_hit = Some(hit);
                 self.message = "coincidencia".into();
                 self.help = false;
+            }
+            SearchOutcome::XmlFound(hit) => {
+                if !self.xml_active() {
+                    return Ok(());
+                }
+                let nav = self.file.as_ref().unwrap().xml.as_ref().unwrap();
+                if hit.generation != nav.structure().generation() {
+                    return Ok(());
+                }
+                let next = XmlState {
+                    node: hit.node,
+                    cursor: Default::default(),
+                    domain: hit.domain,
+                    hit: Some(hit.range),
+                    last_hit: Some(hit),
+                };
+                if self.navigate_xml(next, false, cancel)? {
+                    self.message = "coincidencia XML; Backspace restaura selección previa".into();
+                }
             }
             SearchOutcome::YamlFound(hit) => {
                 if !self.yaml_active() {
@@ -1287,7 +1578,7 @@ impl<'a> App<'a> {
         }
     }
     fn set_viewport(&mut self, rows: usize, columns: usize) {
-        let (rows, columns) = if self.yaml_active() {
+        let (rows, columns) = if self.yaml_active() || self.xml_active() {
             (rows.min(128), columns.min(256))
         } else {
             (rows, columns)
@@ -1298,6 +1589,16 @@ impl<'a> App<'a> {
         }
     }
     fn reveal_selection(&mut self) {
+        if self.xml_active() {
+            let file = self.file.as_mut().unwrap();
+            if file.xml_borrowed.is_none() {
+                file.xml
+                    .as_mut()
+                    .unwrap()
+                    .frame(self.viewport.0, self.viewport.1)
+            }
+            return;
+        }
         if self.yaml_active() {
             let file = self.file.as_mut().unwrap();
             if file.borrowed.is_none() {
@@ -1345,7 +1646,18 @@ impl<'a> App<'a> {
                     self.query = editor.clone();
                     self.editor = None;
                     self.last_hit = None;
+                    self.source_hit = None;
                     self.file_hit = None;
+                    if self.xml_active() {
+                        self.file
+                            .as_mut()
+                            .unwrap()
+                            .xml
+                            .as_mut()
+                            .unwrap()
+                            .current_mut()
+                            .last_hit = None;
+                    }
                     if self.yaml_active() {
                         self.file
                             .as_mut()
@@ -1871,6 +2183,167 @@ fn render_yaml(
         }
     }
 }
+fn render_xml(
+    frame: &mut Frame<'_>,
+    body: Rect,
+    app: &App<'_>,
+    config: &PresentationConfig,
+    cancel: &AtomicBool,
+    stats: &mut RenderStats,
+) {
+    let file = app.file.as_ref().unwrap();
+    let nav = file.xml.as_ref().unwrap();
+    let state = nav.current();
+    if let Some(pane) = &file.xml_borrowed {
+        let numbers = if app.line_numbers {
+            (pane.line_count().to_string().len() + 2).min(usize::from(body.width))
+        } else {
+            0
+        };
+        for row in 0..usize::from(body.height) {
+            let line = state.cursor.top + row;
+            if line >= pane.line_count() {
+                break;
+            }
+            let window = match pane.window(
+                nav.structure(),
+                line,
+                state.cursor.left,
+                usize::from(body.width).saturating_sub(numbers),
+                state.hit,
+                nav.budget(),
+                cancel,
+            ) {
+                Ok(w) => w,
+                Err(error) => {
+                    frame.render_widget(
+                        Paragraph::new(error.to_string()).style(config.style(Role::Secondary)),
+                        Rect::new(
+                            body.x + numbers as u16,
+                            body.y + row as u16,
+                            body.width.saturating_sub(numbers as u16),
+                            1,
+                        ),
+                    );
+                    break;
+                }
+            };
+            let mut spans = Vec::new();
+            if spans.try_reserve_exact(window.cells.len()).is_err() {
+                break;
+            }
+            if spans.capacity() > window.cells.len() {
+                break;
+            }
+            let mut window = window;
+            for cell in window.cells.drain(..) {
+                stats.graphemes += 1;
+                let mut style = config.style(Role::Value);
+                if cell.matched {
+                    style = style.add_modifier(Modifier::REVERSED | Modifier::BOLD)
+                }
+                spans.push(Span::styled(cell.text, style));
+            }
+            if numbers > 0 {
+                frame.render_widget(
+                    Paragraph::new(format!(
+                        "{:>width$} ",
+                        line + 1,
+                        width = numbers.saturating_sub(1)
+                    ))
+                    .style(config.style(Role::Secondary)),
+                    Rect::new(body.x, body.y + row as u16, numbers as u16, 1),
+                );
+            }
+            stats.rows += 1;
+            frame.render_widget(
+                Paragraph::new(Line::from(spans)),
+                Rect::new(
+                    body.x + numbers as u16,
+                    body.y + row as u16,
+                    body.width.saturating_sub(numbers as u16),
+                    1,
+                ),
+            );
+        }
+    } else {
+        let node = nav.node();
+        let width = usize::from(body.width);
+        let first = if width == 1 { state.cursor.column } else { 0 };
+        let cw = if width == 1 { 1 } else { (width / 3).max(1) };
+        for column in first..if width == 1 { first + 1 } else { 2 } {
+            let x = if width == 1 { 0 } else { column * cw };
+            let cwidth = if column == 0 || width == 1 {
+                cw
+            } else {
+                width - x
+            };
+            let heading = if column == 0 {
+                if node.kind() == crate::structure_model::StructureKind::Mapping {
+                    "key"
+                } else {
+                    "ordinal"
+                }
+            } else {
+                "value"
+            };
+            frame.render_widget(
+                Paragraph::new(heading).style(config.style(Role::Secondary)),
+                Rect::new(body.x + x as u16, body.y, cwidth as u16, 1),
+            );
+        }
+        let end = node.entries().len().min(
+            state
+                .cursor
+                .top
+                .saturating_add(usize::from(body.height.saturating_sub(1))),
+        );
+        for row in state.cursor.top.min(end)..end {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            stats.rows += 1;
+            let entry = node.entry(row).unwrap();
+            for column in first..if width == 1 { first + 1 } else { 2 } {
+                let x = if width == 1 { 0 } else { column * cw };
+                let cwidth = if column == 0 || width == 1 {
+                    cw
+                } else {
+                    width - x
+                };
+                let text = if column == 0 {
+                    entry.key().map_or_else(
+                        || row.to_string(),
+                        |key| InspectionRef::File(key).summary(cwidth * 2),
+                    )
+                } else {
+                    InspectionRef::File(entry.value()).summary(cwidth * 2)
+                };
+                let mut style = config.style(Role::Value);
+                if row == state.cursor.row && column == state.cursor.column {
+                    style = style.add_modifier(Modifier::REVERSED)
+                }
+                stats.cells += 1;
+                frame.render_widget(
+                    Paragraph::new(label(&text, cwidth)).style(style),
+                    Rect::new(
+                        body.x + x as u16,
+                        body.y + 1 + (row - state.cursor.top) as u16,
+                        cwidth as u16,
+                        1,
+                    ),
+                );
+            }
+        }
+        if node.entries().len() == 0 && body.height > 1 {
+            frame.render_widget(
+                Paragraph::new(InspectionRef::File(node).summary(width))
+                    .style(config.style(Role::Secondary)),
+                Rect::new(body.x, body.y + 1, body.width, 1),
+            );
+        }
+    }
+}
 fn render(
     frame: &mut Frame<'_>,
     app: &App<'_>,
@@ -1886,7 +2359,18 @@ fn render(
     if width == 0 || area.height == 0 {
         return stats;
     }
-    let header = if app.yaml_active() {
+    let header = if app.xml_active() {
+        let nav = app.file.as_ref().unwrap().xml.as_ref().unwrap();
+        format!(
+            "{} | XML {} node#{} | {} / {:?} | retornos {}/128",
+            label(title, usize::from(width) / 3),
+            nav.label().as_str(),
+            nav.node().id().0,
+            crate::data::file_kind_name(nav.node().kind()),
+            nav.current().domain,
+            nav.history_len()
+        )
+    } else if app.yaml_active() {
         let nav = app.file.as_ref().unwrap().yaml.as_ref().unwrap();
         format!(
             "{} | YAML {} | {} / {:?} | retornos {}/128",
@@ -1934,6 +2418,8 @@ fn render(
             Paragraph::new(HELP).style(config.style(Role::Secondary)),
             body,
         );
+    } else if app.xml_active() {
+        render_xml(frame, body, app, config, cancel, &mut stats);
     } else if app.yaml_active() {
         render_yaml(frame, body, app, config, cancel, &mut stats);
     } else if let Some(pane) = &app.pane {
@@ -4029,5 +4515,188 @@ mod tests {
         assert_eq!(screen.backend().buffer()[(1, 1)].symbol(), "2");
         assert_eq!(screen.backend().buffer()[(3, 1)].symbol(), "l");
         assert!(app.pane.is_none());
+    }
+    fn xml_app(
+        raw: &str,
+    ) -> (
+        App<'static>,
+        Arc<crate::structure_model::Structure>,
+        PresentationConfig,
+    ) {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let structure = Arc::new(
+            crate::xml_worker::project(Arc::new(raw.into()), 1, &cancel)
+                .unwrap()
+                .0,
+        );
+        let mut app = App::new(model(raw), None, None, &config, &cancel).unwrap();
+        app.file = Some(FileWorkspace::new(1, structure.source_handle()));
+        let request = app.file.as_mut().unwrap().build.begin().unwrap();
+        assert!(
+            app.install_structure(1, request, structure.clone(), &cancel)
+                .unwrap()
+        );
+        (app, structure, config)
+    }
+    #[test]
+    fn xml_tui_names_metadata_source_spans_and_domain_returns_are_independent() {
+        let raw = "\u{feff}<r xmlns='urn:r' a='x&amp;y'><i/></r>";
+        let (mut app, s, config) = xml_app(raw);
+        let cancel = AtomicBool::new(false);
+        assert!(app.xml_active());
+        app.key(key(KeyCode::Enter), 8, 80, &cancel).unwrap();
+        app.key(key(KeyCode::Char('K')), 8, 80, &cancel).unwrap();
+        let state = app.file.as_ref().unwrap().xml.as_ref().unwrap().current();
+        assert_eq!(state.domain, XmlDomain::QName);
+        assert_eq!(
+            xml_view::unit(&s, state.node, XmlDomain::QName),
+            Some("xmlns")
+        );
+        assert_eq!(xml_view::unit(&s, state.node, XmlDomain::LocalName), None);
+        app.key(key(KeyCode::Char('o')), 8, 80, &cancel).unwrap();
+        assert!(!app.file_active());
+        let span = s.node(state.node).unwrap().source_location().unwrap();
+        assert_eq!(&raw[span.range()], "xmlns='urn:r'");
+        assert_eq!(
+            app.pane.as_ref().unwrap().hit,
+            Some(app.source.visible_range(span.range()))
+        );
+        app.swap_file_domain(&cancel).unwrap();
+        assert_eq!(
+            app.file.as_ref().unwrap().xml.as_ref().unwrap().current(),
+            state
+        );
+        app.key(key(KeyCode::Backspace), 8, 80, &cancel).unwrap();
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .xml
+                .as_ref()
+                .unwrap()
+                .current()
+                .domain,
+            XmlDomain::Container
+        );
+        app.key(key(KeyCode::Char('m')), 8, 80, &cancel).unwrap();
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .xml
+                .as_ref()
+                .unwrap()
+                .current()
+                .domain,
+            XmlDomain::Inspector
+        );
+        let mut terminal = Terminal::new(TestBackend::new(80, 8)).unwrap();
+        terminal
+            .draw(|f| {
+                render(f, &app, "xml", &config, 0, &cancel);
+            })
+            .unwrap();
+        assert!(contains(&terminal, "inspector XML"));
+    }
+    #[test]
+    fn xml_search_window_stale_results_and_history_are_transactional() {
+        let raw = "<r>\u{009b} \\u{009b}</r>";
+        let (mut app, s, config) = xml_app(raw);
+        let cancel = AtomicBool::new(false);
+        let budget = app
+            .file
+            .as_ref()
+            .unwrap()
+            .xml
+            .as_ref()
+            .unwrap()
+            .budget()
+            .clone();
+        let SearchOutcome::XmlFound(hit) =
+            find_xml(&s, "\u{009b}", None, Direction::Forward, &budget, &cancel)
+        else {
+            panic!()
+        };
+        app.apply_search(SearchOutcome::XmlFound(hit), &cancel)
+            .unwrap();
+        let saved = app.file.as_ref().unwrap().xml.as_ref().unwrap().current();
+        assert_eq!(saved.domain, XmlDomain::ValueDecoded);
+        let mut terminal = Terminal::new(TestBackend::new(80, 8)).unwrap();
+        terminal
+            .draw(|f| {
+                render(f, &app, "xml", &config, 0, &cancel);
+            })
+            .unwrap();
+        assert!(contains(&terminal, "\\u{009b}"));
+        let mut stale = hit;
+        stale.generation += 1;
+        app.apply_search(SearchOutcome::XmlFound(stale), &cancel)
+            .unwrap();
+        assert_eq!(
+            app.file.as_ref().unwrap().xml.as_ref().unwrap().current(),
+            saved
+        );
+        let nav = app.file.as_mut().unwrap().xml.as_mut().unwrap();
+        while nav.history_len() < 128 {
+            nav.commit(saved, &cancel).unwrap();
+        }
+        app.apply_search(SearchOutcome::XmlFound(hit), &cancel)
+            .unwrap();
+        assert_eq!(
+            app.file.as_ref().unwrap().xml.as_ref().unwrap().current(),
+            saved
+        );
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .xml
+                .as_ref()
+                .unwrap()
+                .history_len(),
+            128
+        );
+        app.key(key(KeyCode::Backspace), 4, 40, &cancel).unwrap();
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .xml
+                .as_ref()
+                .unwrap()
+                .history_len(),
+            127
+        );
+    }
+    #[test]
+    fn source_raw_hit_identity_survives_structure_round_trip_and_safe_jump() {
+        let raw = "<r>\u{009b} \\u{009b}</r>";
+        let (mut app, _, _) = xml_app(raw);
+        let cancel = AtomicBool::new(false);
+        app.swap_file_domain(&cancel).unwrap();
+        app.query = "\\u{009b}".into();
+        let outcome = find_source(&app.source, &app.query, None, Direction::Forward, &cancel);
+        app.apply_search(outcome, &cancel).unwrap();
+        let original = app.source_hit.clone().unwrap();
+        let visible = app.last_hit.as_ref().unwrap().range.clone();
+        assert_eq!(&raw[original.clone()], "\\u{009b}");
+        app.swap_file_domain(&cancel).unwrap();
+        assert_eq!(app.source_hit, None);
+        app.swap_file_domain(&cancel).unwrap();
+        assert_eq!(app.source_hit, Some(original.clone()));
+        assert_eq!(app.last_hit.as_ref().unwrap().range, visible);
+        assert_eq!(app.query, "\\u{009b}");
+        app.search(Direction::Forward);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            if let Some(outcome) = app.worker.poll() {
+                app.apply_search(outcome, &cancel).unwrap();
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline);
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert_eq!(app.source_hit, Some(original));
     }
 }
