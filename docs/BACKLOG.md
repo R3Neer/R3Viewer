@@ -287,3 +287,6 @@ GIPC privado R1 congelado FCB6AE119CC5CE20ED34FB95BB9C747FF2715B8A403C7BC3943202
 GIPC R2 privado en corrección de propiedad/cierre: conservar pipes y duplicados hasta cierre probado, distinguir join/receipt/cierre y bloquear siguiente actor ante Pending. AE R1 preserva el primer fallo de lectura bajo sandbox y la corrección de un oráculo Kitty; sus controles persistentes Python no acreditan cierre Rust/Win32. No cierre G2 ni adopción.
 
 PDF texto: [reinspección de fuentes fijadas](research/PDF_TEXTO_INVESTIGACION.md) documenta normalización de ligaduras antes de char_list/text_buf; concordancia entre APIs y flags cero no demuestra texto de fuente exacto. Candidato UTF16 privado sigue en implementación/validación; se conservan oráculos, Unverified y RV-204 abierto.
+
+
+RV-404: prueba nativa HTTP identifica que Nu0.115.1 Windows llama Command.run y rechaza un conversor custom escrito en Nu, aunque open sí lo ejecuta. Se preservan dos FAIL y cuatro controles PASS; [fuentes y evidencia](research/HTML_PARSER_API.md). Propuesta privada de companion opcional PluginCommand pendiente de revisión/spike; Q25, árbol y comandos nativos intactos siguen obligatorios, sin cierre de RV-404.

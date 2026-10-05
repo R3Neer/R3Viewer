@@ -78,3 +78,8 @@ Pendientes técnicos/de cobertura: tablas combinadas; modo artículo; MathML y c
 - [Conversión HTTP upstream](https://github.com/nushell/nushell/blob/main/crates/nu-command/src/network/http/client.rs)
 - [html5ever](https://github.com/servo/html5ever)
 - [parse5](https://parse5.js.org/)
+
+
+## Contraste de ejecución posterior
+
+Nu0.115.1 Windows: `open` ejecuta un `from html` custom temporal y raw conserva fuente, pero `http get` no puede ejecutar ese mismo comando custom: su ruta llama Command.run directamente y devuelve error interno. La evidencia y primarias fijadas están en [inspección HTML](../research/HTML_PARSER_API.md). Q25 sigue vigente; registrar un conversor apto para ambas rutas y conservar activación opcional es trabajo pendiente. Se contrastará la vía de PluginCommand, sin sustituir open/http get ni instalar perfiles por esta investigación.
