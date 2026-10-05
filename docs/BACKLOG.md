@@ -276,3 +276,6 @@ Markdown documento: [arena/wire R2](refinement/MARKDOWN-DOCUMENTO-WIRE.md) y tam
 
 
 PDF texto: [contrato UTF16 R3+deltaR4](refinement/PDF-TEXTO-UTF16.md) con [revisión independiente final](reviews/PDF-texto-utf16-plan-r4.md) sin críticas pendientes de diseño. U16-P01/02/03 resueltos: tablas/asociaciones exactas, cotas y rechazo temprano con receipts finales. Gate Rust privado iniciado, sin runtime/aceptación ni adopción; SourceUnverified, FAIL históricos y RV-204/G1 abiertos se conservan.
+
+
+HTML: [inspección primaria de API](research/HTML_PARSER_API.md) confirma sinkDOM mutable, entrada Unicode incremental y decodificaciónUTF8 lossy de la API de comodidad; identifica gates para identidad/procedencia, presupuestos y configuración noscript. Sólo investigación documental; versión/dependencia/implementación/aceptación de RV-402/404 pendientes.
