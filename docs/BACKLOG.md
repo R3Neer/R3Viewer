@@ -223,3 +223,5 @@ PDF: [contrato G0 R2](refinement/PDF-G0.md) revisado sin críticas de diseño; g
 Sixel: [diseño experimental G2](refinement/GRAFICOS-SIXEL-G2.md) revisado sin críticas pendientes. Cuerpo acotado RGB332, dos pases y validador independiente por implementar/probar; no soporte de terminal ni cierre de G2/RV por revisión de diseño.
 
 Gramáticas shell: [prototipo R2](research/S03_SHELL_GRAMMAR_SPIKE.md) con revisión y AE independientes sin críticas acotadas,269intervalos+16estados finales por motor. [Integración propuesta](refinement/GRAMATICAS-SHELL-INTEGRACION.md) revisada; implementación/candidato worker real por completar. No aceptación visual, runtimeUnix ni cierre RV/S03 desde runner privado.
+
+PDF G1: [diseño de carga/ABI Windows](refinement/PDF-G1.md) revisado tras corregir flags a0x900. Candidato ctypes privado ejecutado por autor; revisión y AE independientes pendientes. No adopción del wrapper ni PDF de producto; mantiene RV204/matriz abiertos.
