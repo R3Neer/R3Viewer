@@ -56,3 +56,6 @@ Actualización R4 A/B: revisión independiente sin críticas y aceptación funci
 114tests/fmt/Clippy/build Windows del autor; core R3 e integración R1 con adversarios independientes sin críticas; AE funcional parcial Windows. Informes finales en reviews/S03-sintaxis-*.md y resumen en sprints/S03.md. Candidato permite código TUI/inline y string_stream explícito, conserva origen/estados y degrada todo documento ante fallos expuestos. WorkerExit y timeout reales comprobados, fuente íntegra/latch/reap; no equivalen a toda la matriz de fallos/estado/estrés ni QA visual.
 
 Crosscheck Linux x86_64 y macOS arm64 del lector pasa, no ejecución runtime. Sintaxis Unix sigue gate provisional; resolver contención nativa/semánticas de memoria antes de certificarla. Fuente Onig/Syntect inspeccionada distingue errores expuestos de internos que se convierten en no-match; spike específico pendiente. Mínimos de SO, gramáticas adicionales, apariencia y bundle final siguen en sus historias.
+
+
+Medición independiente del candidato C release4a3fa9d: [informe](research/S03_RENDIMIENTO_RELEASE.md), tabla1000/100000 primera vista181/940ms y40movimientos63/58ms. Una ejecución por tamaño, incluye productor/transporte/preparación; memoria Nu/app separada sin incluir companion. No comparación causal con debug histórico ni QA visual ni cierre de límites/matriz.

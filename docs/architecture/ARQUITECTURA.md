@@ -1,6 +1,6 @@
 # R3Viewer: plan general de arquitectura y épicas
 
-Fecha: 2026-10-04. Plan de organización general con revisión adversaria; el cierre se registra por separado. Alcance: organizar producto completo y trabajo Scrum; protocolos, APIs, versiones, límites y diseño de historias se refinan por sprint. MIT confirmada. No hay autorización de implementar/instalar/publicar. Esta organización general es la referencia para refinar por sprint; los ADRs de trabajo previos y la investigación se conservan como antecedentes técnicos revisables.
+Fecha: 2026-10-04. Plan de organización general con revisión adversaria; el cierre se registra por separado. Alcance: organizar producto completo y trabajo Scrum; protocolos, APIs, versiones, límites y diseño de historias se refinan por sprint. MIT confirmada. Estado histórico de esta propuesta inicial: no autorizaba implementación/instalación/publicación. El encargo posterior autoriza implementación y commits locales; metodología vigente: [Scrum por objetivos](../process/METODOLOGIA.md), sin cadencia temporal fija. Instalación en perfiles y publicación siguen fuera del encargo. Esta organización general es la referencia para refinar por sprint; los ADRs de trabajo previos y la investigación se conservan como antecedentes técnicos revisables.
 
 ## 1. Objetivo y alcance
 
@@ -93,7 +93,9 @@ RV-008 pertenece principalmente a E10 como coordinación de validación; sus spi
 
 Dependencias por capacidad: E01 habilita lectura de archivos/texto/código de E03; E02 habilita valores tipados/pipeline de E03, sin bloquear lectura independiente de archivos. E04 habilita aspectos gráficos de E05/E06/E07/E08; el Markdown textual de E06 y HTML textual de E08 pueden avanzar con E01 antes de gráficos. E06 documental habilita E07; E01 navegación y E08 red permiten seguir destinos remotos de cualquier formato. E09 puede progresar con E01/E03. Los spikes bloquean solo las historias que dependen de su riesgo, no épicas completas por asociación. E10 es transversal desde el primer incremento, no fase final de calidad. Cada épica implementa ambos modos pertinentes y fallback, no una vista completa y otra indefinidamente pendiente.
 
-## 7. Organización Scrum
+## 7. Organización Scrum (propuesta histórica)
+
+Esta sección registra la propuesta inicial; sus pendientes de roles/cadencia/DoD quedaron sustituidos por [la metodología vigente](../process/METODOLOGIA.md). El sprint activo se organiza por objetivo, sin duración fija; no se simulan responsabilidades humanas ni reuniones.
 
 Un Product Backlog para todo R3Viewer, un Product Goal orientado al lector general con integración Nu y soporte acordado. El usuario fija prioridades/producto; personas que hagan desarrollo refinan arquitectura y tareas. No inventar roles de Scrum Master ni composición de equipo por disponibilidad de agentes. Revisor adversario es práctica de revisión de diseño, no rol oficial Scrum ni sustituto de Sprint Review.
 

@@ -152,3 +152,6 @@ Registro histórico A/B R4, ampliado por C R1 posterior: aceptación funcional W
 ## Estado vigente tras C R1
 
 S03 C04–07 implementado/revisado sin críticas con AE funcional parcial Windows;114pruebas del workspace, CLI/Nu/ConPTY y fallbacks reales WorkerExit/RequestTimeout/SpanBudget. Linux x86_64 y macOS arm64 tienen crosscheck del lector, sin ejecución nativa ni contención sintáctica Unix. Evidencias y pendientes en sprints/S03.md y reviews/S03-sintaxis-aceptacion-r1.md. RV105/106/107 siguen abiertos: estructuras de JSON/YAML/TOML/XML, cobertura de gramáticas (defaults no TOML/Nu/PowerShell), paleta Nu condicionada, criterios de estrés/presupuestos independientes y QA visual/matriz. No cerrar sprints/tareas por esta aceptación parcial; el siguiente refinamiento trabaja estructuras de archivos conservando fuente original.
+
+
+Corte siguiente en refinamiento: [S03 D1 TOML](sprints/S03-D1.md), plan revisado sin críticas pendientes. Spike de parser/gramática y diseño técnico son gates; sin implementación/aceptación acreditada todavía. RV-106 sigue abierto con los cuatro formatos JSON/YAML/TOML/XML.
