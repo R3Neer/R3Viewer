@@ -1,0 +1,1750 @@
+//! Manual Ratatui session over the existing exact-state terminal guard.
+use crate::{
+    config::{PresentationConfig, Role},
+    data::{Cell, Navigator, PathMember},
+    inspect_text::primitive_text,
+    presentation::{SafeTextModel, cell_width, slice_cells},
+    search::{
+        Direction, QUERY_LIMIT, SearchHit, SearchOutcome, SearchWorker, find_data, find_visible,
+    },
+    session::{TerminalGuard, control_terminal},
+};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use r3viewer_wire::TypedInput;
+use ratatui::{
+    Frame, Terminal,
+    backend::CrosstermBackend,
+    layout::Rect,
+    style::Modifier,
+    text::{Line, Span},
+    widgets::Paragraph,
+};
+use std::{
+    io::{self, IsTerminal},
+    ops::Range,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        mpsc,
+    },
+    thread::{self, JoinHandle},
+    time::Duration,
+};
+use unicode_segmentation::UnicodeSegmentation;
+const TICK: Duration = Duration::from_millis(25);
+const EVENT_CAPACITY: usize = 256;
+const HELP: &str = "Flechas / h j k l: mover\nPageUp / PageDown: página; Home / End: extremos\nEnter: abrir celda; columna key: clave completa; r: abrir fila completa\nBackspace: cerrar clave / volver al padre\n/: búsqueda literal; Enter: confirmar; Esc: cancelar editor\nn / N: siguiente / anterior (vuelta al principio/final)\nK: clave completa de columna/campo; L: números de línea; ?: ayuda\nq / Esc: salir; Ctrl-C: cancelar (130)";
+
+fn is_cancel(key: &KeyEvent) -> bool {
+    key.kind != KeyEventKind::Release
+        && (key.code == KeyCode::Char('\u{3}')
+            || key.modifiers.contains(KeyModifiers::CONTROL)
+                && !key.modifiers.contains(KeyModifiers::ALT)
+                && matches!(key.code, KeyCode::Char('c' | 'C')))
+}
+fn enqueue(
+    tx: &mpsc::SyncSender<Event>,
+    event: Event,
+    cancel: &AtomicBool,
+    dropped: &AtomicUsize,
+) -> bool {
+    if let Event::Key(key) = &event
+        && is_cancel(key)
+    {
+        cancel.store(true, Ordering::Relaxed);
+    }
+    match tx.try_send(event) {
+        Ok(()) => true,
+        Err(mpsc::TrySendError::Full(_)) => {
+            dropped.fetch_add(1, Ordering::Relaxed);
+            true
+        }
+        Err(mpsc::TrySendError::Disconnected(_)) => false,
+    }
+}
+/// Sole event reader. Ctrl-C is observed even while a long preparation owns the
+/// main thread or the bounded queue is full. Drop joins before terminal restore.
+struct KeyboardReader {
+    rx: mpsc::Receiver<Event>,
+    shutdown: Arc<AtomicBool>,
+    dropped: Arc<AtomicUsize>,
+    error: Arc<Mutex<Option<io::Error>>>,
+    thread: Option<JoinHandle<()>>,
+}
+impl KeyboardReader {
+    fn new(cancel: Arc<AtomicBool>) -> io::Result<Self> {
+        Self::spawn(cancel, || {
+            event::poll(TICK).and_then(|ready| {
+                if ready {
+                    event::read().map(Some)
+                } else {
+                    Ok(None)
+                }
+            })
+        })
+    }
+    fn spawn(
+        cancel: Arc<AtomicBool>,
+        mut poll: impl FnMut() -> io::Result<Option<Event>> + Send + 'static,
+    ) -> io::Result<Self> {
+        let (tx, rx) = mpsc::sync_channel(EVENT_CAPACITY);
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let error = Arc::new(Mutex::new(None));
+        let stop = shutdown.clone();
+        let lost = dropped.clone();
+        let failure = error.clone();
+        let worker = thread::Builder::new()
+            .name("r3viewer-keyboard".into())
+            .spawn(move || {
+                while !stop.load(Ordering::Relaxed) && !cancel.load(Ordering::Relaxed) {
+                    let event = match poll() {
+                        Ok(Some(event)) => event,
+                        Ok(None) => continue,
+                        Err(e) => {
+                            *failure.lock().unwrap() = Some(e);
+                            break;
+                        }
+                    };
+                    if !enqueue(&tx, event, &cancel, &lost) {
+                        break;
+                    }
+                }
+            })?;
+        Ok(Self {
+            rx,
+            shutdown,
+            dropped,
+            error,
+            thread: Some(worker),
+        })
+    }
+    fn error(&self) -> Option<io::Error> {
+        self.error.lock().unwrap().take()
+    }
+}
+impl Drop for KeyboardReader {
+    fn drop(&mut self) {
+        self.shutdown.store(true, Ordering::Relaxed);
+        if let Some(worker) = self.thread.take() {
+            let _ = worker.join();
+        }
+    }
+}
+#[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
+struct Position {
+    top: usize,
+    left: usize,
+}
+struct TextPane {
+    model: Arc<SafeTextModel>,
+    position: Position,
+    hit: Option<Range<usize>>,
+    key: bool,
+}
+struct App<'a> {
+    source: Arc<SafeTextModel>,
+    typed: Option<Arc<TypedInput>>,
+    navigator: Option<Navigator<'a>>,
+    pane: Option<TextPane>,
+    worker: SearchWorker,
+    query: String,
+    editor: Option<String>,
+    last_hit: Option<SearchHit>,
+    help: bool,
+    line_numbers: bool,
+    message: String,
+    searching: bool,
+    viewport: (usize, usize),
+}
+fn prepare_error(error: impl std::fmt::Debug) -> io::Error {
+    io::Error::other(format!("no se puede preparar vista: {error:?}"))
+}
+fn copy_key(key: &str, cancel: &AtomicBool) -> io::Result<String> {
+    let mut result = String::new();
+    let mut start = 0;
+    while start < key.len() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+        }
+        let mut end = (start + 65536).min(key.len());
+        while !key.is_char_boundary(end) {
+            end -= 1;
+        }
+        result.push_str(&key[start..end]);
+        start = end;
+    }
+    Ok(result)
+}
+impl<'a> App<'a> {
+    fn new(
+        source: Arc<SafeTextModel>,
+        typed: Option<Arc<TypedInput>>,
+        borrowed: Option<&'a TypedInput>,
+        config: &PresentationConfig,
+        cancel: &AtomicBool,
+    ) -> io::Result<Self> {
+        let navigator = borrowed
+            .map(|input| Navigator::new(input, cancel))
+            .transpose()
+            .map_err(prepare_error)?;
+        let mut app = Self {
+            source,
+            typed,
+            navigator,
+            pane: None,
+            worker: SearchWorker::new(),
+            query: String::new(),
+            editor: None,
+            last_hit: None,
+            help: false,
+            line_numbers: config.line_numbers,
+            message: String::new(),
+            searching: false,
+            viewport: (1, 1),
+        };
+        app.refresh_pane(cancel)?;
+        Ok(app)
+    }
+    fn refresh_pane(&mut self, cancel: &AtomicBool) -> io::Result<()> {
+        if let Some(nav) = &self.navigator {
+            let node = nav.current().node();
+            self.pane = if node.is_container() {
+                None
+            } else {
+                let raw = primitive_text(node, cancel).map_err(prepare_error)?;
+                let model = SafeTextModel::new(raw, cancel).map_err(prepare_error)?;
+                let cursor = nav.current().cursor;
+                Some(TextPane {
+                    model: Arc::new(model),
+                    position: Position {
+                        top: cursor.top,
+                        left: cursor.left,
+                    },
+                    hit: None,
+                    key: false,
+                })
+            };
+        } else {
+            self.pane = Some(TextPane {
+                model: self.source.clone(),
+                position: Position::default(),
+                hit: None,
+                key: false,
+            });
+        }
+        Ok(())
+    }
+    fn open_key(&mut self, key: &str, cancel: &AtomicBool) -> io::Result<()> {
+        let model = SafeTextModel::new(copy_key(key, cancel)?, cancel).map_err(prepare_error)?;
+        self.pane = Some(TextPane {
+            model: Arc::new(model),
+            position: Position::default(),
+            hit: None,
+            key: true,
+        });
+        Ok(())
+    }
+    fn search(&mut self, direction: Direction) {
+        if self.query.is_empty() {
+            self.message = "consulta vacía".into();
+            return;
+        }
+        let query = self.query.clone();
+        let previous = self.last_hit.clone();
+        if let Some(input) = &self.typed {
+            let input = input.clone();
+            self.worker.submit(move |cancel| {
+                find_data(&input, &query, previous.as_ref(), direction, cancel)
+            });
+        } else {
+            let source = self.source.clone();
+            self.worker.submit(move |cancel| {
+                let offset = previous.as_ref().map_or_else(
+                    || {
+                        if direction == Direction::Forward {
+                            0
+                        } else {
+                            source.visible().len()
+                        }
+                    },
+                    |hit| {
+                        if direction == Direction::Forward {
+                            hit.range.end
+                        } else {
+                            hit.range.start
+                        }
+                    },
+                );
+                match find_visible(source.visible(), &query, offset, direction, cancel) {
+                    Ok(Some(range)) => SearchOutcome::Found(SearchHit {
+                        path: None,
+                        key: false,
+                        visit_index: 0,
+                        range,
+                    }),
+                    Ok(None) => SearchOutcome::NotFound,
+                    Err(e) if cancel.load(Ordering::Relaxed) => {
+                        let _ = e;
+                        SearchOutcome::Cancelled
+                    }
+                    Err(e) => SearchOutcome::Error(e),
+                }
+            });
+        }
+        self.searching = true;
+        self.message = "buscando…".into();
+    }
+    fn apply_search(&mut self, outcome: SearchOutcome, cancel: &AtomicBool) -> io::Result<()> {
+        self.searching = false;
+        match outcome {
+            SearchOutcome::Found(hit) => {
+                if let (Some(nav), Some(path)) = (&mut self.navigator, &hit.path) {
+                    if hit.key {
+                        let mut parent = path.clone();
+                        let Some(PathMember::Key(key)) = parent.0.pop() else {
+                            return Err(io::Error::other(
+                                "coincidencia de clave con ruta inválida",
+                            ));
+                        };
+                        nav.jump(&parent, cancel).map_err(prepare_error)?;
+                        let record = nav
+                            .current()
+                            .node()
+                            .record()
+                            .ok_or_else(|| io::Error::other("clave sin registro padre"))?;
+                        let row = record
+                            .iter()
+                            .position(|(name, _)| name == &key)
+                            .ok_or_else(|| io::Error::other("clave no encontrada"))?;
+                        nav.current_mut().cursor.row = row;
+                        nav.current_mut().cursor.column = 0;
+                        self.open_key(&key, cancel)?;
+                    } else {
+                        nav.jump(path, cancel).map_err(prepare_error)?;
+                        self.refresh_pane(cancel)?;
+                    }
+                }
+                if let Some(pane) = &mut self.pane {
+                    pane.position.top = pane.model.line_for_offset(hit.range.start);
+                    pane.position.left = offset_cell(&pane.model, hit.range.start, cancel)?;
+                    pane.hit = Some(hit.range.clone());
+                }
+                self.last_hit = Some(hit);
+                self.message = "coincidencia".into();
+                self.help = false;
+            }
+            SearchOutcome::NotFound => self.message = "sin coincidencias".into(),
+            SearchOutcome::Cancelled => self.message = "búsqueda cancelada".into(),
+            SearchOutcome::Error(e) => self.message = e,
+        }
+        Ok(())
+    }
+    fn cancel_pending(&mut self) {
+        if self.searching {
+            self.worker.cancel();
+            self.searching = false;
+            self.message = "búsqueda cancelada al navegar".into();
+        }
+    }
+    fn set_viewport(&mut self, rows: usize, columns: usize) {
+        if self.viewport != (rows, columns) {
+            self.viewport = (rows, columns);
+            self.reveal_selection();
+        }
+    }
+    fn reveal_selection(&mut self) {
+        if self.pane.is_none()
+            && let Some(nav) = &mut self.navigator
+        {
+            frame_data(nav, self.viewport.0, self.viewport.1);
+        }
+    }
+    fn key(
+        &mut self,
+        key: KeyEvent,
+        rows: usize,
+        columns: usize,
+        cancel: &AtomicBool,
+    ) -> io::Result<bool> {
+        if key.kind == KeyEventKind::Release {
+            return Ok(false);
+        }
+        self.set_viewport(rows, columns);
+        if let Some(editor) = &mut self.editor {
+            match key.code {
+                KeyCode::Esc => {
+                    self.editor = None;
+                    self.message = "edición cancelada".into();
+                }
+                KeyCode::Enter => {
+                    self.query = editor.clone();
+                    self.editor = None;
+                    self.last_hit = None;
+                    self.search(Direction::Forward);
+                }
+                KeyCode::Backspace => {
+                    editor.pop();
+                }
+                KeyCode::Char(ch)
+                    if !ch.is_control()
+                        && (!key
+                            .modifiers
+                            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+                            || key
+                                .modifiers
+                                .contains(KeyModifiers::CONTROL | KeyModifiers::ALT)) =>
+                {
+                    if editor.len() + ch.len_utf8() <= QUERY_LIMIT {
+                        editor.push(ch);
+                    } else {
+                        self.message = format!("consulta limitada a {QUERY_LIMIT} bytes");
+                    }
+                }
+                _ => {}
+            }
+            return Ok(false);
+        }
+        // AltGr text must not trigger a command after leaving the editor.
+        // Ctrl-C is handled separately by the sole event reader.
+        if matches!(key.code, KeyCode::Char(_))
+            && key
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        {
+            return Ok(false);
+        }
+        match key.code {
+            KeyCode::Char('q') | KeyCode::Esc => return Ok(true),
+            KeyCode::Char('?') => {
+                self.cancel_pending();
+                self.help = !self.help;
+            }
+            KeyCode::Char('/') => {
+                self.worker.cancel();
+                self.searching = false;
+                self.editor = Some(self.query.clone());
+            }
+            KeyCode::Char('n') => self.search(Direction::Forward),
+            KeyCode::Char('N') => self.search(Direction::Backward),
+            KeyCode::Char('L') => self.line_numbers = !self.line_numbers,
+            KeyCode::Char('K') => {
+                let selected = self.navigator.as_ref().and_then(|nav| {
+                    let view = nav.current();
+                    if view.is_table() {
+                        view.column_key(view.cursor.column)
+                    } else {
+                        match view.cell(view.cursor.row, 0) {
+                            Some(Cell::Key(key)) => Some(key),
+                            _ => None,
+                        }
+                    }
+                });
+                if let Some(key) = selected {
+                    self.cancel_pending();
+                    self.open_key(key, cancel)?;
+                }
+            }
+            KeyCode::Char('r') if self.pane.is_none() => {
+                let entered = if let Some(nav) = &mut self.navigator {
+                    nav.enter_row(nav.current().cursor.row, cancel)
+                        .map_err(prepare_error)?
+                } else {
+                    false
+                };
+                if entered {
+                    self.cancel_pending();
+                    self.refresh_pane(cancel)?;
+                }
+            }
+            KeyCode::Backspace => {
+                let overlay = self.pane.as_ref().is_some_and(|p| p.key);
+                let can_back = self
+                    .navigator
+                    .as_ref()
+                    .is_some_and(|nav| nav.breadcrumbs().nth(1).is_some());
+                if overlay || can_back {
+                    self.cancel_pending();
+                    if !overlay {
+                        self.navigator.as_mut().unwrap().back();
+                    }
+                    self.refresh_pane(cancel)?;
+                }
+            }
+            KeyCode::Enter if self.pane.is_none() => {
+                let selected = self.navigator.as_ref().and_then(|nav| {
+                    let cursor = nav.current().cursor;
+                    nav.current()
+                        .cell(cursor.row, cursor.column)
+                        .map(|cell| (cursor.row, cursor.column, cell))
+                });
+                if let Some((row, column, cell)) =
+                    selected.filter(|(_, _, cell)| !matches!(cell, Cell::Missing))
+                {
+                    self.cancel_pending();
+                    if let Cell::Key(key) = cell {
+                        self.open_key(key, cancel)?;
+                    } else if self
+                        .navigator
+                        .as_mut()
+                        .unwrap()
+                        .enter(row, column, cancel)
+                        .map_err(prepare_error)?
+                    {
+                        self.refresh_pane(cancel)?;
+                    }
+                }
+            }
+            code => {
+                let moved = if let Some(pane) = &mut self.pane {
+                    let before = pane.position;
+                    move_text(
+                        &mut pane.position,
+                        code,
+                        pane.model.line_count(),
+                        pane.model.max_width(),
+                        rows,
+                        columns,
+                    );
+                    if !pane.key
+                        && let Some(nav) = &mut self.navigator
+                    {
+                        nav.current_mut().cursor.top = pane.position.top;
+                        nav.current_mut().cursor.left = pane.position.left;
+                    }
+                    before != pane.position
+                } else if let Some(nav) = &mut self.navigator {
+                    let before = nav.current().cursor;
+                    move_data(nav, code, rows, columns);
+                    before != nav.current().cursor
+                } else {
+                    false
+                };
+                if moved {
+                    self.cancel_pending();
+                }
+            }
+        }
+        self.reveal_selection();
+        Ok(false)
+    }
+}
+fn offset_cell(model: &SafeTextModel, offset: usize, cancel: &AtomicBool) -> io::Result<usize> {
+    let range = model.line_range(model.line_for_offset(offset)).unwrap();
+    let mut column = 0;
+    for (index, (byte, grapheme)) in model.visible()[range.clone()]
+        .grapheme_indices(true)
+        .enumerate()
+    {
+        if index.is_multiple_of(4096) && cancel.load(Ordering::Relaxed) {
+            return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+        }
+        if range.start + byte + grapheme.len() > offset {
+            break;
+        }
+        column += cell_width(grapheme, column);
+    }
+    Ok(column)
+}
+fn move_text(
+    pos: &mut Position,
+    code: KeyCode,
+    lines: usize,
+    max_left: usize,
+    rows: usize,
+    columns: usize,
+) {
+    match code {
+        KeyCode::Up | KeyCode::Char('k') => pos.top = pos.top.saturating_sub(1),
+        KeyCode::Down | KeyCode::Char('j') => {
+            pos.top = pos.top.saturating_add(1).min(lines.saturating_sub(1))
+        }
+        KeyCode::Left | KeyCode::Char('h') => pos.left = pos.left.saturating_sub(1),
+        KeyCode::Right | KeyCode::Char('l') => pos.left = pos.left.saturating_add(1).min(max_left),
+        KeyCode::PageUp => pos.top = pos.top.saturating_sub(rows.max(1)),
+        KeyCode::PageDown => {
+            pos.top = pos
+                .top
+                .saturating_add(rows.max(1))
+                .min(lines.saturating_sub(1))
+        }
+        KeyCode::Home => *pos = Position::default(),
+        KeyCode::End => pos.top = lines.saturating_sub(rows.max(1)),
+        _ => {
+            let _ = columns;
+        }
+    }
+}
+fn move_data(nav: &mut Navigator<'_>, code: KeyCode, rows: usize, columns: usize) {
+    let view = nav.current_mut();
+    let count = view.row_count();
+    let cols = view.column_count();
+    match code {
+        KeyCode::Up | KeyCode::Char('k') => view.cursor.row = view.cursor.row.saturating_sub(1),
+        KeyCode::Down | KeyCode::Char('j') => {
+            view.cursor.row = view
+                .cursor
+                .row
+                .saturating_add(1)
+                .min(count.saturating_sub(1))
+        }
+        KeyCode::Left | KeyCode::Char('h') => {
+            view.cursor.column = view.cursor.column.saturating_sub(1)
+        }
+        KeyCode::Right | KeyCode::Char('l') => {
+            view.cursor.column = view
+                .cursor
+                .column
+                .saturating_add(1)
+                .min(cols.saturating_sub(1))
+        }
+        KeyCode::PageUp => view.cursor.row = view.cursor.row.saturating_sub(rows.max(1)),
+        KeyCode::PageDown => {
+            view.cursor.row = view
+                .cursor
+                .row
+                .saturating_add(rows.max(1))
+                .min(count.saturating_sub(1))
+        }
+        KeyCode::Home => {
+            view.cursor.row = 0;
+            view.cursor.column = 0;
+        }
+        KeyCode::End => view.cursor.row = count.saturating_sub(1),
+        _ => {}
+    }
+    frame_data(nav, rows, columns);
+}
+fn frame_data(nav: &mut Navigator<'_>, rows: usize, columns: usize) {
+    let view = nav.current_mut();
+    view.clamp_cursor();
+    let rows = rows.max(1);
+    if view.cursor.row < view.cursor.top {
+        view.cursor.top = view.cursor.row;
+    }
+    if view.cursor.row >= view.cursor.top.saturating_add(rows) {
+        view.cursor.top = view.cursor.row.saturating_sub(rows - 1);
+    }
+    let visible_cols = if view.is_table() {
+        (columns / 24).max(1)
+    } else if columns == 1 {
+        1
+    } else {
+        2
+    };
+    if view.cursor.column < view.cursor.left {
+        view.cursor.left = view.cursor.column;
+    }
+    if view.cursor.column >= view.cursor.left.saturating_add(visible_cols) {
+        view.cursor.left = view.cursor.column + 1 - visible_cols;
+    }
+}
+#[derive(Default, Debug)]
+struct RenderStats {
+    rows: usize,
+    cells: usize,
+    graphemes: usize,
+}
+fn label(text: &str, width: usize) -> String {
+    let head: String = text
+        .chars()
+        .take(width.saturating_mul(4))
+        .map(|ch| if ch.is_control() { '�' } else { ch })
+        .collect();
+    slice_cells(&head, 0, width)
+}
+fn text_line(
+    model: &SafeTextModel,
+    line: usize,
+    window: Range<usize>,
+    hit: Option<&Range<usize>>,
+    config: &PresentationConfig,
+    cancel: &AtomicBool,
+    stats: &mut RenderStats,
+) -> Line<'static> {
+    let Some(range) = model.line_range(line) else {
+        return Line::default();
+    };
+    let left = window.start;
+    let right = window.end;
+    let (start, mut column) = model.viewport_start(line, left).unwrap();
+    let mut spans = Vec::new();
+    for (index, (byte, grapheme)) in model.visible()[start..range.end]
+        .grapheme_indices(true)
+        .enumerate()
+    {
+        if column >= right || index.is_multiple_of(4096) && cancel.load(Ordering::Relaxed) {
+            break;
+        }
+        stats.graphemes += 1;
+        let end = column.saturating_add(cell_width(grapheme, column));
+        if end > column && end > left {
+            let source_range = start + byte..start + byte + grapheme.len();
+            let matched =
+                hit.is_some_and(|hit| hit.start < source_range.end && hit.end > source_range.start);
+            let style = if matched {
+                config
+                    .style(Role::Accent)
+                    .add_modifier(Modifier::REVERSED | Modifier::BOLD)
+            } else {
+                config.style(Role::Value)
+            };
+            let piece = if grapheme == "\t" || column < left || end > right {
+                " ".repeat(end.min(right) - column.max(left))
+            } else {
+                grapheme.to_owned()
+            };
+            spans.push(Span::styled(piece, style));
+        }
+        column = end;
+    }
+    Line::from(spans)
+}
+fn render(
+    frame: &mut Frame<'_>,
+    app: &App<'_>,
+    title: &str,
+    config: &PresentationConfig,
+    dropped: usize,
+    cancel: &AtomicBool,
+) -> RenderStats {
+    let mut stats = RenderStats::default();
+    let area = frame.area();
+    let width = area.width.saturating_sub(1);
+    let content_height = area.height.saturating_sub(2);
+    if width == 0 || area.height == 0 {
+        return stats;
+    }
+    let header = if let Some(nav) = &app.navigator {
+        format!(
+            "{} | {}{}",
+            label(title, usize::from(width) / 2),
+            nav.current().path.label(usize::from(width) / 2),
+            if app.pane.as_ref().is_some_and(|p| p.key) {
+                " | clave"
+            } else {
+                ""
+            }
+        )
+    } else {
+        label(title, usize::from(width))
+    };
+    frame.render_widget(
+        Paragraph::new(header).style(config.style(Role::Heading)),
+        Rect::new(area.x, area.y, width, 1),
+    );
+    let body = Rect::new(area.x, area.y.saturating_add(1), width, content_height);
+    if app.help {
+        frame.render_widget(
+            Paragraph::new(HELP).style(config.style(Role::Secondary)),
+            body,
+        );
+    } else if let Some(pane) = &app.pane {
+        let numbers = if app.line_numbers {
+            pane.model.line_count().to_string().len() + 2
+        } else {
+            0
+        };
+        for row in 0..usize::from(content_height) {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            let line = pane.position.top + row;
+            if line >= pane.model.line_count() {
+                break;
+            }
+            stats.rows += 1;
+            let number_width = numbers.min(usize::from(width));
+            if number_width > 0 {
+                frame.render_widget(
+                    Paragraph::new(format!(
+                        "{:>w$} ",
+                        line + 1,
+                        w = number_width.saturating_sub(1)
+                    ))
+                    .style(config.style(Role::Secondary)),
+                    Rect::new(body.x, body.y + row as u16, number_width as u16, 1),
+                );
+            }
+            let line = text_line(
+                &pane.model,
+                line,
+                pane.position.left
+                    ..pane
+                        .position
+                        .left
+                        .saturating_add(usize::from(width) - number_width),
+                pane.hit.as_ref(),
+                config,
+                cancel,
+                &mut stats,
+            );
+            frame.render_widget(
+                Paragraph::new(line),
+                Rect::new(
+                    body.x + number_width as u16,
+                    body.y + row as u16,
+                    width - number_width as u16,
+                    1,
+                ),
+            );
+        }
+    } else if let Some(nav) = &app.navigator {
+        let view = nav.current();
+        let table = view.is_table();
+        let cols = view.column_count();
+        let first = if table {
+            view.cursor.left
+        } else if width == 1 {
+            view.cursor.column
+        } else {
+            0
+        };
+        let visible_cols = if table {
+            (usize::from(width) / 24).max(1)
+        } else if width == 1 {
+            1
+        } else {
+            cols
+        };
+        let row_width = if table {
+            24usize.min(usize::from(width))
+        } else {
+            (usize::from(width) / 3).max(1)
+        };
+        for col in first..cols.min(first.saturating_add(visible_cols)) {
+            let x = (col - first) * row_width;
+            if x >= usize::from(width) {
+                break;
+            }
+            let cw = if width == 1 {
+                1
+            } else if table || col == 0 {
+                row_width
+            } else {
+                usize::from(width) - x
+            };
+            frame.render_widget(
+                Paragraph::new(label(view.column_name(col).unwrap_or(""), cw))
+                    .style(config.style(Role::Secondary)),
+                Rect::new(body.x + x as u16, body.y, cw as u16, 1),
+            );
+        }
+        let available_rows = usize::from(content_height.saturating_sub(1));
+        for row in view.rows(view.cursor.top..view.cursor.top.saturating_add(available_rows)) {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            stats.rows += 1;
+            let y = body.y + 1 + (row.index - view.cursor.top) as u16;
+            for col in first..cols.min(first.saturating_add(visible_cols)) {
+                let x = (col - first) * row_width;
+                if x >= usize::from(width) {
+                    break;
+                }
+                let cw = if width == 1 {
+                    1
+                } else if table || col == 0 {
+                    row_width
+                } else {
+                    usize::from(width) - x
+                };
+                let Some(cell) = row.cell(col) else {
+                    continue;
+                };
+                stats.cells += 1;
+                let mut style = if matches!(cell, Cell::Missing) {
+                    config.style(Role::Secondary)
+                } else {
+                    config.style(Role::Value)
+                };
+                if row.index == view.cursor.row && col == view.cursor.column {
+                    style = style.add_modifier(Modifier::REVERSED);
+                }
+                frame.render_widget(
+                    Paragraph::new(label(&cell.summary(cw.saturating_mul(2)), cw)).style(style),
+                    Rect::new(body.x + x as u16, y, cw as u16, 1),
+                );
+            }
+        }
+        if view.row_count() == 0 {
+            frame.render_widget(
+                Paragraph::new(view.node().summary(usize::from(width)))
+                    .style(config.style(Role::Secondary)),
+                Rect::new(
+                    body.x,
+                    body.y.saturating_add(1),
+                    width,
+                    1.min(content_height.saturating_sub(1)),
+                ),
+            );
+        }
+    }
+    let status = if let Some(editor) = &app.editor {
+        format!(
+            "{} /{} | Enter confirmar · Esc cancelar",
+            if dropped > 0 {
+                format!("cola: {dropped} descartados")
+            } else {
+                String::new()
+            },
+            label(editor, usize::from(width))
+        )
+    } else {
+        format!(
+            "{}{}{} | / buscar · n/N · Enter abrir · Backspace volver · ? · q",
+            if dropped > 0 {
+                format!("cola: {dropped} descartados | ")
+            } else {
+                String::new()
+            },
+            if app.searching { "buscando… " } else { "" },
+            label(&app.message, usize::from(width) / 2)
+        )
+    };
+    if area.height > 1 {
+        frame.render_widget(
+            Paragraph::new(label(&status, usize::from(width))).style(config.style(Role::Secondary)),
+            Rect::new(area.x, area.y + area.height - 1, width, 1),
+        );
+    }
+    stats
+}
+
+/// true means cancelled (exit130); normal q/Escape returns false. The keyboard
+/// reader and search worker are always joined before exact terminal restoration.
+pub fn run(
+    source_text: Arc<SafeTextModel>,
+    typed: Option<Arc<TypedInput>>,
+    title: &str,
+    config: &PresentationConfig,
+    cancelled: Arc<AtomicBool>,
+) -> io::Result<bool> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Ok(true);
+    }
+    let stdout = io::stdout();
+    if !stdout.is_terminal() {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "la sesión requiere stdout terminal",
+        ));
+    }
+    crossterm::style::force_color_output(config.coloured);
+    let mut guard = TerminalGuard::enter(&stdout, control_terminal()?)?;
+    // Declaration order and the inner scope keep reader/worker alive during
+    // cancellable preparation, and drop both before the owning guard.
+    let result = (|| {
+        let keyboard = KeyboardReader::new(cancelled.clone())?;
+        let mut app = App::new(
+            source_text,
+            typed.clone(),
+            typed.as_deref(),
+            config,
+            &cancelled,
+        )?;
+        let mut terminal = Terminal::new(CrosstermBackend::new(&mut guard.output))?;
+        let mut redraw = true;
+        let mut last_dropped = 0;
+        loop {
+            if cancelled.load(Ordering::Relaxed) {
+                return Ok(true);
+            }
+            if let Some(error) = keyboard.error() {
+                return Err(error);
+            }
+            if let Some(outcome) = app.worker.poll() {
+                app.apply_search(outcome, &cancelled)?;
+                redraw = true;
+            }
+            let lost = keyboard.dropped.load(Ordering::Relaxed);
+            if lost != last_dropped {
+                last_dropped = lost;
+                redraw = true;
+            }
+            if redraw {
+                terminal.draw(|frame| {
+                    let size = frame.area();
+                    app.set_viewport(
+                        usize::from(size.height.saturating_sub(3)),
+                        usize::from(size.width.saturating_sub(1)),
+                    );
+                    render(frame, &app, title, config, lost, &cancelled);
+                })?;
+                redraw = false;
+            }
+            let event = match keyboard.rx.recv_timeout(TICK) {
+                Ok(event) => event,
+                Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                Err(mpsc::RecvTimeoutError::Disconnected) if cancelled.load(Ordering::Relaxed) => {
+                    return Ok(true);
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(keyboard
+                        .error()
+                        .unwrap_or_else(|| io::Error::other("lector de teclado cerrado")));
+                }
+            };
+            match event {
+                Event::Resize(columns, rows) => {
+                    app.set_viewport(
+                        usize::from(rows.saturating_sub(3)),
+                        usize::from(columns.saturating_sub(1)),
+                    );
+                    redraw = true;
+                }
+                Event::Key(key) => {
+                    if is_cancel(&key) {
+                        cancelled.store(true, Ordering::Relaxed);
+                        return Ok(true);
+                    }
+                    let area = terminal.get_frame().area();
+                    if app.key(
+                        key,
+                        usize::from(area.height.saturating_sub(3)),
+                        usize::from(area.width.saturating_sub(1)),
+                        &cancelled,
+                    )? {
+                        return Ok(false);
+                    }
+                    redraw = true;
+                }
+                _ => {}
+            }
+        }
+    })();
+    // A keyboard cancellation discovered during preparation wins over the
+    // preparation's Interrupted/error result, while I/O errors stay failures.
+    let result = if cancelled.load(Ordering::Relaxed) {
+        Ok(true)
+    } else {
+        result
+    };
+    let restored = guard.restore();
+    match result {
+        Err(error) => Err(error),
+        Ok(value) => {
+            restored?;
+            Ok(value)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{cli::Cli, data::LogicalPath};
+    use clap::Parser;
+    use r3viewer_wire::{Origin, Payload, Start, VERSION, Value};
+    use ratatui::backend::TestBackend;
+    use std::time::Instant;
+    static FIXTURE_ID: AtomicUsize = AtomicUsize::new(0);
+    fn config() -> PresentationConfig {
+        // load() reads an explicit fixture, independent of personal config.
+        let path = std::env::temp_dir().join(format!(
+            "r3viewer-session-test-{}-{}.toml",
+            std::process::id(),
+            FIXTURE_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::write(&path, "colour='never'\nline_numbers=false").unwrap();
+        let cli = Cli::parse_from(["r3viewer", "--config", path.to_str().unwrap()]);
+        let result = PresentationConfig::load(&cli, true, Arc::new(AtomicBool::new(false)));
+        std::fs::remove_file(path).unwrap();
+        result.unwrap()
+    }
+    fn model(text: &str) -> Arc<SafeTextModel> {
+        Arc::new(SafeTextModel::new(text.into(), &AtomicBool::new(false)).unwrap())
+    }
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+    fn plain(
+        app: &App<'_>,
+        columns: u16,
+        rows: u16,
+        config: &PresentationConfig,
+    ) -> (Terminal<TestBackend>, RenderStats) {
+        let mut terminal = Terminal::new(TestBackend::new(columns, rows)).unwrap();
+        let mut stats = RenderStats::default();
+        terminal
+            .draw(|frame| {
+                stats = render(frame, app, "fixture", config, 0, &AtomicBool::new(false));
+            })
+            .unwrap();
+        (terminal, stats)
+    }
+    fn contains(terminal: &Terminal<TestBackend>, needle: &str) -> bool {
+        let buffer = terminal.backend().buffer();
+        let text: String = buffer.content.iter().map(|cell| cell.symbol()).collect();
+        text.contains(needle)
+    }
+    #[test]
+    fn unicode_highlights_use_safe_bytes_whole_graphemes_and_resize_anchor() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let source = model("\x1bXfoo\r\ne\u{301}界👩‍💻\tend");
+        let mut app = App::new(source, None, None, &config, &cancel).unwrap();
+        app.pane.as_mut().unwrap().hit = Some(4..7);
+        let (terminal, stats) = plain(&app, 24, 6, &config);
+        assert!(contains(&terminal, "␛Xfoo"));
+        assert_eq!(stats.rows, 2);
+        let buffer = terminal.backend().buffer();
+        assert!(buffer[(2, 1)].modifier.contains(Modifier::REVERSED));
+        assert!(!buffer[(1, 1)].modifier.contains(Modifier::REVERSED));
+        let pane = app.pane.as_mut().unwrap();
+        let combining = pane.model.visible().find('\u{301}').unwrap();
+        pane.hit = Some(combining..combining + 2);
+        pane.position.top = 1;
+        pane.position.left = offset_cell(&pane.model, combining, &cancel).unwrap();
+        assert_eq!(pane.position.left, 0);
+        let (terminal, _) = plain(&app, 12, 4, &config);
+        assert_eq!(terminal.backend().buffer()[(0, 1)].symbol(), "e\u{301}");
+        assert!(
+            terminal.backend().buffer()[(0, 1)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+        let pane = app.pane.as_mut().unwrap();
+        pane.position.left = 2;
+        let anchor = pane.position;
+        let (_, _) = plain(&app, 6, 3, &config);
+        assert_eq!(app.pane.as_ref().unwrap().position.top, anchor.top);
+        assert_eq!(app.pane.as_ref().unwrap().position.left, anchor.left);
+    }
+    #[test]
+    fn real_hundred_thousand_row_render_reads_only_viewport_and_selected_cell() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let typed = Arc::new(TypedInput {
+            start: Start {
+                version: VERSION,
+                cwd: "never-reopen".into(),
+                origin: Origin::ListStream,
+            },
+            payload: Payload::ListStream(
+                (0..100_000)
+                    .map(|n| {
+                        Value::Record(vec![
+                            ("n".into(), Value::Int(n)),
+                            ("value".into(), Value::String("🦊".into())),
+                        ])
+                    })
+                    .collect(),
+            ),
+        });
+        let before = Instant::now();
+        let mut app = App::new(
+            model(""),
+            Some(typed.clone()),
+            Some(&typed),
+            &config,
+            &cancel,
+        )
+        .unwrap();
+        let preparation = before.elapsed();
+        let view = app.navigator.as_mut().unwrap().current_mut();
+        assert_eq!(view.preparation.rows_scanned, 100_000);
+        assert_eq!(view.preparation.fields_scanned, 200_000);
+        view.cursor.row = 99_980;
+        view.cursor.top = 99_980;
+        view.cursor.column = 1;
+        let (terminal, stats) = plain(&app, 80, 12, &config);
+        assert_eq!(stats.rows, 9);
+        assert_eq!(stats.cells, 18);
+        assert!(
+            terminal.backend().buffer()[(24, 2)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+        assert!(
+            !terminal.backend().buffer()[(0, 2)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+        let (_, small) = plain(&app, 30, 5, &config);
+        assert_eq!(small.rows, 2);
+        assert_eq!(small.cells, 2);
+        assert_eq!(
+            app.navigator
+                .as_ref()
+                .unwrap()
+                .current()
+                .preparation
+                .rows_scanned,
+            100_000
+        );
+        eprintln!(
+            "100k initial preparation {preparation:?}; viewport visits {} rows/{} cells",
+            stats.rows, stats.cells
+        );
+    }
+    #[test]
+    fn all_record_and_table_keys_are_fully_inspectable_and_parent_cursor_restored() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let long_key = format!("{}\x1bend-key", "a".repeat(500));
+        let typed = Arc::new(TypedInput {
+            start: Start {
+                version: VERSION,
+                cwd: "x".into(),
+                origin: Origin::SingleValue,
+            },
+            payload: Payload::SingleValue(Value::List(vec![Value::Record(vec![(
+                long_key.clone(),
+                Value::String("complete-value".into()),
+            )])])),
+        });
+        let mut app = App::new(
+            model(""),
+            Some(typed.clone()),
+            Some(&typed),
+            &config,
+            &cancel,
+        )
+        .unwrap();
+        app.key(key(KeyCode::Char('K')), 8, 40, &cancel).unwrap();
+        let pane = app.pane.as_ref().unwrap();
+        assert!(pane.key);
+        assert_eq!(pane.model.original(), long_key);
+        assert!(pane.model.visible().ends_with("␛end-key"));
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        assert!(app.pane.is_none());
+        app.key(key(KeyCode::Enter), 8, 40, &cancel).unwrap();
+        assert_eq!(
+            app.pane.as_ref().unwrap().model.original(),
+            "complete-value"
+        );
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        assert_eq!(app.navigator.as_ref().unwrap().current().cursor.row, 0);
+        assert_eq!(app.navigator.as_ref().unwrap().current().cursor.column, 0);
+        let key_hit = SearchHit {
+            path: Some(LogicalPath(vec![
+                PathMember::Index(0),
+                PathMember::Key(long_key),
+            ])),
+            key: true,
+            visit_index: 1,
+            range: 500..503,
+        };
+        app.apply_search(SearchOutcome::Found(key_hit), &cancel)
+            .unwrap();
+        assert!(app.pane.as_ref().unwrap().key);
+        assert_eq!(app.navigator.as_ref().unwrap().current().cursor.column, 0);
+        let (terminal, _) = plain(&app, 30, 5, &config);
+        assert!(
+            terminal.backend().buffer()[(0, 1)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+    }
+    #[test]
+    fn altgr_printable_editor_input_is_literal_and_release_is_not_duplicated() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let mut app = App::new(model("á@{cC␛"), None, None, &config, &cancel).unwrap();
+        app.key(key(KeyCode::Char('/')), 4, 30, &cancel).unwrap();
+        let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;
+        for ch in ['á', '@', '{', 'c', 'C'] {
+            let press = KeyEvent::new(KeyCode::Char(ch), altgr);
+            assert!(!is_cancel(&press));
+            assert!(!app.key(press, 4, 30, &cancel).unwrap());
+            let release = KeyEvent::new_with_kind(KeyCode::Char(ch), altgr, KeyEventKind::Release);
+            app.key(release, 4, 30, &cancel).unwrap();
+        }
+        // The Windows backend normalizes completed Alt-code text to Press.
+        app.key(key(KeyCode::Char('␛')), 4, 30, &cancel).unwrap();
+        app.key(
+            KeyEvent::new_with_kind(
+                KeyCode::Char('␛'),
+                KeyModifiers::NONE,
+                KeyEventKind::Release,
+            ),
+            4,
+            30,
+            &cancel,
+        )
+        .unwrap();
+        for modifiers in [KeyModifiers::CONTROL, KeyModifiers::ALT] {
+            app.key(KeyEvent::new(KeyCode::Char('x'), modifiers), 4, 30, &cancel)
+                .unwrap();
+        }
+        for ch in ['\u{3}', '\u{1b}', '\n', '\t', '\u{7f}'] {
+            app.key(key(KeyCode::Char(ch)), 4, 30, &cancel).unwrap();
+        }
+        assert_eq!(app.editor.as_deref(), Some("á@{cC␛"));
+        assert!(!cancel.load(Ordering::Relaxed));
+        app.key(key(KeyCode::Enter), 4, 30, &cancel).unwrap();
+        assert_eq!(app.query, "á@{cC␛");
+        assert!(app.editor.is_none());
+    }
+    #[test]
+    fn modified_character_events_do_not_execute_viewer_commands() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let mut app = App::new(model("one\ntwo\nthree"), None, None, &config, &cancel).unwrap();
+        for modifiers in [
+            KeyModifiers::ALT,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+            KeyModifiers::CONTROL,
+        ] {
+            for ch in ['q', '/', '?', 'n', 'N', 'L', 'j', 'l', 'K', 'r'] {
+                assert!(
+                    !app.key(KeyEvent::new(KeyCode::Char(ch), modifiers), 2, 30, &cancel)
+                        .unwrap()
+                );
+                assert!(app.editor.is_none());
+                assert!(!app.help);
+                assert!(!app.searching);
+                assert!(!app.line_numbers);
+                assert_eq!(app.pane.as_ref().unwrap().position, Position::default());
+            }
+        }
+        // Unmodified commands and Shift+N still dispatch normally.
+        app.query = "one".into();
+        app.key(
+            KeyEvent::new(KeyCode::Char('N'), KeyModifiers::SHIFT),
+            2,
+            30,
+            &cancel,
+        )
+        .unwrap();
+        assert!(app.searching);
+        assert!(app.key(key(KeyCode::Char('q')), 2, 30, &cancel).unwrap());
+    }
+    #[test]
+    fn cancellation_distinguishes_altgr_c_and_raw_etx_even_with_full_queue() {
+        let (tx, _rx) = mpsc::sync_channel(1);
+        let cancel = AtomicBool::new(false);
+        let dropped = AtomicUsize::new(0);
+        assert!(enqueue(
+            &tx,
+            Event::Key(key(KeyCode::Char('x'))),
+            &cancel,
+            &dropped
+        ));
+        for ch in ['c', 'C'] {
+            let altgr = KeyEvent::new(KeyCode::Char(ch), KeyModifiers::CONTROL | KeyModifiers::ALT);
+            assert!(!is_cancel(&altgr));
+            assert!(enqueue(&tx, Event::Key(altgr), &cancel, &dropped));
+            assert!(!cancel.load(Ordering::Relaxed));
+        }
+        let release = KeyEvent::new_with_kind(
+            KeyCode::Char('c'),
+            KeyModifiers::CONTROL,
+            KeyEventKind::Release,
+        );
+        assert!(!is_cancel(&release));
+        assert!(enqueue(&tx, Event::Key(release), &cancel, &dropped));
+        assert!(!cancel.load(Ordering::Relaxed));
+        for modifiers in [
+            KeyModifiers::NONE,
+            KeyModifiers::ALT,
+            KeyModifiers::CONTROL | KeyModifiers::ALT,
+        ] {
+            let raw = KeyEvent::new(KeyCode::Char('\u{3}'), modifiers);
+            assert!(is_cancel(&raw));
+            assert!(enqueue(&tx, Event::Key(raw), &cancel, &dropped));
+            assert!(cancel.swap(false, Ordering::Relaxed));
+        }
+        let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+        assert!(enqueue(&tx, Event::Key(ctrl_c), &cancel, &dropped));
+        assert!(cancel.load(Ordering::Relaxed));
+        assert_eq!(dropped.load(Ordering::Relaxed), 7);
+    }
+    #[test]
+    fn search_editor_cancel_limit_and_n_next_are_literal() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let mut app = App::new(model("aba aba"), None, None, &config, &cancel).unwrap();
+        app.key(key(KeyCode::Char('/')), 4, 30, &cancel).unwrap();
+        app.key(key(KeyCode::Char('q')), 4, 30, &cancel).unwrap();
+        assert_eq!(app.editor.as_deref(), Some("q"));
+        assert!(!app.key(key(KeyCode::Esc), 4, 30, &cancel).unwrap());
+        assert!(app.editor.is_none());
+        assert!(app.query.is_empty());
+        app.editor = Some("x".repeat(QUERY_LIMIT));
+        app.key(key(KeyCode::Char('🦊')), 4, 30, &cancel).unwrap();
+        assert_eq!(app.editor.as_ref().unwrap().len(), QUERY_LIMIT);
+        app.editor = Some("aba".into());
+        app.key(key(KeyCode::Enter), 4, 30, &cancel).unwrap();
+        let start = Instant::now();
+        loop {
+            if let Some(outcome) = app.worker.poll() {
+                app.apply_search(outcome, &cancel).unwrap();
+                break;
+            }
+            assert!(start.elapsed() < Duration::from_secs(2));
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(app.last_hit.as_ref().unwrap().range, 0..3);
+        app.key(key(KeyCode::Char('n')), 4, 30, &cancel).unwrap();
+        loop {
+            if let Some(outcome) = app.worker.poll() {
+                app.apply_search(outcome, &cancel).unwrap();
+                break;
+            }
+            assert!(start.elapsed() < Duration::from_secs(2));
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(app.last_hit.as_ref().unwrap().range, 4..7);
+    }
+    #[test]
+    fn empty_records_enter_rows_and_r_work_without_fictitious_keys() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        for rows in [
+            vec![Value::Record(vec![]); 3],
+            vec![
+                Value::Record(vec![]),
+                Value::Record(vec![("x".into(), Value::Nothing)]),
+            ],
+        ] {
+            let typed = Arc::new(TypedInput {
+                start: Start {
+                    version: VERSION,
+                    cwd: "x".into(),
+                    origin: Origin::ListStream,
+                },
+                payload: Payload::ListStream(rows),
+            });
+            let mut app = App::new(
+                model(""),
+                Some(typed.clone()),
+                Some(&typed),
+                &config,
+                &cancel,
+            )
+            .unwrap();
+            app.key(key(KeyCode::Char('/')), 5, 40, &cancel).unwrap();
+            app.key(key(KeyCode::Char('r')), 5, 40, &cancel).unwrap();
+            assert_eq!(app.editor.as_deref(), Some("r"));
+            app.key(key(KeyCode::Esc), 5, 40, &cancel).unwrap();
+            app.key(key(KeyCode::Char('r')), 5, 40, &cancel).unwrap();
+            assert_eq!(app.navigator.as_ref().unwrap().current().row_count(), 0);
+            assert_eq!(
+                app.navigator.as_ref().unwrap().current().path,
+                LogicalPath(vec![PathMember::Index(0)])
+            );
+            let (terminal, _) = plain(&app, 45, 5, &config);
+            assert!(contains(&terminal, "record{0 fields}"));
+            app.key(key(KeyCode::Backspace), 5, 40, &cancel).unwrap();
+            assert!(app.navigator.as_ref().unwrap().current().is_table());
+        }
+    }
+    #[test]
+    fn keyboard_thread_cancels_without_consumption_and_drop_reaps_it() {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let calls = Arc::new(AtomicUsize::new(0));
+        let counter = calls.clone();
+        let keyboard = KeyboardReader::spawn(cancel.clone(), move || {
+            let index = counter.fetch_add(1, Ordering::Relaxed);
+            Ok(Some(Event::Key(if index < EVENT_CAPACITY * 2 {
+                key(KeyCode::Char('x'))
+            } else {
+                KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)
+            })))
+        })
+        .unwrap();
+        let before = Instant::now();
+        while !cancel.load(Ordering::Relaxed) {
+            assert!(before.elapsed() < Duration::from_secs(2));
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(keyboard.dropped.load(Ordering::Relaxed) > 0);
+        drop(keyboard);
+        let after = calls.load(Ordering::Relaxed);
+        thread::sleep(Duration::from_millis(10));
+        assert_eq!(calls.load(Ordering::Relaxed), after);
+    }
+    #[test]
+    fn tiny_viewports_keep_selected_cells_and_never_access_outside_buffer() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let typed = Arc::new(TypedInput {
+            start: Start {
+                version: VERSION,
+                cwd: "x".into(),
+                origin: Origin::SingleValue,
+            },
+            payload: Payload::SingleValue(Value::Record(vec![(
+                "key".into(),
+                Value::String("value".into()),
+            )])),
+        });
+        let mut app = App::new(
+            model(""),
+            Some(typed.clone()),
+            Some(&typed),
+            &config,
+            &cancel,
+        )
+        .unwrap();
+        app.navigator.as_mut().unwrap().current_mut().cursor.column = 1;
+        for (columns, rows) in [(1, 1), (2, 2), (2, 4), (3, 3)] {
+            let _ = plain(&app, columns, rows, &config);
+        }
+        let (terminal, _) = plain(&app, 2, 5, &config);
+        assert!(
+            terminal.backend().buffer()[(0, 2)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+    }
+    #[test]
+    fn pending_search_results_cannot_move_views_after_navigation() {
+        use std::sync::Barrier;
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        for code in [
+            KeyCode::Enter,
+            KeyCode::Char('K'),
+            KeyCode::Char('r'),
+            KeyCode::Backspace,
+            KeyCode::Right,
+            KeyCode::Char('?'),
+        ] {
+            let typed = Arc::new(TypedInput {
+                start: Start {
+                    version: VERSION,
+                    cwd: "x".into(),
+                    origin: Origin::ListStream,
+                },
+                payload: Payload::ListStream(vec![
+                    Value::Record(vec![("a".into(), Value::String("old".into()))]),
+                    Value::Record(vec![("b".into(), Value::String("new".into()))]),
+                ]),
+            });
+            let mut app = App::new(
+                model(""),
+                Some(typed.clone()),
+                Some(&typed),
+                &config,
+                &cancel,
+            )
+            .unwrap();
+            app.navigator.as_mut().unwrap().current_mut().cursor.row = 1;
+            app.navigator.as_mut().unwrap().current_mut().cursor.column = 1;
+            if matches!(code, KeyCode::Backspace | KeyCode::Right) {
+                app.key(key(KeyCode::Enter), 5, 80, &cancel).unwrap();
+            }
+            let started = Arc::new(Barrier::new(2));
+            let release = Arc::new(Barrier::new(2));
+            let finished = Arc::new(AtomicBool::new(false));
+            let worker_started = started.clone();
+            let worker_release = release.clone();
+            let worker_finished = finished.clone();
+            app.last_hit = Some(SearchHit {
+                path: None,
+                key: false,
+                visit_index: 99,
+                range: 0..1,
+            });
+            app.worker.submit(move |_| {
+                worker_started.wait();
+                worker_release.wait();
+                worker_finished.store(true, Ordering::Relaxed);
+                // Deliberately ignores the token: cancellation must invalidate
+                // delivery even if completion races with the navigation.
+                SearchOutcome::Found(SearchHit {
+                    path: Some(LogicalPath(vec![
+                        PathMember::Index(0),
+                        PathMember::Key("a".into()),
+                    ])),
+                    key: false,
+                    visit_index: 1,
+                    range: 0..3,
+                })
+            });
+            app.searching = true;
+            started.wait();
+            app.key(key(code), 5, 80, &cancel).unwrap();
+            assert!(!app.searching, "{code:?}");
+            let path = app.navigator.as_ref().unwrap().current().path.clone();
+            let left = app.pane.as_ref().map(|p| p.position.left);
+            release.wait();
+            let before = Instant::now();
+            while !finished.load(Ordering::Relaxed) {
+                assert!(before.elapsed() < Duration::from_secs(2));
+                thread::yield_now();
+            }
+            assert!(app.worker.poll().is_none(), "stale result from {code:?}");
+            assert_eq!(app.navigator.as_ref().unwrap().current().path, path);
+            assert_eq!(app.pane.as_ref().map(|p| p.position.left), left);
+            assert_eq!(app.last_hit.as_ref().unwrap().visit_index, 99);
+        }
+    }
+    #[test]
+    fn horizontal_scroll_uses_tab_cells_and_sparse_viewport_checkpoints() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let raw = format!("{}end", "\t".repeat(20));
+        let mut app = App::new(model(&raw), None, None, &config, &cancel).unwrap();
+        assert_eq!(app.source.visible().len(), 23);
+        assert_eq!(app.source.max_width(), 163);
+        app.apply_search(
+            SearchOutcome::Found(SearchHit {
+                path: None,
+                key: false,
+                visit_index: 0,
+                range: 20..23,
+            }),
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(app.pane.as_ref().unwrap().position.left, 160);
+        app.key(key(KeyCode::Right), 4, 8, &cancel).unwrap();
+        assert_eq!(app.pane.as_ref().unwrap().position.left, 161);
+        app.key(key(KeyCode::Left), 4, 8, &cancel).unwrap();
+        assert_eq!(app.pane.as_ref().unwrap().position.left, 160);
+        let (terminal, _) = plain(&app, 9, 4, &config);
+        assert!(contains(&terminal, "end"));
+        let long = format!("{}needle", "x".repeat(100_000));
+        let mut app = App::new(model(&long), None, None, &config, &cancel).unwrap();
+        app.apply_search(
+            SearchOutcome::Found(SearchHit {
+                path: None,
+                key: false,
+                visit_index: 0,
+                range: 100_000..100_006,
+            }),
+            &cancel,
+        )
+        .unwrap();
+        let (terminal, stats) = plain(&app, 13, 4, &config);
+        assert!(contains(&terminal, "needle"));
+        assert!(
+            stats.graphemes <= 4096 + 12,
+            "visited {} graphemes",
+            stats.graphemes
+        );
+    }
+    #[test]
+    fn shrinking_and_back_after_distant_hit_reveal_selection_without_resetting_anchor() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let typed = Arc::new(TypedInput {
+            start: Start {
+                version: VERSION,
+                cwd: "x".into(),
+                origin: Origin::ListStream,
+            },
+            payload: Payload::ListStream(
+                (0..10)
+                    .map(|n| {
+                        Value::Record(vec![
+                            ("a".into(), Value::Int(n)),
+                            ("b".into(), Value::Nothing),
+                            ("c".into(), Value::Bool(true)),
+                        ])
+                    })
+                    .collect(),
+            ),
+        });
+        let mut app = App::new(
+            model(""),
+            Some(typed.clone()),
+            Some(&typed),
+            &config,
+            &cancel,
+        )
+        .unwrap();
+        app.set_viewport(20, 110);
+        let view = app.navigator.as_mut().unwrap().current_mut();
+        view.cursor.row = 8;
+        view.cursor.column = 2;
+        app.set_viewport(1, 24);
+        let view = app.navigator.as_ref().unwrap().current();
+        assert_eq!(
+            (
+                view.cursor.row,
+                view.cursor.column,
+                view.cursor.top,
+                view.cursor.left
+            ),
+            (8, 2, 8, 2)
+        );
+        let path = view.selected_path();
+        app.set_viewport(20, 110);
+        assert_eq!(app.navigator.as_ref().unwrap().current().cursor.top, 8);
+        assert_eq!(app.navigator.as_ref().unwrap().current().cursor.left, 2);
+        assert_eq!(
+            app.navigator.as_ref().unwrap().current().selected_path(),
+            path
+        );
+        let typed = Arc::new(TypedInput {
+            start: Start {
+                version: VERSION,
+                cwd: "x".into(),
+                origin: Origin::ListStream,
+            },
+            payload: Payload::ListStream(
+                (0..100_000)
+                    .map(|n| Value::Record(vec![("n".into(), Value::Int(n))]))
+                    .collect(),
+            ),
+        });
+        let mut app = App::new(
+            model(""),
+            Some(typed.clone()),
+            Some(&typed),
+            &config,
+            &cancel,
+        )
+        .unwrap();
+        app.set_viewport(5, 79);
+        let path = LogicalPath(vec![PathMember::Index(99_985), PathMember::Key("n".into())]);
+        app.apply_search(
+            SearchOutcome::Found(SearchHit {
+                path: Some(path.clone()),
+                key: false,
+                visit_index: 0,
+                range: 0..3,
+            }),
+            &cancel,
+        )
+        .unwrap();
+        app.key(key(KeyCode::Backspace), 5, 79, &cancel).unwrap();
+        app.key(key(KeyCode::Backspace), 5, 79, &cancel).unwrap();
+        let view = app.navigator.as_ref().unwrap().current();
+        assert_eq!(view.cursor.row, 99_985);
+        assert_eq!(view.cursor.top, 99_981);
+        assert_eq!(view.selected_path(), Some(path));
+        let (terminal, stats) = plain(&app, 80, 8, &config);
+        assert_eq!(stats.rows, 5);
+        assert!(
+            terminal.backend().buffer()[(0, 6)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+    }
+    #[test]
+    fn full_keyboard_queue_cannot_swallow_ctrl_c_and_overflow_is_visible() {
+        let (tx, _rx) = mpsc::sync_channel(1);
+        let cancel = AtomicBool::new(false);
+        let lost = AtomicUsize::new(0);
+        assert!(enqueue(
+            &tx,
+            Event::Key(key(KeyCode::Char('x'))),
+            &cancel,
+            &lost
+        ));
+        assert!(enqueue(
+            &tx,
+            Event::Key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+            &cancel,
+            &lost
+        ));
+        assert!(cancel.load(Ordering::Relaxed));
+        assert_eq!(lost.load(Ordering::Relaxed), 1);
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let app = App::new(model("text"), None, None, &config, &cancel).unwrap();
+        let mut terminal = Terminal::new(TestBackend::new(40, 4)).unwrap();
+        terminal
+            .draw(|frame| {
+                render(frame, &app, "fixture", &config, 257, &cancel);
+            })
+            .unwrap();
+        assert!(contains(&terminal, "cola: 257 descartados"));
+    }
+}

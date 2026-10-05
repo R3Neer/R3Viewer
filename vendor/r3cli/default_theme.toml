@@ -1,0 +1,8 @@
+[colours]
+heading = "#50CDDC"
+accent = "#FFAA46"
+secondary = "#9196A0"
+value = "#EBEEF5"
+success = "#50C878"
+error = "#F55A5A"
+process = "#F5C850"

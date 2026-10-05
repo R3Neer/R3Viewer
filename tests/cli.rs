@@ -116,3 +116,66 @@ fn path_flag_does_not_authorize_url_fetch() {
     let message = String::from_utf8(result.stderr).unwrap();
     assert!(message.contains("no se puede abrir"));
 }
+
+#[test]
+fn invalid_configuration_is_reported_before_opening_input() {
+    let config = Fixture::new(b"colur = 'always'\n");
+    let result = invoke(
+        &[
+            "--config",
+            config.path(),
+            "absent-document-that-must-not-open.txt",
+        ],
+        None,
+    );
+    assert_eq!(result.status.code(), Some(2));
+    assert!(result.stdout.is_empty());
+    let stderr = String::from_utf8(result.stderr).unwrap();
+    assert!(stderr.contains("configuración"));
+    assert!(!stderr.contains("no se puede abrir \"absent-document"));
+    let result = invoke(&["--config", config.path(), "-v", "text"], None);
+    assert_eq!(result.status.code(), Some(2));
+}
+#[test]
+fn redirected_colour_and_theme_never_emit_terminal_styles() {
+    let config = Fixture::new(
+        b"colour='always'\ntheme='light'\nline_numbers=true\n[colours]\nvalue='#123456'\n",
+    );
+    let original = "// comment\r\nlet x = \"🦊\";\n";
+    let result = invoke(
+        &[
+            "-v",
+            original,
+            "--config",
+            config.path(),
+            "--colour",
+            "always",
+            "--theme",
+            "dark",
+            "--line-numbers",
+        ],
+        None,
+    );
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert_eq!(result.stdout, original.as_bytes());
+    assert!(result.stderr.is_empty());
+}
+#[test]
+fn configuration_limit_and_missing_explicit_file_are_cli_errors() {
+    let config = Fixture::new(&vec![b' '; 65537]);
+    assert_eq!(
+        invoke(&["--config", config.path(), "-v", "x"], None)
+            .status
+            .code(),
+        Some(2)
+    );
+    assert_eq!(
+        invoke(
+            &["--config", "absent-explicit-config.toml", "-v", "x"],
+            None
+        )
+        .status
+        .code(),
+        Some(2)
+    );
+}

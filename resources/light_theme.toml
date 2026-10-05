@@ -1,0 +1,9 @@
+# R3Viewer light palette, using the R3CLI semantic role names.
+[colours]
+heading = "#126875"
+accent = "#80500B"
+secondary = "#555B65"
+value = "#20242B"
+success = "#146D3A"
+error = "#B52323"
+process = "#746000"

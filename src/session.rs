@@ -24,7 +24,7 @@ const HELP: &[&str] = &[
     "Ctrl-C: cancelar (codigo 130)",
 ];
 
-fn control_terminal() -> io::Result<File> {
+pub(crate) fn control_terminal() -> io::Result<File> {
     #[cfg(windows)]
     let path = "CONIN$";
     #[cfg(unix)]
@@ -87,8 +87,8 @@ mod console_mode {
     }
 }
 
-struct TerminalGuard<'a> {
-    output: StdoutLock<'a>,
+pub(crate) struct TerminalGuard<'a> {
+    pub(crate) output: StdoutLock<'a>,
     _control: File,
     raw: bool,
     alternate: bool,
@@ -102,7 +102,7 @@ struct TerminalGuard<'a> {
 }
 
 impl<'a> TerminalGuard<'a> {
-    fn enter(stdout: &'a io::Stdout, control: File) -> io::Result<Self> {
+    pub(crate) fn enter(stdout: &'a io::Stdout, control: File) -> io::Result<Self> {
         #[cfg(windows)]
         let input_mode = console_mode::get(&control)?;
         #[cfg(windows)]
@@ -138,7 +138,7 @@ impl<'a> TerminalGuard<'a> {
         Ok(guard)
     }
 
-    fn restore(&mut self) -> io::Result<()> {
+    pub(crate) fn restore(&mut self) -> io::Result<()> {
         let mut first_error = None;
         let mut record = |result: io::Result<()>| {
             if let Err(error) = result

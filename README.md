@@ -43,7 +43,7 @@ El usuario autoriza implementar el producto completo siguiendo [Scrum por objeti
 
 ## Incremento textual disponible para desarrollo
 
-S01 contiene lector UTF-8 local/literal/stdin externo, salida textual y sesión de terminal. S02 incorpora el módulo público `viewer` y companion privado `nu_plugin_r3viewer`; transporta valores tipados de Nushell al ejecutable `r3viewer`. Todavía se muestran como proyección textual: navegación estructurada y formatos enriquecidos están pendientes. No es la distribución final.
+S01 contiene lector UTF-8 local/literal/stdin externo, salida textual y sesión de terminal. S02 incorpora el módulo público `viewer` y companion privado `nu_plugin_r3viewer`; transporta valores tipados de Nushell al ejecutable `r3viewer`. S03 añade navegación estructurada, búsqueda y presentación configurable; su candidato está en validación independiente. Los formatos enriquecidos y la distribución final siguen pendientes.
 
 ```powershell
 . ./scripts/dev.ps1 # si se usa el toolchain privado .tools
@@ -68,3 +68,11 @@ Construir workspace y preparar directorios privados bin/ y nu/ con los dos ejecu
 ```
 
 Validación S02: 48pruebas del workspace, Clippy/fmt, revisión independiente R1 sin críticas y aceptación de tipos, errores, límites y abandono. ConPTY propia confirma Ctrl-C130, modos restaurados y siguiente invocación funcional; no acredita QA visual. [Detalle y límites](docs/sprints/S02.md). Custom ajenos no son universalmente transportables: Nu los rechaza por propietario. No se convierten ejecutando callbacks.
+
+## Candidato S03 en validación
+
+La TUI permite Enter para inspeccionar una celda/hoja, r para la fila completa, K para una clave completa y Backspace para volver conservando selección. / abre búsqueda literal sensible a mayúsculas; Enter confirma, n/N recorren y vuelven por los extremos. Escape cancela el editor; fuera del editor sale. L alterna números de línea. Consulta máxima4096bytesUTF-8. Nothing, ausencia y string vacío son estados distintos; la búsqueda incluye claves y hojas colapsadas completas.
+
+Opciones de presentación: --colour auto|always|never, --theme auto|dark|light, --line-numbers/-n y --no-line-numbers. --config indica TOML de lectura, máximo64KiB. Flags prevalecen sobre configuración; auto respeta NO_COLOR/TERM=dumb. Redirección siempre plana. Esquema y rutas estándar en [S03](docs/sprints/S03.md). No crear perfiles ni archivos de configuración implícitamente.
+
+El corte A/B llega a R4 con 89 pruebas del workspace, dos pruebas del backend controlado, revisión independiente sin críticas y aceptación funcional Windows. Las revisiones anteriores detectaron y corrigieron problemas de teclado Unicode, posición/búsqueda y override de NO_COLOR. El resaltado aislado sigue en integración y todavía no se anuncia como capacidad disponible. Compilación Linux comprobada; ejecución Linux/macOS y QA visual aún pendientes.

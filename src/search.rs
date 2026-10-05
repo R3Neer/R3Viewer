@@ -1,0 +1,495 @@
+//! One coalescing search worker; bounded result channel and interruptible chunks.
+use crate::data::LogicalPath;
+use std::{
+    ops::Range,
+    sync::{
+        Arc, Condvar, Mutex,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    thread,
+    time::Duration,
+};
+const CHUNK: usize = 64 * 1024;
+pub const QUERY_LIMIT: usize = 4096;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Forward,
+    Backward,
+}
+#[derive(Clone, Debug)]
+pub struct SearchHit {
+    pub visit_index: usize,
+    pub path: Option<LogicalPath>,
+    pub key: bool,
+    pub range: Range<usize>,
+}
+#[derive(Debug)]
+pub enum SearchOutcome {
+    Found(SearchHit),
+    NotFound,
+    Cancelled,
+    Error(String),
+}
+struct Job {
+    generation: u64,
+    cancel: Arc<AtomicBool>,
+    run: Box<dyn FnOnce(&AtomicBool) -> SearchOutcome + Send>,
+}
+#[derive(Default)]
+struct State {
+    pending: Option<Job>,
+    active: Option<Arc<AtomicBool>>,
+    shutdown: bool,
+}
+pub struct SearchWorker {
+    state: Arc<(Mutex<State>, Condvar)>,
+    results: Option<mpsc::Receiver<(u64, SearchOutcome)>>,
+    thread: Option<thread::JoinHandle<()>>,
+    generation: u64,
+}
+impl Default for SearchWorker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl SearchWorker {
+    pub fn new() -> Self {
+        let state = Arc::new((Mutex::new(State::default()), Condvar::new()));
+        let thread_state = state.clone();
+        let (tx, rx) = mpsc::sync_channel(1);
+        let worker = thread::spawn(move || {
+            loop {
+                let job = {
+                    let (lock, cv) = &*thread_state;
+                    let mut state = lock.lock().unwrap();
+                    while state.pending.is_none() && !state.shutdown {
+                        state = cv.wait(state).unwrap();
+                    }
+                    if state.shutdown {
+                        break;
+                    }
+                    let job = state.pending.take().unwrap();
+                    state.active = Some(job.cancel.clone());
+                    job
+                };
+                let outcome = (job.run)(&job.cancel);
+                let mut result = (job.generation, outcome);
+                while !job.cancel.load(Ordering::Relaxed) {
+                    match tx.try_send(result) {
+                        Ok(()) => break,
+                        Err(mpsc::TrySendError::Disconnected(_)) => return,
+                        Err(mpsc::TrySendError::Full(old)) => {
+                            result = old;
+                            thread::sleep(Duration::from_millis(5));
+                        }
+                    }
+                }
+            }
+        });
+        Self {
+            state,
+            results: Some(rx),
+            thread: Some(worker),
+            generation: 0,
+        }
+    }
+    pub fn submit(
+        &mut self,
+        run: impl FnOnce(&AtomicBool) -> SearchOutcome + Send + 'static,
+    ) -> u64 {
+        self.generation = self.generation.wrapping_add(1);
+        let (lock, cv) = &*self.state;
+        let mut state = lock.lock().unwrap();
+        if let Some(token) = &state.active {
+            token.store(true, Ordering::Relaxed);
+        }
+        if let Some(job) = state.pending.take() {
+            job.cancel.store(true, Ordering::Relaxed);
+        }
+        state.pending = Some(Job {
+            generation: self.generation,
+            cancel: Arc::new(AtomicBool::new(false)),
+            run: Box::new(run),
+        });
+        cv.notify_one();
+        self.generation
+    }
+    pub fn poll(&self) -> Option<SearchOutcome> {
+        let receiver = self.results.as_ref()?;
+        while let Ok((generation, outcome)) = receiver.try_recv() {
+            if generation == self.generation {
+                return Some(outcome);
+            }
+        }
+        None
+    }
+    pub fn cancel(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        let mut state = self.state.0.lock().unwrap();
+        if let Some(token) = &state.active {
+            token.store(true, Ordering::Relaxed);
+        }
+        if let Some(job) = state.pending.take() {
+            job.cancel.store(true, Ordering::Relaxed);
+        }
+    }
+}
+impl Drop for SearchWorker {
+    fn drop(&mut self) {
+        self.cancel();
+        self.state.0.lock().unwrap().shutdown = true;
+        self.state.1.notify_one();
+        self.results.take(); // Close receiver before joining a producer.
+        if let Some(worker) = self.thread.take() {
+            let _ = worker.join();
+        }
+    }
+}
+fn floor_boundary(s: &str, mut offset: usize) -> usize {
+    offset = offset.min(s.len());
+    while !s.is_char_boundary(offset) {
+        offset -= 1;
+    }
+    offset
+}
+fn ceil_boundary(s: &str, mut offset: usize) -> usize {
+    offset = offset.min(s.len());
+    while !s.is_char_boundary(offset) {
+        offset += 1;
+    }
+    offset
+}
+fn segment(
+    text: &str,
+    query: &str,
+    range: Range<usize>,
+    direction: Direction,
+    cancelled: &AtomicBool,
+) -> Result<Option<Range<usize>>, ()> {
+    let mut begin = range.start;
+    let mut end = range.end;
+    while begin < end {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(());
+        }
+        match direction {
+            Direction::Forward => {
+                let next = ceil_boundary(text, begin.saturating_add(CHUNK).min(end));
+                let extended = ceil_boundary(
+                    text,
+                    next.saturating_add(query.len().saturating_sub(1)).min(end),
+                );
+                if let Some(found) = text[begin..extended].find(query) {
+                    let offset = begin + found;
+                    return Ok(Some(offset..offset + query.len()));
+                }
+                begin = next;
+            }
+            Direction::Backward => {
+                let next = floor_boundary(text, end.saturating_sub(CHUNK).max(begin));
+                let extended = floor_boundary(
+                    text,
+                    next.saturating_sub(query.len().saturating_sub(1))
+                        .max(begin),
+                );
+                if let Some(found) = text[extended..end].rfind(query) {
+                    let offset = extended + found;
+                    return Ok(Some(offset..offset + query.len()));
+                }
+                end = next;
+            }
+        }
+    }
+    Ok(None)
+}
+/// Matches are non-overlapping on n/N; wrap once at the document boundary.
+pub fn find_visible(
+    text: &str,
+    query: &str,
+    start: usize,
+    direction: Direction,
+    cancelled: &AtomicBool,
+) -> Result<Option<Range<usize>>, String> {
+    if query.is_empty() {
+        return Ok(None);
+    }
+    if query.len() > QUERY_LIMIT {
+        return Err(format!("consulta excede{QUERY_LIMIT}bytes"));
+    }
+    let start = floor_boundary(text, start);
+    let ranges = match direction {
+        Direction::Forward => [start..text.len(), 0..start],
+        Direction::Backward => [0..start, start..text.len()],
+    };
+    for range in ranges {
+        match segment(text, query, range, direction, cancelled) {
+            Ok(Some(found)) => return Ok(Some(found)),
+            Ok(None) => (),
+            Err(()) => return Err("búsqueda cancelada".into()),
+        }
+    }
+    Ok(None)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn chunk_crossing_unicode_both_directions_and_wrap() {
+        let text = format!("{}界🦊xyz{}", "a".repeat(CHUNK - 1), "b".repeat(CHUNK));
+        let query = "界🦊xyz";
+        let expected = CHUNK - 1..CHUNK - 1 + query.len();
+        let cancel = AtomicBool::new(false);
+        assert_eq!(
+            find_visible(&text, query, 0, Direction::Forward, &cancel).unwrap(),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            find_visible(&text, query, text.len(), Direction::Backward, &cancel).unwrap(),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            find_visible(&text, query, expected.end, Direction::Forward, &cancel).unwrap(),
+            Some(expected)
+        );
+        assert_eq!(
+            find_visible("ab abab", "ab", 2, Direction::Backward, &cancel).unwrap(),
+            Some(0..2)
+        );
+    }
+    #[test]
+    fn cancelled_and_overbudget() {
+        assert!(
+            find_visible(
+                &"x".repeat(CHUNK * 2),
+                "none",
+                0,
+                Direction::Forward,
+                &AtomicBool::new(true)
+            )
+            .is_err()
+        );
+        assert!(
+            find_visible(
+                "x",
+                &"x".repeat(QUERY_LIMIT + 1),
+                0,
+                Direction::Forward,
+                &AtomicBool::new(false)
+            )
+            .is_err()
+        );
+    }
+    #[test]
+    fn superseded_job_never_applies_and_drop_releases_worker() {
+        let mut worker = SearchWorker::new();
+        worker.submit(|cancel| {
+            while !cancel.load(Ordering::Relaxed) {
+                thread::sleep(Duration::from_millis(1));
+            }
+            SearchOutcome::Error("stale".into())
+        });
+        worker.submit(|_| SearchOutcome::NotFound);
+        let started = std::time::Instant::now();
+        loop {
+            if let Some(result) = worker.poll() {
+                assert!(matches!(result, SearchOutcome::NotFound));
+                break;
+            }
+            assert!(started.elapsed() < Duration::from_secs(2));
+            thread::sleep(Duration::from_millis(1));
+        }
+        worker.submit(|cancel| {
+            while !cancel.load(Ordering::Relaxed) {
+                thread::sleep(Duration::from_millis(1));
+            }
+            SearchOutcome::Cancelled
+        });
+        drop(worker);
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+}
+
+/// Whole-data literal search in DFS visitation order, including collapsed keys.
+/// Only one tentative result is retained; n/N wrap once and do not overlap.
+pub fn find_data(
+    input: &r3viewer_wire::TypedInput,
+    query: &str,
+    previous: Option<&SearchHit>,
+    direction: Direction,
+    cancelled: &AtomicBool,
+) -> SearchOutcome {
+    use crate::{
+        data::{BorrowedPath, DataRef, VisitItem},
+        inspect_text::{copy_text, primitive_text},
+        presentation::SafeTextModel,
+    };
+    if query.is_empty() {
+        return SearchOutcome::NotFound;
+    }
+    if query.len() > QUERY_LIMIT {
+        return SearchOutcome::Error(format!("consulta excede{QUERY_LIMIT}bytes"));
+    }
+    for pass in 0..if previous.is_some() { 2 } else { 1 } {
+        let mut tentative: Option<(BorrowedPath<'_>, bool, usize, Range<usize>)> = None;
+        for (index, visit) in DataRef::root(input).visits(cancelled).enumerate() {
+            let visit = match visit {
+                Ok(x) => x,
+                Err(e) => {
+                    return if cancelled.load(Ordering::Relaxed) {
+                        SearchOutcome::Cancelled
+                    } else {
+                        SearchOutcome::Error(e.to_string())
+                    };
+                }
+            };
+            if let Some(last) = previous {
+                let relevant = match (direction, pass) {
+                    (Direction::Forward, 0) | (Direction::Backward, 1) => index >= last.visit_index,
+                    _ => index <= last.visit_index,
+                };
+                if !relevant {
+                    continue;
+                }
+            }
+            let (raw, key) = match visit.item {
+                VisitItem::Key(key) => {
+                    // Key text may be large: share the same cancelable copying path.
+                    match copy_text(key, cancelled) {
+                        Ok(s) => (s, true),
+                        Err(e) => return SearchOutcome::Error(e),
+                    }
+                }
+                VisitItem::Primitive(node) => match primitive_text(node, cancelled) {
+                    Ok(s) => (s, false),
+                    Err(e) => return SearchOutcome::Error(e),
+                },
+            };
+            let safe = match SafeTextModel::new(raw, cancelled) {
+                Ok(x) => x,
+                Err(e) => {
+                    return SearchOutcome::Error(format!("no se puede preparar búsqueda: {e:?}"));
+                }
+            };
+            let mut range = 0..safe.visible().len();
+            if let Some(last) = previous.filter(|last| index == last.visit_index) {
+                match (direction, pass) {
+                    (Direction::Forward, 0) => range.start = last.range.end.min(range.end),
+                    (Direction::Backward, 0) => range.end = last.range.start.min(range.end),
+                    (Direction::Forward, _) => range.end = last.range.end.min(range.end),
+                    (Direction::Backward, _) => range.start = last.range.start.min(range.end),
+                }
+            }
+            match segment(safe.visible(), query, range, direction, cancelled) {
+                Err(()) => return SearchOutcome::Cancelled,
+                Ok(None) => (),
+                Ok(Some(range)) => {
+                    if direction == Direction::Forward {
+                        return SearchOutcome::Found(SearchHit {
+                            path: Some(visit.path.to_logical_path()),
+                            key,
+                            visit_index: index,
+                            range,
+                        });
+                    }
+                    tentative = Some((visit.path, key, index, range));
+                }
+            }
+        }
+        if let Some((path, key, visit_index, range)) = tentative {
+            return SearchOutcome::Found(SearchHit {
+                path: Some(path.to_logical_path()),
+                key,
+                visit_index,
+                range,
+            });
+        }
+    }
+    SearchOutcome::NotFound
+}
+
+#[cfg(test)]
+mod typed_search_tests {
+    use super::*;
+    use r3viewer_wire::{Origin, Payload, Start, TypedInput, VERSION, Value};
+    fn input(v: Value) -> TypedInput {
+        TypedInput {
+            start: Start {
+                version: VERSION,
+                cwd: "fixture".into(),
+                origin: Origin::SingleValue,
+            },
+            payload: Payload::SingleValue(v),
+        }
+    }
+    #[test]
+    fn collapsed_full_leaves_order_keys_and_wrap_single_match() {
+        let data = input(Value::Record(vec![(
+            "needle-key".into(),
+            Value::Record(vec![(
+                "z".into(),
+                Value::String(format!("{}needle", "x".repeat(100000))),
+            )]),
+        )]));
+        let cancel = AtomicBool::new(false);
+        let SearchOutcome::Found(key) =
+            find_data(&data, "needle", None, Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        assert!(key.key);
+        let SearchOutcome::Found(value) =
+            find_data(&data, "needle", Some(&key), Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        assert!(!value.key);
+        assert_eq!(value.range, 100000..100006);
+        let SearchOutcome::Found(wrapped) =
+            find_data(&data, "needle", Some(&value), Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        assert!(wrapped.key);
+        let SearchOutcome::Found(previous) =
+            find_data(&data, "needle", Some(&key), Direction::Backward, &cancel)
+        else {
+            panic!()
+        };
+        assert_eq!(previous.range, value.range);
+        let only = input(Value::String("unique".into()));
+        let SearchOutcome::Found(hit) =
+            find_data(&only, "unique", None, Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        for direction in [Direction::Forward, Direction::Backward] {
+            let SearchOutcome::Found(wrapped) =
+                find_data(&only, "unique", Some(&hit), direction, &cancel)
+            else {
+                panic!()
+            };
+            assert_eq!(wrapped.range, hit.range);
+        }
+    }
+    #[test]
+    fn visible_placeholder_search_retains_source_identity() {
+        let input = input(Value::Record(vec![(
+            "key".into(),
+            Value::String("\x1bfoo ␛foo".into()),
+        )]));
+        let cancel = AtomicBool::new(false);
+        let SearchOutcome::Found(first) =
+            find_data(&input, "␛foo", None, Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        let SearchOutcome::Found(next) =
+            find_data(&input, "␛foo", Some(&first), Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        assert_ne!(first.range, next.range);
+        assert_eq!(first.path, next.path);
+    }
+}

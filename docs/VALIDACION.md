@@ -1,6 +1,6 @@
 # Plan de validación y preparación
 
-Fecha: 2026-10-04. Ninguna prueba runtime de R3Viewer ejecutada todavía. Documentación y repositorio se verifican ahora; pruebas siguientes requieren implementación/prototipo autorizado.
+Fecha inicial: 2026-10-04. Implementación y pruebas privadas autorizadas posteriormente. S01/S02 tienen evidencia funcional Windows; S03 en validación. Esta matriz conserva los criterios pendientes y no anuncia certificación de plataformas por compilar.
 
 ## RV-008: validaciones por capacidad dentro de los sprints
 
@@ -42,3 +42,11 @@ Repositorio local inicializado, archivos canónicos migrados, política de commi
 La arquitectura general de architecture/ARQUITECTURA.md fue revisada iterativamente hasta SIN_CRITICAS_PENDIENTES. Su alcance es dominios, relaciones y épicas. Esta validación es un catálogo inicial para refinar por sprint, no APIs finales ni orden completo de implementación.
 
 Puente Nu corresponde a E02; gráficos a E04; PDF a E05; formatos/Obsidian/HTML a E06–E08; compatibilidad/calidad a E10 y a cada historia afectada. Los criterios específicos y versiones se concretan al seleccionar el trabajo. Sin ejecutar QA no anunciar plataforma/capacidad acreditada. Licencia MIT registrada; revisar avisos de dependencias al distribuir.
+## Evidencia actual (2026-10-05)
+
+S01/S02: lectura, bridge tipado, cancelación, restitución de modos y siguiente invocación ejecutados en Windows con Nu0.115.1; referencias exactas en sprints/S01.md y S02.md. S03A/B: revisión adversaria R2 sin críticas y86pruebas; AE detecta teclado AltGr/Alt-code y override NO_COLOR, que requieren candidato R3. cargo check -p r3viewer --target x86_64-unknown-linux-gnu --locked pasa para A/B, sin ejecución Linux.
+
+ConPTY propia es prueba funcional de procesos/teclas/modos. No sustituye revisión visual Windows Terminal/WezTerm. Gráficos, PDF, Markdown/HTML/Obsidian, distribución completa y ejecución de la matriz siguen pendientes. Los modelos y snapshots de widgets no certifican fuentes/DPI/protocolos reales.
+
+
+Actualización R4 A/B: revisión independiente sin críticas y aceptación funcional Windows; 89 pruebas workspace y dos pruebas parser controlado, formato/Clippy/build. Compilación Linux pasa; advertencia cosmética upstream de paréntesis en Crossterm Unix, sin cambio de su código. Las validaciones de apariencia, ejecución macOS/Linux, resaltado, demás adaptadores y distribución conservan estado pendiente.

@@ -56,9 +56,18 @@ fn read_cancelable(
     reader: impl Read + Send + 'static,
     cancelled: &AtomicBool,
 ) -> Result<Vec<u8>, InputError> {
+    read_operation_cancelable(move || read_bounded(reader, INPUT_LIMIT), cancelled)
+}
+
+// Opening a FIFO, remote filesystem or device may itself block. Keep open and
+// read under the same cancellation boundary, not just reads after File::open.
+fn read_operation_cancelable(
+    operation: impl FnOnce() -> io::Result<Vec<u8>> + Send + 'static,
+    cancelled: &AtomicBool,
+) -> Result<Vec<u8>, InputError> {
     let (sender, receiver) = mpsc::sync_channel(1);
     thread::spawn(move || {
-        let _ = sender.send(read_bounded(reader, INPUT_LIMIT));
+        let _ = sender.send(operation());
     });
     loop {
         if cancelled.load(Ordering::Relaxed) {
@@ -125,10 +134,17 @@ pub fn load(
                     "lectura de URL pendiente de E08; S01 no inicia tráfico de red",
                 ));
             }
-            let file = File::open(source).map_err(|err| {
-                InputError::new(1, format!("no se puede abrir {source:?}: {err}"))
-            })?;
-            (source.clone(), read_cancelable(file, &cancelled)?)
+            let path = source.clone();
+            let bytes = read_operation_cancelable(
+                move || {
+                    let file = File::open(&path).map_err(|err| {
+                        io::Error::new(err.kind(), format!("no se puede abrir {path:?}: {err}"))
+                    })?;
+                    read_bounded(file, INPUT_LIMIT)
+                },
+                &cancelled,
+            )?;
+            (source.clone(), bytes)
         }
         None => ("Entrada estándar".to_owned(), piped),
     };

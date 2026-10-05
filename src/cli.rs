@@ -1,6 +1,6 @@
 use clap::{Parser, ValueEnum};
 
-/// Visor de archivos y contenido. S01: lectura textual UTF-8.
+/// Visor de archivos y datos, de solo lectura.
 #[derive(Clone, Debug, Parser)]
 #[command(version, about)]
 pub struct Cli {
@@ -18,12 +18,28 @@ pub struct Cli {
     /// Forzar contenido literal, también desde stdin.
     #[arg(short = 'v', long)]
     pub value: bool,
-    /// Formato explícito. Este incremento incluye solamente text.
-    #[arg(long, value_enum, default_value = "text")]
+    /// Archivo TOML de configuración; no modifica perfiles.
+    #[arg(long)]
+    pub config: Option<std::path::PathBuf>,
+    /// Color de presentación (la redirección siempre es texto plano).
+    #[arg(long, value_enum)]
+    pub colour: Option<crate::config::Colour>,
+    /// Paleta; auto conserva el foreground del terminal.
+    #[arg(long, value_enum)]
+    pub theme: Option<crate::config::Theme>,
+    /// Mostrar números de línea.
+    #[arg(short = 'n', long, conflicts_with = "no_line_numbers")]
+    pub line_numbers: bool,
+    /// Ocultar números de línea configurados.
+    #[arg(long)]
+    pub no_line_numbers: bool,
+    /// Formato explícito; auto selecciona una presentación compatible.
+    #[arg(long, value_enum, default_value = "auto")]
     pub format: Format,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum Format {
+    Auto,
     Text,
 }

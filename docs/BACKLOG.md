@@ -125,7 +125,7 @@ RV-008 coordina spikes por riesgo dentro de E10, con referencias a E02/E04/E05: 
 
 Plan general revisado por adversario independiente: dos propuestas generales y dos informes temporales; cierre SIN_CRITICAS_PENDIENTES. Épicas E01–E10 y propietarios principales en architecture/ARQUITECTURA.md, única tabla canónica de asignación. Las referencias secundarias no duplican tareas.
 
-Antes del primer sprint se acordarán responsables reales de Product Owner, Scrum Master y Developers, duración, Definition of Done y realización de eventos. No hay Sprint Backlog, fechas, estimaciones ni capacidad comprometidos todavía. Planning selecciona resultado/objetivo; Daily inspecciona/adapta; Review recoge feedback del incremento; Retrospective mejora el proceso. El adversario revisa diseño, no sustituye eventos Scrum. La preparación actual no autoriza implementar el producto.
+Registro histórico de preparación, sustituido por la metodología por objetivos: antes del primer sprint se acordarían responsables reales de Product Owner, Scrum Master y Developers, duración, Definition of Done y realización de eventos. No hay Sprint Backlog, fechas, estimaciones ni capacidad comprometidos todavía. Planning selecciona resultado/objetivo; Daily inspecciona/adapta; Review recoge feedback del incremento; Retrospective mejora el proceso. El adversario revisa diseño, no sustituye eventos Scrum. La preparación actual no autoriza implementar el producto.
 
 Los detalles de transporte, APIs, locks, límites y UX se refinan con cada historia. La revisión macro no cierra RV-003/004/006/008 runtime ni modifica las decisiones funcionales confirmadas.
 ## Autoridad y proceso vigentes
@@ -142,3 +142,9 @@ Implementación completa autorizada el 2026-10-04. Scrum por objetivos sin caden
 | S02 puente Nu | Comprobado funcionalmente Windows | 48pruebas, revisión integrada R1 sin críticas, AE y ConPTY Ctrl-C/reset/máscaras. QA visual/matriz y distribución pendientes. RV-102 parcial; sprints/S02.md. |
 
 S01 código revisado iterativamente hasta R2 SIN_CRITICAS_PENDIENTES; aceptación independiente y15pruebas. Evidencia y límites en sprints/S01.md. RV-003/004/006/008 y H1–H5 conservan pendientes completos; no borrar tareas ni marcar RV terminado por subhistorias comprobadas.
+
+
+Registro histórico R2/R3, sustituido por el estado R4 posterior: S03 activo con A/B y configuración en validación; resaltado aislado en integración. R2A/B pasa86pruebas y revisión adversaria; aceptación independiente detecta AltGr/Alt-code Windows y override NO_COLOR. R3 se corrige y vuelve a revisión/AE. RV-105/106/107 siguen abiertos, incluyendo estructura de archivos de datos, paleta Nu condicionada y QA visual/matriz. No se cancela el objetivo por terminar un corte.
+
+
+S03 A/B alcanza aceptación funcional Windows en R4 y revisión sin críticas; quedan pendientes resaltado C04–07, estructuras de archivos de datos y QA visual/matriz. Las correcciones de las revisiones R1–R3 se conservan como evidencia en sprints/S03.md. Este resultado parcial no cierra RV-105/106/107 ni el objetivo S03 completo.

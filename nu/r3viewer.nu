@@ -8,8 +8,13 @@ export def viewer [
     --inline(-i)
     --path(-p)
     --value(-v)
-    --format: string = 'text'
+    --format: string = 'auto'
+    --config: string
+    --colour: string
+    --theme: string
+    --line-numbers(-n)
+    --no-line-numbers
 ] {
     # Keep encoder as the first command: any prelude statement loses PipelineData.
-    r3viewer encode | ^$reader --nu-wire ...(if $inline { ['--inline'] } else { [] }) ...(if $path { ['--path'] } else { [] }) ...(if $value { ['--value'] } else { [] }) --format $format -- ...(if $source == null { [] } else { [$source] })
+    r3viewer encode | ^$reader --nu-wire ...(if $inline { ['--inline'] } else { [] }) ...(if $path { ['--path'] } else { [] }) ...(if $value { ['--value'] } else { [] }) --format $format ...(if $config == null { [] } else { ['--config' $config] }) ...(if $colour == null { [] } else { ['--colour' $colour] }) ...(if $theme == null { [] } else { ['--theme' $theme] }) ...(if $line_numbers { ['--line-numbers'] } else { [] }) ...(if $no_line_numbers { ['--no-line-numbers'] } else { [] }) -- ...(if $source == null { [] } else { [$source] })
 }

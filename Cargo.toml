@@ -17,12 +17,17 @@ crossterm = "0.29"
 ctrlc = "3.5"
 unicode-width = "0.2"
 unicode-segmentation = "1.12"
+ratatui = { version = "=0.30.2", default-features = false, features = ["crossterm"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
 
 [workspace]
 members = [".", "crates/wire", "crates/nu-plugin"]
-exclude = ["vendor/nushell", ".tmp/*"]
+exclude = ["vendor/nushell", "vendor/crossterm", ".tmp/*"]
 resolver = "3"
 
 [patch.crates-io]
 nu-plugin = { path = "vendor/nushell/nu-plugin" }
 nu-plugin-core = { path = "vendor/nushell/nu-plugin-core" }
+
+crossterm = { path = "vendor/crossterm" }
