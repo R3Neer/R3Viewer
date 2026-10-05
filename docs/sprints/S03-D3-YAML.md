@@ -26,3 +26,7 @@ Parser candidato Saphyr0.1.0, Marker.index cuenta caracteres no bytes pese docge
 Y-P1 resuelto con prioridades URI/!→style→decoded, quoted tagged integer y Unavailable incompatibilidad; Y-P2 perfil explícito whole-stream; Y-P3 claves complejas/wrappers/alias e historial128 acotado. RevisiónR2 exacta cerrada SIN_CRITICAS_PENDIENTES. Parser y detalle todavía pendientes.
 
 Fuentes y gate experimental: [investigación YAML](../research/S03_YAML_PARSER_SPIKE.md) y [YAML1.2.2](https://yaml.org/spec/1.2.2/). El perfil de versión, límites, conservación de pares y UI son política explícita de R3Viewer.
+
+## Gate y precisión de rangos
+
+[Gate parser R2](../reviews/S03-D3-parser.md) cerrado sin críticas sobre candidato privado; detalle/proyección/integración/AEpendientes. Streamsincontenido=0documentos, noDoc/nullsintético; documento explícitovacío preservaDoc+nullimplícito sinSourceSpan de tokenvalue. Un blockspancontiguo incluyeheader/comentarioinline interno/body/blanklines propias; quotedexcluyetriviaposterior, blockexcluyeindent siguientehermano. Comentarios no se añadenalcooked. URIpercentescapes exactos después expandirhandle, sinpercentdecoding.
