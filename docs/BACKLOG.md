@@ -232,3 +232,6 @@ PDF: [candidato privado G1 R2](research/PDF_G1_SPIKE.md) con revisión de códig
 ## Integración shell vigente
 
 Gramáticas Nushell y PowerShell integradas con revisión de código y aceptación independientes sin críticas pendientes en el alcance funcional Windows: 215 pruebas workspace (cuatro ignores separados), 269 intervalos y 16 estados finales sobre 84 documentos, controlador real con Job y límites, 18 casos CLI/Nu y ConPTY funcional. Windows usa Onig; fancy-regex construye el pack. Auto .nu/.ps1 y alias explícito pwsh; .pwsh continúa texto plano. [Entrega y evidencia](research/S03_SHELL_INTEGRACION.md). QA visual, contención/runtime Unix y cierre RV-105/106/107/S03 permanecen pendientes.
+
+
+Sixel: [candidato privado R2 final](research/GRAFICOS_SIXEL_SPIKE.md) con revisión independiente y AE240invocaciones sobre oráculos previos. R1 tenía dos fallos de ownership/captura del helper, corregidos con encoder intacto; snapshots/controles negativos conservados. Sin críticas pendientes en el gate probado. Snapshot/IPC/agregado/cache/framing/terminal/inline/visual/Unix y G2 completo permanecen abiertos, sin adopción ni cierre RV/S03.
