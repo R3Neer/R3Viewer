@@ -1,0 +1,9 @@
+# Gate de parser Markdown — candidato privado R3
+
+Candidato pulldown-cmark0.13.4 con perfiles explícitos, Event/OffsetIter y fuente UTF8 acotada para el experimento. [Revisión de código y aceptación independientes](../reviews/Markdown-parser-gate-aceptacion-r3.md) sin críticas pendientes en el gate privado. MANIFEST367B4BF11E313185963EABD4EBD1B48193B13DE7E879DD0702F50E1A04F87686,702entradas; binario470B8355A63713315B51BC23A4C65A567C602C6E568B5D2ACCADB4B3B1C0A4C3. Snapshot conservado fuera de Git.
+
+R2 permanece rechazado y preservado. R3 corrige cierre persistente de streams con autoridad Pending retenida y diagnóstico de cuota de bytes antes de decodificarUTF8. AE independiente repite21casos y7controles previos, contrasta16casos propios y cierres persistentes stdout/stderr/ambos; exige bloqueo de nuevo spawn y recuperación por el mismo helper, sin rescate externo. Casos y expectativas previos no se actualizan a partir de outputs.
+
+El parser distingue enlaces y embeds wiki y preserva el fragmento PDF page; detecta fórmulas y bloques fenced. Callouts personalizados y HTMLinline necesitan contexto del adaptador, conforme a [plan](../refinement/MARKDOWN-PARSER-GATE.md). Los offsets describen cobertura de tokens, no equivalencia automática de texto decoded con bytes fuente. No carga recursos ni ejecuta HTML/código.
+
+Siguiente trabajo: integrar árbol de documento, procedencia, composición y navegación compartidas con recursos tipados; después imágenes, Mermaid, matemáticas gráficas y resolución Obsidian completa. La cuota32KiB del ejecutable experimental no cambia los límites128MiB de fuente del producto. El parser constructor no queda acreditado como cancelable por iterar eventos. RV-301/302/303/305 y S03 siguen abiertos; no render gráfico/visual ni compatibilidad nativaUnix acreditados.
