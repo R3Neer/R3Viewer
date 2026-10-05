@@ -185,3 +185,6 @@ YAML D3 R3 integrado y revisado sin críticas con aceptación funcional parcial 
 
 
 YAML Y08 amplía aceptación independiente con cinco casos lifecycle,depth64/65 yfuente128MiB±1; [límites exactos de evidencia](reviews/S03-YAML-lifecycle-y08.md). Timeout controlado/exclusión sintaxis/Job512MiB/arena64MiB/items1M siguen pendientes, ademásvisual/runtimeUnix. XML G1–G3 ydelimitaciónG4 pasan experimentos yrevisión, pero G4 mantiene observaciónOS archivos/red exigida pendiente; no portarlo ni cambiar ese criterio para aprobar.
+
+
+Refinamiento gráfico PNG: [contrato R2](refinement/GRAFICOS-PNG.md) y [revisión final](reviews/GRAFICOS-contrato-r2.md) sin críticas pendientes, G0 cerrado. G1–G7 y producción permanecen abiertos; no es nuevo sprint ni cierre de RV-201/202/203/205. S03 continúa activo.
