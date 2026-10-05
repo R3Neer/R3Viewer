@@ -191,3 +191,6 @@ Refinamiento gráfico PNG: [contrato R2](refinement/GRAFICOS-PNG.md) y [revisió
 
 
 XML G4 observación de recursos: [evidencia NT acotada](research/S03_XML_OBSERVACION_RECURSOS.md) y [cierre independiente](reviews/S03-XML-gate-recursos.md) cumplen el criterio original para prototipo exacto. G1–G4 experimentales cerrados, integración núcleo A iniciada; G5–G7 y aceptación producto pendientes. No es ETW/kernel ni garantiza ausencia universal de I/O. RV-106 y S03 continúan abiertos.
+
+
+YAML Y09: [aceptación deadline/exclusión/Job](reviews/S03-YAML-lifecycle-y09.md) cierra los casos pendientes de timeoutTUI y exclusión real en dos transiciones bajo fallo. Job observado por handle propio confirma configuración512MiB por proceso; aplicación por estrés/arena total64MiB/items1M/visual/runtimeUnix siguen pendientes. No cerrar RV-106 ni S03.
