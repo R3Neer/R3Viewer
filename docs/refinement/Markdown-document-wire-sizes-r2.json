@@ -1,0 +1,30 @@
+{
+  "record_strides": {
+    "Block": 64,
+    "Domain": 24,
+    "Item": 16,
+    "Run": 64,
+    "Span": 40,
+    "Link": 64,
+    "Resource": 80,
+    "TextRef": 16,
+    "Origin": 16,
+    "Attribute": 24
+  },
+  "header": 32,
+  "init": 56,
+  "source_end": 40,
+  "boot": 8,
+  "begin": 112,
+  "end": 88,
+  "failure": 16,
+  "output_fixed": 304,
+  "source_max": 134217728,
+  "input_max": 134299808,
+  "input_max_with_start": 134299809,
+  "arena_per_actor": 67108864,
+  "fixed_control_reserve": 3145728,
+  "scratch": "16*K+4096",
+  "known_library_allocation_claim": "none; controlled model allocations only; Job512MiB distinct",
+  "scope": "arithmetic receipt only, no Rust runtime/layout or acceptance PASS"
+}
