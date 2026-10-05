@@ -1,0 +1,25 @@
+{
+  "provenance": "R4 delta expectations before new candidate outputs; historical R2/R3 oracles unchanged",
+  "cases": [
+    {
+      "id": "U16R4-A",
+      "expectation": "Host cap/page preflight rejects before any spawn; source preserved"
+    },
+    {
+      "id": "U16R4-B",
+      "expectation": "Early D rejection + writer BrokenPipe -> HostError, never validated Failure; bounded cleanup/Pending without draining unbounded source"
+    },
+    {
+      "id": "U16R4-C",
+      "expectation": "Transport-complete content Failure plus late flush/close error -> sticky HostError after joins, no validated Failure"
+    },
+    {
+      "id": "U16R4-D",
+      "expectation": "Malformed PDF but complete valid transport and clean receipts -> validated content LoadFailure; no semantic completeness/NoText"
+    },
+    {
+      "id": "U16R4-E",
+      "expectation": "Early Failure observed before host SourceEnd/EOF submission, no writer error yet -> EarlyInputRejected latch and HostError; no independent D-consumption ACK claimed"
+    }
+  ]
+}

@@ -273,3 +273,6 @@ PDF texto: [investigación de primarias fijadas](research/PDF_TEXTO_INVESTIGACIO
 
 
 Markdown documento: [arena/wire R2](refinement/MARKDOWN-DOCUMENTO-WIRE.md) y tamaños tienen [revisión independiente sin críticas pendientes de contrato](reviews/Markdown-document-wire-plan-r2.md). Cierra esquemas/ownership/orden/procedencia y framing para implementación después de frontera de integraciónUnicode; source128MiB se conserva, memoria de fuente/biblioteca/arena se distingue explícitamente. Contención efectiva, código/AE y capacidades enriquecidas completas permanecen abiertos.
+
+
+PDF texto: [contrato UTF16 R3+deltaR4](refinement/PDF-TEXTO-UTF16.md) con [revisión independiente final](reviews/PDF-texto-utf16-plan-r4.md) sin críticas pendientes de diseño. U16-P01/02/03 resueltos: tablas/asociaciones exactas, cotas y rechazo temprano con receipts finales. Gate Rust privado iniciado, sin runtime/aceptación ni adopción; SourceUnverified, FAIL históricos y RV-204/G1 abiertos se conservan.

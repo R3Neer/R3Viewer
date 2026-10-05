@@ -1,0 +1,94 @@
+{
+  "provenance": "Supplement R3 before outputs; original 18-case oracle unchanged",
+  "cases": [
+    {
+      "id": "U16R3-A",
+      "native_count": 8,
+      "units": [
+        55357,
+        56832
+      ],
+      "raw_unit_indices": [
+        5,
+        7
+      ],
+      "native_text_indices": {
+        "5": 0,
+        "6": -1,
+        "7": 1
+      },
+      "expect": "ordered association [5,7], excluded6 not part of scalar; valid boxes only5/7"
+    },
+    {
+      "id": "U16R3-B",
+      "units": [
+        55357,
+        56832
+      ],
+      "raw_unit_indices": [
+        7,
+        5
+      ],
+      "native_text_indices": {
+        "7": 0,
+        "5": 1
+      },
+      "expect": "ordered [7,5], no sort/range"
+    },
+    {
+      "id": "U16R3-C",
+      "units": [
+        55357,
+        56832
+      ],
+      "raw_unit_indices": [
+        5,
+        -1
+      ],
+      "expect": "text😀, native0=5/native1=NONE, incomplete mapping and unavailable geometry"
+    },
+    {
+      "id": "U16R3-D",
+      "units": [
+        55357,
+        56832
+      ],
+      "raw_unit_indices": [
+        5,
+        5
+      ],
+      "expect": "duplicate unit classification, scalar mapping invalid, no geometry"
+    },
+    {
+      "id": "U16R3-E",
+      "expect": "Raw mapping -1/out-of-range/native API errors preserved with typed states; not false exact association"
+    },
+    {
+      "id": "U16R3-F",
+      "expect": "InvalidUnicodeDiagnostic S=B=0; any decoded prefix table in this status rejected"
+    },
+    {
+      "id": "U16R3-G",
+      "expect": "UTF16 valid text stays readable under mapping/geometry qualified failure; no exact highlight"
+    },
+    {
+      "id": "U16R3-H",
+      "expect": "Wire max8070600 and cap8388608; lying counts/old-new/capacity failures before publication"
+    },
+    {
+      "id": "U16R3-I",
+      "units_with_terminator": [
+        65,
+        0,
+        66,
+        0
+      ],
+      "return": 4,
+      "expect": "Payload UTF8 A\\u0000B, internal NUL retained"
+    },
+    {
+      "id": "U16R3-J",
+      "expect": "S>U/U>N/B>3U/inconsistent tables/flags/summary/End/EOF/receipts/cancel reject"
+    }
+  ]
+}

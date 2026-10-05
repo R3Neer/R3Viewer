@@ -1,0 +1,12 @@
+{
+  "scope": "Independent arithmetic only; no runtime/allocator/ABI acceptance",
+  "candidate_sha256": "0CDBA3171F996584B6D1D753856E20FC1B3F77DB98319E03AF3A8AFE833A4BEA",
+  "computed": {
+    "model_bound": 8060928,
+    "output_max": 8070600,
+    "host_bound_at_max": 29757440,
+    "worker_bound_at_max": 18677762,
+    "input_max": 1049384
+  },
+  "assertions": "PASS"
+}

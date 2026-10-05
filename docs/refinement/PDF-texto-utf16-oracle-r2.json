@@ -1,0 +1,96 @@
+{
+  "authority": "source-derived expectations frozen before any new candidate outputs; no fixture implementation/runtime yet",
+  "source_commit": "91b9d569b34be4f38eed7b3c49b227356c3aadad",
+  "cases": [
+    {
+      "id": "U16-01",
+      "input": "ASCII BMP",
+      "expectation": "Exact UTF8 and bidirectional units/indices; identity only when proven"
+    },
+    {
+      "id": "U16-02",
+      "input": "Raw returned [65,0,66,0], return4",
+      "expectation": "Payload A\\u0000B; final NUL only is terminator; no strlen/first-NUL truncation"
+    },
+    {
+      "id": "U16-03",
+      "input": "Original CMap maps to NUL/missing mapping",
+      "expectation": "Keep original semantic expectation; actual native exclusion/maperror logged, never guessed replacement or source Complete"
+    },
+    {
+      "id": "U16-04",
+      "input": "Native index0 excluded, then1024 printable units",
+      "expectation": "One GetText page call; no duplication of index1024; full text mapping starts first actual printable"
+    },
+    {
+      "id": "U16-05",
+      "input": "Trailing and internal nonprintable runs",
+      "expectation": "Text units covered once, exclusions separately enumerated; no invented scalar for excluded index"
+    },
+    {
+      "id": "U16-06",
+      "input": "Page all excluded / CountChars0 / loaderror",
+      "expectation": "NativeEmpty vs API error distinguished; neither alone is SourceNoText"
+    },
+    {
+      "id": "U16-07",
+      "input": "Pair D83D DE00 straddles Rust unit1023/1024",
+      "expectation": "One scalar U+1F600, UTF8 length4, UTF16 span[1023,1025), two accredited native indices, no split publication"
+    },
+    {
+      "id": "U16-08",
+      "input": "Pairs at offsets1022/1023/1024 plus start/end",
+      "expectation": "Reuse original expected source; no change to previous GetUnicode failures; identical text/map regardless Rust decode chunk"
+    },
+    {
+      "id": "U16-09",
+      "input": "Isolated high/low, reversed pair, high EOF",
+      "expectation": "InvalidUnicode explicit with unit range; no U+FFFD silently; no final validated artifact"
+    },
+    {
+      "id": "U16-10",
+      "input": "Mappings -1/out-of-range/noninverse/duplicate-text-index",
+      "expectation": "Unknown/excluded recorded; contradiction rejects mapped artifact; no proportion-based mapping"
+    },
+    {
+      "id": "U16-11",
+      "input": "Ligature/CMap one-to-many/generated LF or space",
+      "expectation": "Separate scalar/UTF16/native/glyph domains; generated flagged; original boxes only, no false 1:1 glyph relation"
+    },
+    {
+      "id": "U16-12",
+      "input": "BBox false/NaN/infinity, pair differing/identical boxes",
+      "expectation": "Failure/no-geometry explicit; original individual boxes retained; enclosing bbox labeled derived only"
+    },
+    {
+      "id": "U16-13",
+      "input": "Rotated/cropped page plus outside-crop text",
+      "expectation": "Reuse existing geometry expectations; page user-space originals retained; search scope not silently cropped"
+    },
+    {
+      "id": "U16-14",
+      "input": "Count -1/0/65536/65537",
+      "expectation": "-1 APIerror,0 NativeEmpty;65536 exact admitted;65537 limit before reserve/GetText, never prefix"
+    },
+    {
+      "id": "U16-15",
+      "input": "GetText return0/negative/>N+1/lastunitnonzero",
+      "expectation": "API/contract failure; no artifact; hard native CHECK isolated as WorkerExit"
+    },
+    {
+      "id": "U16-16",
+      "input": "Search crossing pair/Rust chunk, literal NUL search",
+      "expectation": "UTF8 hits complete scalar boundaries; hits point to accredited sets, no raw PDF byte span"
+    },
+    {
+      "id": "U16-17",
+      "input": "Quota exact/+1/reservefail; cancel during native/decode/map/serialize and stale",
+      "expectation": "No validated artifact; bounded capture, final IO receipts, wait/close/join before nextspawn; no rescue for PASS"
+    },
+    {
+      "id": "U16-18",
+      "input": "Original singleTJ32767..65537 vs segmented control",
+      "expectation": "Retain original FAIL/truncation evidence and Unverified; same-layer agreement is not SourceComplete"
+    }
+  ]
+}
