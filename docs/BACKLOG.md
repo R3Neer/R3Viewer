@@ -240,3 +240,5 @@ S03-UNICODE01 abierto: [reproducción privada de cancelación](research/S03_UNIC
 
 
 Gráficos: [diseño IPC R3](refinement/GRAFICOS-IPC.md) revisado sin críticas pendientes tras cerrar ownership externo/duplicación segura y receiptIO final antes de Ready. Wire/subreservas/gate privado e integración por implementar; no cierre de cache/terminal/visual/G2/RV/S03.
+
+PDF Rust privado R1: implementación entregada para revisión y aceptación independientes; PRUST-ROOT01 detectado y reproducido por el coordinador. Una excepción en `child.poll()` dentro del finally del supervisor omite kill/wait/joins/cierres y deja vivo el hijo retenido; el ensayo propio requirió rescate. Candidato congelado SHA256 1E4195C719DECF9F37C7D630F2C9A31A526034327A39FF1008BF67B3D76D387C conservado como rechazado; corrección R2 separada en preparación. Las observaciones de cobertura nativa (astrales y texto truncado por PDFium) mantienen la extracción semántica sin acreditar; no cerrar gate Rust, G1 ni RV-204. Informe intermedio y controles propios fuera de Git, conforme a metodología.
