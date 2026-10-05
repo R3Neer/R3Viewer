@@ -188,3 +188,6 @@ YAML Y08 amplía aceptación independiente con cinco casos lifecycle,depth64/65 
 
 
 Refinamiento gráfico PNG: [contrato R2](refinement/GRAFICOS-PNG.md) y [revisión final](reviews/GRAFICOS-contrato-r2.md) sin críticas pendientes, G0 cerrado. G1–G7 y producción permanecen abiertos; no es nuevo sprint ni cierre de RV-201/202/203/205. S03 continúa activo.
+
+
+XML G4 observación de recursos: [evidencia NT acotada](research/S03_XML_OBSERVACION_RECURSOS.md) y [cierre independiente](reviews/S03-XML-gate-recursos.md) cumplen el criterio original para prototipo exacto. G1–G4 experimentales cerrados, integración núcleo A iniciada; G5–G7 y aceptación producto pendientes. No es ETW/kernel ni garantiza ausencia universal de I/O. RV-106 y S03 continúan abiertos.
