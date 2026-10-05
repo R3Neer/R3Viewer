@@ -182,3 +182,6 @@ XML D4 tiene [detalle técnico del núcleo](sprints/S03-D4-core.md) revisado ind
 
 
 YAML D3 R3 integrado y revisado sin críticas con aceptación funcional parcial Windows:188tests y95spans comprobados. [Evidencia](reviews/S03-YAML-producto.md). Límites máximos/lifecycle/visual/runtimeUnix pendientes; XML en gates experimentales. No completar RV-106 ni S03 ni retirar tareas por este corte.
+
+
+YAML Y08 amplía aceptación independiente con cinco casos lifecycle,depth64/65 yfuente128MiB±1; [límites exactos de evidencia](reviews/S03-YAML-lifecycle-y08.md). Timeout controlado/exclusión sintaxis/Job512MiB/arena64MiB/items1M siguen pendientes, ademásvisual/runtimeUnix. XML G1–G3 ydelimitaciónG4 pasan experimentos yrevisión, pero G4 mantiene observaciónOS archivos/red exigida pendiente; no portarlo ni cambiar ese criterio para aprobar.
