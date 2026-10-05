@@ -261,3 +261,6 @@ Markdown gate privado R3: [evidencia final](research/MARKDOWN_PARSER_GATE.md) y 
 
 
 PDF Rust R4: [estado y evidencia](research/PDF_RUST_GATE.md), revisión y AE independientes sin críticas pendientes en lifecycle/I/O; PRUST-ROOT02 cerrado para este corte. Extracción semántica nativa permanece Unverified con fallos originales conservados; investigar causa/alternativas e integrar producto antes de cerrar RV-204/G1.
+
+
+S03-UNICODE01: [plan operacional](refinement/S03-UNICODE-INTEGRACION.md) revisado [sin críticas pendientes](reviews/S03-unicode-integration-plan-r1.md) sobre rutas actuales; implementación conjunta Source/Nu/inline/legacy/borrowedYAMLXML/preflight autorizada en el incremento activo. Gate verde no sustituye revisión/AE del código integrado; defecto y RV-105/504 permanecen abiertos.
