@@ -267,3 +267,6 @@ S03-UNICODE01: [plan operacional](refinement/S03-UNICODE-INTEGRACION.md) revisad
 
 
 Markdown: [plan operacional de documento enriquecido](refinement/MARKDOWN-DOCUMENTO.md) revisado [sin críticas pendientes a nivel general](reviews/Markdown-document-integration-plan-r1.md). Mantiene imágenes/Mermaid/mathinline+block/Obsidian y separar datosNu/DOM. Wire/ledger/contención efectiva/baseline/resolver/servicios se refinan antes de implementación; no abre otro sprint en paralelo a integraciónUnicode ni cierra prestaciones.
+
+
+PDF texto: [investigación de primarias fijadas](research/PDF_TEXTO_INVESTIGACION.md) identifica truncado32767 en parser antes de extracción y unidadesUTF16 separadas detrás de GetUnicode; [seguimiento](research/PDF_TEXTO_SEGUIMIENTO.md) señala solapamiento posible al concatenar GetText por ventanas nativas. PropuestaUTF16R2 elige una llamada acotada por página y decodeRust cancelable; revisión exige cerrar esquema/strides/ledger y asociaciones exactas de índices (U16-P01/02) antes de construir el nuevo candidato. Investigación no cambia FAIL originales ni acredita SourceComplete, geometría completa o RV-204.
