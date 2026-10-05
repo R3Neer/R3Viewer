@@ -225,3 +225,5 @@ Sixel: [diseño experimental G2](refinement/GRAFICOS-SIXEL-G2.md) revisado sin c
 Gramáticas shell: [prototipo R2](research/S03_SHELL_GRAMMAR_SPIKE.md) con revisión y AE independientes sin críticas acotadas,269intervalos+16estados finales por motor. [Integración propuesta](refinement/GRAMATICAS-SHELL-INTEGRACION.md) revisada; implementación/candidato worker real por completar. No aceptación visual, runtimeUnix ni cierre RV/S03 desde runner privado.
 
 PDF G1: [diseño de carga/ABI Windows](refinement/PDF-G1.md) revisado tras corregir flags a0x900. Candidato ctypes privado ejecutado por autor; revisión y AE independientes pendientes. No adopción del wrapper ni PDF de producto; mantiene RV204/matriz abiertos.
+
+PDF: [candidato privado G1 R2](research/PDF_G1_SPIKE.md) con revisión de código y AE independientes sin críticas en ABI/carga/fixtures pequeñas/cleanup. AE R1 encontró orphan en fallo de setup, corregido y controlado en R2; evidencia previa preservada. Sin adopción Rust/wrapper ni producto/QA; nativecallblocked/UTF16exhaustivo/budgets/Unix y RV204/G1 completo permanecen abiertos.
