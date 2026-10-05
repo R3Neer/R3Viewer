@@ -30,3 +30,6 @@ Fuentes y gate experimental: [investigación YAML](../research/S03_YAML_PARSER_S
 ## Gate y precisión de rangos
 
 [Gate parser R2](../reviews/S03-D3-parser.md) cerrado sin críticas sobre candidato privado; detalle/proyección/integración/AEpendientes. Streamsincontenido=0documentos, noDoc/nullsintético; documento explícitovacío preservaDoc+nullimplícito sinSourceSpan de tokenvalue. Un blockspancontiguo incluyeheader/comentarioinline interno/body/blanklines propias; quotedexcluyetriviaposterior, blockexcluyeindent siguientehermano. Comentarios no se añadenalcooked. URIpercentescapes exactos después expandirhandle, sinpercentdecoding.
+
+
+[Diseño de integración R2](S03-D3-core.md) revisado sin críticas pendientes; implementación autorizada sobre sus gates y aceptación prevista, sin cierre de producto.

@@ -24,3 +24,9 @@ Oracle spans para BOM/Unicode/CRLF/atributos y delimitadores, parser state/Name/
 ## Fuentes primarias
 
 [XML1.0](https://www.w3.org/TR/xml/), [Namespaces1.0](https://www.w3.org/TR/xml-names/), [quick-xml0.42 Event](https://docs.rs/quick-xml/0.42.0/quick_xml/events/enum.Event.html), [Config](https://docs.rs/quick-xml/0.42.0/quick_xml/reader/struct.Config.html). Inspección exacta de src/reader/mod.rs, slice_reader.rs, state.rs, src/parser/dtd.rs y eventos/atributos del crate descargado. Documentación y código respaldan posibilidades; no acreditan R3Viewer ejecutado con XML.
+
+## Namespace: riesgo adicional comprobado
+
+Cuatro casos con NsReader::from_str ejecutados aparte, log .tmp/xml-research/namespace-output.log SHAF898A82F541A6C7FCD8C1B8615DCE0444E0FD57A07D7730CCBA7AD58987022E5. NsReader resuelve xmlns:p="urn:x&amp;y" como URI lexical urn:x&amp;y, aunque normalized_value devuelve urn:x&y. Dos prefixes con urn:x&amp;y/urn:x&#38;y se resuelven a URIs distintas pese normalizarse al mismo valor; una declaración válida del URI reservado xml con referencia numeric final se rechaza por comparación lexical. No usar NsReader como autoridad sin corregir este gate. Código exacto NamespaceResolver::push pasa Attribute.value raw a add, with_checks(false) y deja de consumir ante error. Resolver propio sobre valores ya normalizados bajo presupuesto es candidato para arquitectura; no hay patch ni decisión implementada.
+
+Scope default/rebinding/pending-pop funcionó en el ejemplo observado; no acredita casos restantes ni Name/QName/duplicados expandidos. xmlns por defecto y xmlns:prefix necesitan representación lexical preservada e identidad namespace separada, no inferirla de URI raw. Reader conserva internamente nombres abiertos en Vec/String aun con check_end_names=false; atributos guardan claves/hash para checks. Allocations internas bajo Job, propias bajo ledger, con límite de profundidad antes de continuar y cancel/deadline; detalle por revisar.
