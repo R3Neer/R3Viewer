@@ -1,0 +1,82 @@
+# S03 D1 — núcleo estructurado: propuesta técnica R1
+
+Fecha: 2026-10-05. Diseño para revisión, sin código de producción. Base comprobada: `f8ee1ba22f128ce21cd33784090e2544d03ea553`, árbol limpio; producto idéntico a `4a3fa9d`. Autoridad: `docs/sprints/S03-D1.md`, revisión D1 R2 y metodología del repositorio. JSON/YAML/XML siguen pendientes; esta propuesta concreta únicamente TOML.
+
+## 1. Propiedad y arena
+
+El padre conserva `Arc<String>` de la fuente original inmutable y una única arena estructural publicada, también compartible mediante `Arc`. No convierte TOML en `wire::Value`, no reabre paths y no conserva `toml_edit::Document` en el padre. El hijo recibe bytes de esa fuente y tiene exclusivamente el DOM transitorio durante interpretación/proyección. La arena y su IPC usan tipos propios, sin dependencias de Nu, MessagePack ni sintaxis.
+
+`structure_model.rs` expone `NodeId(u32)`, `EntryId(u32)`, `SourceSpan { start: u32, end: u32 }` y `Structure`. Los campos de construcción son privados; acceso público prestado: raíz, clase semántica, entradas por ordinal, texto completo y ubicación opcional. La estructura contiene vectores planos de nodos, aristas/entradas, declaraciones, componentes de declaraciones y un blob UTF-8 de texto interpretado. No hay un `String`/`Vec` por nodo.
+
+Clases D1: Mapping, Sequence, ArrayOfTables, String, Boolean, Integer, Float y las cuatro categorías de fecha TOML. Integer/Float/fecha conservan su lexema original como autoridad de presentación y búsqueda; los valores nativos del parser sirven para validar/clasificar, no para sustituir fracciones o números por una conversión redondeada. Claves y strings contienen texto interpretado completo. `TextRef` referencia un intervalo de fuente cuando su contenido coincide exactamente, o un intervalo del blob cooked; no es un mapa cooked→raw.
+
+Una entrada identifica una arista por ordinal estable, con nodo valor y nodo clave opcional. La etiqueta no identifica universalmente una entrada. Mapping conserva orden lógico por primera declaración; Sequence/AoT conservan orden de elementos. Las declaraciones físicas forman un índice separado ordenado por posición original, enlazado con las entradas relevantes; no se atribuye contigüidad física al árbol lógico.
+
+Los spans son bytes originales UTF-8 validados: `start <= end <= source.len()` y ambos extremos en límite de scalar. Claves/hojas pueden tener span completo; una tabla implícita/dispersa tiene `None`. Un container solo recibe span si se verifica una construcción contigua completa, por ejemplo array/inline table. El span nativo de una tabla no se acepta como ubicación de todo el container por sí solo. `o` usa el span completo de nodo/celda/declaración seleccionada, nunca offsets cooked sumados al origen.
+
+## 2. Interpretación y límites
+
+`toml_worker.rs` usa `toml_edit = "=0.25.15"`, solo feature `parse`, con `Document<SharedSource>` donde `SharedSource(Arc<String>)` implementa `AsRef<str>`. No usa `into_mut`. Tras parse válido, proyecta a tablas planas; consume el DOM y termina el hijo después de la entrega. No utiliza la profundidad interna 80 de la biblioteca como nuestro límite 64.
+
+Debe comprobar por separado profundidad sintáctica 64 y profundidad lógica 64. La raíz lógica tiene profundidad 0; cada componente de clave/tabla y cada elemento de array aumenta la profundidad del camino del valor. Dotted keys/headers de 65 componentes no pasan aunque el DOM tenga profundidad superficial. Los nodos de inspección de claves no añaden una falsa capa lógica de pares. Límite combinado `nodes + edges <= 1_000_000`, con operaciones aritméticas comprobadas.
+
+El presupuesto persistente padre es 64 MiB: capacidades reales reservadas de todos los vectores, blob cooked e índices, incluida metadata de validación que permanezca. La fuente compartida pertenece al límite de entrada 128 MiB y se declara aparte. Reservas con `try_reserve_exact`, cálculo antes de reservar y comprobación de capacidad efectiva después; si se excede, se descarta la construcción completa. Scratch de validación tiene un límite explícito cargado al presupuesto de construcción; no hashsets, strings o cachés ilimitadas fuera del contador. Buffers de transporte de hasta 64 KiB y un frame máximo 1 MiB tienen cota separada y constante.
+
+Para strings grandes se usa fuente prestada solo si la igualdad exacta del intervalo con el cooked está verificada; el resto va al blob por chunks sin clonar otro string completo. El DOM del hijo todavía puede materializar cooked: su coste queda bajo Job/deadline, no se afirma que eliminar copias del padre elimine ese pico. No se normalizan CRLF ni fracciones de fecha.
+
+El control sintáctico y el índice físico pueden usar la API pública de lexer de `toml_parser = "=1.1.3"` mediante iterador, sin `into_vec`, después de validar el documento con `Document`. El lexer no es autoridad semántica. Escaneo cuenta anidamiento, declaraciones completas y componentes de claves/headers, y los enlaza al DOM por rangos exactos y posición, no por DFS ni búsqueda global por nombre. Debe admitir strings multilínea, comentarios, inline tables y AoT. Si el enlace no puede demostrarse completo, no publica una arena incompleta.
+
+**Gate de fidelidad aún abierto:** el spike acredita orden físico de hojas intercaladas, pero no el índice completo de headers, tablas vacías, dotted keys y AoT. Antes de aceptar esta proyección hay que cerrar fixtures dirigidos de ese enlace y profundidad sintáctica/lógica. Si falla, revisar la proyección con `toml_parser` conservando contrato y corpus; no rebajar D06 ni inventar spans.
+
+## 3. IPC y publicación
+
+`structure_protocol.rs` define protocolo binario propio con magic/version, generación de documento, id de petición y longitudes acotadas. Frames: Init, SourceChunk/SourceEnd, Ack, OutputBegin, lotes Node/Entry/Declaration, CookedChunk, End y Failure. Cada frame máximo 1 MiB, chunks habituales 64 KiB; no un frame con toda la fuente, arena o un string. Transferencia fuente y salida serializada con cola acotada 1 y offsets consecutivos. Los chunks pueden partir UTF-8: validación incremental con carry máximo 3 bytes o validación final acotada; no rechazar un scalar partido por el transporte.
+
+El hijo no interpreta ni carga el parser hasta Init, enviado después de contenerlo. El lector de stdin/lease empieza antes de Init. EOF/truncamiento fatal termina el proceso propio incluso durante parse síncrono. OutputBegin declara counts/bytes antes de reservas; el padre valida cada lote, sus ids, capacidades y acumulados. End no basta: antes de publicar verifica raíz única, conectividad sin ciclos ni alias de padres, rangos de entradas, clases, profundidad, referencias cooked/raw, orden de declaraciones y totales. No conserva payload IPC completo más arena. La validación es iterativa en el controlador, cancelable por lotes, nunca en UI.
+
+Publicación exige resultado completo, EOF limpio sin frames adicionales, salida exitosa del hijo y recogida de hijo/IO. Un fallo o muerte tardía durante construcción produce Unavailable, no un Ready parcial. Bajo el mismo lock se verifica documento vigente, id de petición, revisión del slot y estado antes de retirar una solicitud y antes de publicar. No se hace `status` seguido por `request.take()` en locks separados. Solicitud sin documento vigente/pending válido se rechaza y vuelve a espera, sin loop activo.
+
+## 4. Cliente y exclusión de procesos
+
+API concreta en `structure.rs`:
+
+- `StructureClient::new(global_cancel: Arc<AtomicBool>)` crea controlador de sesión, sin documento ni child.
+- `set_document(source: Arc<String>, generation: u64)` publica solo metadata/coalescencia; sin copia ni IO en UI.
+- `request(generation, request_id, mode: Tui|Inline, syntax_reaped: ReapTicket)` solicita una construcción. Deadline total desde esta solicitud: 2 s TUI/5 s inline, incluidos espera de exclusión, arranque, fuente, parse, proyección, recepción y validación. ACK/progreso no lo renuevan.
+- `cancel_request(generation, request_id) -> ReapTicket` cancela exclusivamente esa petición; el controlador cierra transporte, mata y recoge su hijo propio. No modifica el flag global.
+- `clear_document(generation)`, `poll() -> Option<StructureEvent>` y `cancel()` son no bloqueantes. Eventos completos: Ready con generación/id y `Arc<Structure>`, o Unavailable con razón acotada. Unavailable se conserva por snapshot; ninguna nueva petición de ese snapshot lo reintenta automáticamente.
+- `shutdown()` entrega ownership de join al caller para recoger después de restaurar TTY. Ningún Drop en UI hace join bloqueante.
+
+Solo un documento/petición pending, un resultado y un child propios; reemplazos coalescen al último sin consumir una petición nueva con una revisión antigua. Generación de documento e id de construcción son independientes. Resultado obsoleto se descarta antes de publicación; comprobar obsolescencia/cancelación durante recepción/validación. Ctrl-C usa el flag global y 130. El objetivo visible 100 ms requiere medir intervalos de poll y pérdida de respuesta; kill/wait/join se mide por separado, sin promesa de tiempo absoluto del SO.
+
+Para excluir syntax y parser se añade a `SyntaxClient` `pause_document(generation) -> ReapTicket`; preserva identidad del documento y su Plain latched, pero invalida solicitudes/styles activos. El ticket solo marca Reaped tras cerrar child, wait e IO join; puede marcar Failed. No se reemplaza esta confirmación por `clear_document` sin ACK. El cliente estructural espera ese ticket fuera de UI, dentro del deadline, antes de spawn. No existe ventana con dos hijos de 512 MiB.
+
+Al volver a Fuente durante Building, UI pasa inmediatamente a NotRequested, cancela ese request y muestra fuente; puede navegar/buscar mientras parser se recoge. Solo reactiva syntax con el mismo documento/generación cuando el ticket del parser indica Reaped y la vista sigue en Fuente. Una petición estructural posterior invalida esa reactivación pendiente. Un error de recogida mantiene fuente plana y no autoriza otro hijo. El controlador completa tickets de pausa/cancelación pendientes también en shutdown/error; solo se conservan slots acotados. Joins finales después de TTY.
+
+Windows reutiliza únicamente el mecanismo de `syntax_process.rs`: Job privado no heredable, committed memory 512 MiB, kill-on-close y AssignJob antes de Init, lease temprana y kill/wait del child propio. La extracción mínima a `worker_process.rs` puede incluir `ReapTicket`; no crea framework de ejecutores. La memoria persistente padre 64 MiB y buffers se informan aparte del cap del hijo. Unix permanece gate de containment/runtime por host: no introducir RLIMIT ficticio ni afirmar soporte acreditado; conservar compilación y alcance pendiente explícitos.
+
+## 5. Contrato de aplicación y división de archivos
+
+La arena no conoce Nu. `data.rs` adapta ambos orígenes por préstamos: `kind()`, `entries() -> EntryRef`, `item(ordinal)`, `leaf() -> LeafRef`, `source_location()` y resumen acotado. `EntryRef` presta etiqueta/clave y valor, con dirección ordinal; `LeafRef` presta String/lexema/descriptores completos. No trait objects ni clonación universal de `wire::Value`. Nu mantiene listas de registros y columnas por etiqueta; al resolver una celda, su dirección usa el ordinal real de la entrada de esa fila. Nombres son presentación, no identidad universal.
+
+Las direcciones de estructura son vectores de hasta 64 pasos ordinales con parte Key/Value; no strings clonados de todo el path. Ready instala dinámicamente un `FileNavigator` propietario de `Arc<Structure>` y estados/IDs de navegación; resuelve préstamos solo dentro de cada operación/render. No guarda un préstamo self-referente en App ni adapta a la fuerza el lifetime del Navigator Nu existente. Preparación lazy de la vista visitada, sin materializar layouts de todo el árbol; cursor/scroll/historial contienen metadata acotada. Se conserva el Navigator Nu vigente, incluida unión de columnas por primera aparición, y la fachada común presta Nu o arena durante las operaciones. No se exige una reescritura universal ni se clona payload.
+
+UI mantiene estados independientes Fuente/Estructura. Tab/BackTab solo Press fuera de ayuda/editor; Repeat sigue válido para movimiento. Ready solo cambia el estado si coinciden documento e id. Building cancelado por Tab vuelve a NotRequested y permite petición explícita posterior. Unavailable queda latched. Búsqueda estructural recorre claves/cooked/lexemas completos y devuelve rangos en ese dominio; salto `o` resalta rawspan completo, preservando consulta y último resultado de Fuente. Inline/redir construyen representación tipada completa y acotada antes de escribir; fallo devuelve fuente completa con diagnóstico y código recuperable 0. CLI incompatible conserva error 2, cancelación 130.
+
+Ownership de dos implementadores, sin colisión:
+
+| Propietario | Archivos |
+|---|---|
+| A: núcleo/proceso y bundle | Nuevos `structure_model.rs`, `structure_protocol.rs`, `structure.rs`, `toml_worker.rs`, extracción mínima `worker_process.rs`; `syntax.rs` pause/ticket, `syntax_process.rs` containment, `syntax_worker.rs` y catálogo de lenguajes para bundle TOML. Cargo.toml/lock, lib.rs exports, recursos/manifest y generador privado o build.rs del bundle tras gate de gramática. Tests núcleo/IPC/lifecycle. |
+| B: adaptador/presentación y selección | `data.rs`, `inspect_text.rs`, `search.rs`, `viewer_session.rs`, nuevo `structure_output.rs`, main.rs/CLI/syntax_selection, módulo Nu y tests CLI. Integra entrada privada worker según API A y selección/entrada tipada/preparación completa. Pruebas navegación/búsqueda, alternancia y salida. Sin tocar Cargo/lib ni módulos A. |
+| Root: integración/revisión | Integra entregas, coordina contratos y ejecución de builds, revisión independiente y docs/QA; no tercera implementación simultánea. |
+
+Primero congelar firmas y tipos del modelo, eventos, `ReapTicket`, fachada prestada y funciones de núcleo A y preparación B llamadas por main. B puede avanzar con fixtures de arena validados después del gate de detalle, sin depender de que el hijo esté implementado. A incorpora gramática/worker de sintaxis una vez revisado su asset; no ediciones simultáneas a `syntax.rs`/`syntax_process.rs`/Cargo ni main. Root revisa el glue y los assets exactos; cualquier integración correctiva se hace después de las entregas A/B, sin tercera implementación concurrente.
+
+## 6. Evidencia y gates de aceptación
+
+Fuente primaria exacta instalada: `toml_edit-0.25.15+spec-1.1.0/src/document.rs` y `toml_parser-1.1.3+spec-1.1.0/src/lexer/mod.rs` bajo `.tools/cargo/registry/src`. Evidencia experimental: `.tmp/rv106-spike/EVIDENCE-R1.md` y su `src/main.rs`. Document usa el mismo backing Arc; lexemas preservan precisión no representable por native float/date. Flag cooperativo ignorado durante parse monolítico: 1348 ms en corpus medido; kill/wait/join propio 3 ms en prueba aislada. Corpus 32 MiB: peak allocator 268,437,050 bytes, no RSS ni cap Job acreditado; incluye fuente/cooked/transitorios y todavía no arena. No extrapolar que 128 MiB siempre cabe: límite/deadline implica fallback total legítimo.
+
+Antes de producción: adversario de este detalle y cierre del enlace físico/profundidad. Antes de integrar gramática: corrección/revisión de TOML 1.1, incluidos escapes e/x, tiempo sin segundos, inline table multilínea, continuación con espacios/CRLF y cierres de cuatro comillas. R3 tuvo fallos heredados; no es asset aceptado. Bundle precompilado reproducible con hash/licencia, no YAML parser runtime; elegir asset checked-in o build privado y comprobar compatibilidad del dump con runtime Onig. Ese gate no reduce el contrato D1 ni obliga a retrasar núcleo ya aceptado por otro motivo.
+
+Revisión exacta posterior debe probar límites inclusivos 64/65 y 1M, capacities con strings grandes, splits UTF-8 y frames truncados, fallo/end/exit, cancelación durante fuente/parse/salida, parent-loss antes/después AssignJob, handles no heredados a sibling, bloqueo IO y recogida, carreras Set+Request y Tab cancel/retry, ningún segundo child, fallback completo, Nu sin regresión. Las métricas distinguen latencia visible, reap, allocator/RSS/committed memory. ConPTY/hosts reales y QA visual siguen separados de pruebas unitarias; nada de esta propuesta cierra S03/RV-106.

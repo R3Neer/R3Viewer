@@ -155,3 +155,6 @@ S03 C04–07 implementado/revisado sin críticas con AE funcional parcial Window
 
 
 Corte siguiente en refinamiento: [S03 D1 TOML](sprints/S03-D1.md), plan revisado sin críticas pendientes. Spike de parser/gramática y diseño técnico son gates; sin implementación/aceptación acreditada todavía. RV-106 sigue abierto con los cuatro formatos JSON/YAML/TOML/XML.
+
+
+Actualización D1: diseño core y recurso TOML-R4 aprobados por adversario, implementación A/B iniciada. Gate de viabilidad del índice físico/profundidad cerrado por15pruebas independientes; aceptación y candidato de producto pendientes. Plan/recurso aprobados no cierran RV-106 ni QA.

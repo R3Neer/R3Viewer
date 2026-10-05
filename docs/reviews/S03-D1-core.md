@@ -1,0 +1,17 @@
+# S03 D1 — revisión adversaria de plan técnico core R1
+
+2026-10-05. Leída completa propuesta r3viewer-s03-d1-core-proposal-r1.md, SHA B31D3A028EABF2FC9791F5C2F11910AC7475B939CFB9E94173D0BB9D9531C95E. Revisión del diseño antes de producción, sin implementación ni certificación del spike.
+
+**SIN_CRITICAS_PENDIENTES** dentro del alcance de este plan. No es aceptación del candidato de código.
+
+Propiedad: fuente Arc inmutable y arena final única, sin DOM nativo en padre, sin universal wire::Value. Vectores planos y blob permiten contabilizar capacidades; lexema original conserva autoridad numérica/temporal. FileNavigator dueño de Arc y resolución de préstamos por operación evita self-reference/lifetimes forzados en App. Nu mantiene su Navigator y datos originales; fachada prestada con dirección ordinal real de celda, etiquetas de presentación sin identidad universal.
+
+Recepción: counts/longitudes antes de reservas, frame1MiB/chunk64KiB/cola1; carry UTF8 y validación incremental o final limitada; scratch presupuestado. Validación iterativa de ids/rangos/clases/conectividad/depth/totales antes de publicación, con End+EOF+salida exitosa+reap. No payload completo duplicado ni validación pesada UI. Documento/request/slot comprobados bajo el mismo lock, rechaza resultados obsoletos y evita consumir solicitudes nuevas desde snapshots viejos.
+
+Lifecycle: deadline total incluye espera de exclusión y todas las fases, no renovación por Ack/progreso; cancel por solicitud distinto de flag global. ReapTicket solo completo después de wait/IOjoin, Failed no permite otro child. Pausa sintáctica preserva generación/Plain latched, invalida solicitudes/styles y suspensión no utiliza clear_document sin ACK. Reactivación espera recoger parser y queda invalidada por nueva solicitud estructural. UI vuelve inmediatamente a fuente durante recogida, shutdown entrega join posterior a restaurar TTY. Estas obligaciones, incluidas carreras pause/resume/new request y obsolescencia, deberán probarse en el candidato; su descripción es coherente y suficiente para empezar el detalle acordado.
+
+Gates: índice físico completo por lexer y enlace exacto de headers/tablas vacías/dotted/AoT antes de producción; límites sintáctico/lógico64 independientes del parser nativo80; no se inventan spans para containers dispersos. Si enlace no cumple, cambiar proyección con mismo corpus. Gramática R3 no integrada y corrección independiente previa requerida. Contención Unix no acreditada por crossbuild; Windows reutiliza mecanismo Job/lease con gate de lifecycle, padre64MiB y buffers separados del cap hijo512MiB. Los datos de allocator32MiB y kill/wait del spike no se venden como hardcap o SLA.
+
+División A/B cubre Cargo/lib/bundle/core y UI/main/adaptadores sin colisiones. Root coordina/revisa y hace glue después de entregas, sin tercer implementador concurrente. Congelar firmas/modelo/tickets/eventos/fachada antes de fixtures B conserva dependencias verificables.
+
+No se requiere otro rediseño general ni ejecutar nuevos spikes para aprobar este plan: los gates restantes tienen corpus, resultado exigible y alternativa concreta. Antes del candidato exacto deben concretarse el formato wire propio y rechazo antes de asignación, tamaños de structs/reservas, manejo de tickets al cerrar/reemplazar, resume sin stale spawn, representación inline acotada y enlace físico demostrado. Son las obligaciones ya previstas por R1, no fallos adicionales. No cerrar D01–14/S03/RV106 ni sustituir aceptación independiente/QA visual/matriz por este informe.
