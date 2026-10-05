@@ -57,3 +57,13 @@ Conclusión: un wrapper custom escrito en Nu no cumple por sí solo Q25 para HTT
 ## Spike de registro refinado
 
 2026-10-06: [plan R2 del companion opcional](../refinement/HTML-CONVERSOR-NU-R2.md) y [revisión independiente](../reviews/HTML-conversor-nu-plan-r2.md) SIN_CRITICAS_PENDIENTES para diseño del spike. La propuesta conserva menciones históricas de revisión pendiente; dictamen posterior prevalece. Fuente de fixture25B exacta, SDK upstream0.115.1 y grafo H/C/Nu/plugin en Job propio antes del lanzamiento. Implementación privada iniciada tras esta revisión, todavía sin candidato/runtime aceptado. Sentinel sólo prueba registro: DOM, parser, integración y RV-404 siguen pendientes.
+
+## Spike PluginCommand R1 rechazado por comprobación de éxito
+
+2026-10-06. Candidato privado html-nu-plugin-spike-r1 MANIFEST69EACB781B29635D12FAB4CA80403A2E3A6FBE7E35FF5F4C773C478DF3D6BAA7,14583 registros originales verificados por raíz. Ocho resultados funcionales del autor no equivalen a aceptación; revisión de raíz **NO APROBADO, HNU-R01**.
+
+El bootstrap C comunica el exit de Nu en C_receipt.exit, pero el driver sólo exige exit0 de C y cleanup. Dos controles propios anteriores a outputs (`exit 7`, `print broken; exit 9`) reciben Nu7/9 y driverPASS=true: FAIL. Control positivo Nu0 PASS. Todos Reaped/wait/handles/streams/joins/JobActive0, Pendingfalse y un hilo; no rescate. Cleanup correcto no convierte un comando Nu fallido en éxito.
+
+Informe privado HTML-NU-root-review-r1.md SHA9B8F35DCFCC4AC3BA2C3CBC46C8E724E477C109B57E7AF87E6F2702B919C89E8; oracle027151F196FF13D269A3FA231DE54CAD69ABAD2F6C32F732854772D8F23F2828, resultados2BA58590704F731675F7B0590B5B8C9E3DEA3A2B872911A9C911E0CDB94F0945. Nueve archivos runtime/fuente copiados byteexactos antes/después, no se afirma copia completa del SDK. R1/oráculos/FAIL permanecen intactos.
+
+Corrección R2 debe exigir exit0 de Nu además de todos recibos actuales, incluso con stdout válido seguido de error. Repetir oráculos sin cambiarlos y los positivos de registro, revisar delta antes de recomendar adopción. SDK/bin/parser no se modifican por este error del helper. RV-404, conversión DOM, producto y QA siguen pendientes.
