@@ -1,0 +1,2076 @@
+{
+  "patches": [
+    {
+      "owner": "N01",
+      "lowering": "prioritized internal/ordinary full owner with direct cellpath capture",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N02",
+      "lowering": "fixed AST path expansion/remap keyword1 path2 namespace3|4|5 imports6",
+      "expectedByIndependentOracle": true,
+      "original": "(?<path>(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*[\\w\\- ]+(?:\\.nu)?){0}^\\s*((?:export )?use)\\s+(\"\\g<path>\"|'\\g<path>\\'|(?![\"'])\\g<path>)(?:\\s+([\\w\\-]+|\"[\\w\\- ]+\"|'[^']+'|\\*))?\\s*;?$",
+      "emitted": "^\\s*((?:export )?use)\\s+(\"(?:(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*([\\w\\- ]+)(?:\\.nu)?)\"|'(?:(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*([\\w\\- ]+)(?:\\.nu)?)\\'|(?![\"'])(?:(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*([\\w\\- ]+)(?:\\.nu)?))(?:\\s+([\\w\\-]+|\"[\\w\\- ]+\"|'[^']+'|\\*))?\\s*;?$",
+      "ast": {
+        "sourceAst": [
+          {
+            "kind": "group",
+            "head": "?<path>",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "literal",
+                    "text": "/"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "escape",
+                    "text": "\\\\"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "~"
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[\\/\\\\]"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "escape",
+                    "text": "\\."
+                  },
+                  {
+                    "kind": "escape",
+                    "text": "\\."
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[\\/\\\\]"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[^\\/\\\\]"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "+"
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[\\/\\\\]"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "*"
+              },
+              {
+                "kind": "class",
+                "text": "[\\w\\- ]"
+              },
+              {
+                "kind": "literal",
+                "text": "+"
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "escape",
+                    "text": "\\."
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "n"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "u"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              }
+            ]
+          },
+          {
+            "kind": "literal",
+            "text": "{"
+          },
+          {
+            "kind": "literal",
+            "text": "0"
+          },
+          {
+            "kind": "literal",
+            "text": "}"
+          },
+          {
+            "kind": "literal",
+            "text": "^"
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "*"
+          },
+          {
+            "kind": "group",
+            "head": "",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "literal",
+                    "text": "e"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "x"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "p"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "o"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "r"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "t"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": " "
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "literal",
+                "text": "u"
+              },
+              {
+                "kind": "literal",
+                "text": "s"
+              },
+              {
+                "kind": "literal",
+                "text": "e"
+              }
+            ]
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "+"
+          },
+          {
+            "kind": "group",
+            "head": "",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "literal",
+                "text": "\""
+              },
+              {
+                "kind": "call",
+                "target": "path"
+              },
+              {
+                "kind": "literal",
+                "text": "\""
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "literal",
+                "text": "'"
+              },
+              {
+                "kind": "call",
+                "target": "path"
+              },
+              {
+                "kind": "escape",
+                "text": "\\'"
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "group",
+                "head": "?!",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[\"']"
+                  }
+                ]
+              },
+              {
+                "kind": "call",
+                "target": "path"
+              }
+            ]
+          },
+          {
+            "kind": "group",
+            "head": "?:",
+            "capture": false,
+            "nodes": [
+              {
+                "kind": "escape",
+                "text": "\\s"
+              },
+              {
+                "kind": "literal",
+                "text": "+"
+              },
+              {
+                "kind": "group",
+                "head": "",
+                "capture": true,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[\\w\\-]"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "+"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "\""
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[\\w\\- ]"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "+"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "\""
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "'"
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[^']"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "+"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "'"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "escape",
+                    "text": "\\*"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "literal",
+            "text": "?"
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "*"
+          },
+          {
+            "kind": "literal",
+            "text": ";"
+          },
+          {
+            "kind": "literal",
+            "text": "?"
+          },
+          {
+            "kind": "literal",
+            "text": "$"
+          }
+        ],
+        "loweredAst": [
+          {
+            "kind": "literal",
+            "text": "^"
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "*"
+          },
+          {
+            "kind": "group",
+            "head": "",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "literal",
+                    "text": "e"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "x"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "p"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "o"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "r"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "t"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": " "
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "literal",
+                "text": "u"
+              },
+              {
+                "kind": "literal",
+                "text": "s"
+              },
+              {
+                "kind": "literal",
+                "text": "e"
+              }
+            ]
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "+"
+          },
+          {
+            "kind": "group",
+            "head": "",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "literal",
+                "text": "\""
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "literal",
+                        "text": "/"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\\\"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "~"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "?"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[^\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "*"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "",
+                    "capture": true,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[\\w\\- ]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "n"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "u"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "\""
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "literal",
+                "text": "'"
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "literal",
+                        "text": "/"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\\\"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "~"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "?"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[^\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "*"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "",
+                    "capture": true,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[\\w\\- ]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "n"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "u"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  }
+                ]
+              },
+              {
+                "kind": "escape",
+                "text": "\\'"
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "group",
+                "head": "?!",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[\"']"
+                  }
+                ]
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "literal",
+                        "text": "/"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\\\"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "~"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "?"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[^\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "*"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "",
+                    "capture": true,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[\\w\\- ]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "n"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "u"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "group",
+            "head": "?:",
+            "capture": false,
+            "nodes": [
+              {
+                "kind": "escape",
+                "text": "\\s"
+              },
+              {
+                "kind": "literal",
+                "text": "+"
+              },
+              {
+                "kind": "group",
+                "head": "",
+                "capture": true,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[\\w\\-]"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "+"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "\""
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[\\w\\- ]"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "+"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "\""
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "'"
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[^']"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "+"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "'"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "escape",
+                    "text": "\\*"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "literal",
+            "text": "?"
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "*"
+          },
+          {
+            "kind": "literal",
+            "text": ";"
+          },
+          {
+            "kind": "literal",
+            "text": "?"
+          },
+          {
+            "kind": "literal",
+            "text": "$"
+          }
+        ],
+        "recursive": false,
+        "removedDeclarationCapture": 1,
+        "addedBasenameCaptures": [
+          3,
+          4,
+          5
+        ],
+        "captureRemap": {
+          "old2": 1,
+          "old3": 2,
+          "namespace": [
+            3,
+            4,
+            5
+          ],
+          "old4": 6
+        }
+      },
+      "captureRemap": {
+        "old2": 1,
+        "old3": 2,
+        "namespace": [
+          3,
+          4,
+          5
+        ],
+        "old4": 6
+      }
+    },
+    {
+      "owner": "N03",
+      "lowering": "fixed AST path expansion/remap keyword1 path2 namespace3|4|5 imports6",
+      "expectedByIndependentOracle": true,
+      "original": "(?<path>(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*[\\w\\- ]+(?:\\.nu)?){0}^\\s*((?:export )?use)\\s+(\"\\g<path>\"|'\\g<path>\\'|(?![\"'])\\g<path>)\\s+\\[",
+      "emitted": "^\\s*((?:export )?use)\\s+(\"(?:(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*([\\w\\- ]+)(?:\\.nu)?)\"|'(?:(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*([\\w\\- ]+)(?:\\.nu)?)\\'|(?![\"'])(?:(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*([\\w\\- ]+)(?:\\.nu)?))\\s+\\[",
+      "ast": {
+        "sourceAst": [
+          {
+            "kind": "group",
+            "head": "?<path>",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "literal",
+                    "text": "/"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "escape",
+                    "text": "\\\\"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "~"
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[\\/\\\\]"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "|"
+                  },
+                  {
+                    "kind": "escape",
+                    "text": "\\."
+                  },
+                  {
+                    "kind": "escape",
+                    "text": "\\."
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[\\/\\\\]"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[^\\/\\\\]"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "+"
+                  },
+                  {
+                    "kind": "class",
+                    "text": "[\\/\\\\]"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "*"
+              },
+              {
+                "kind": "class",
+                "text": "[\\w\\- ]"
+              },
+              {
+                "kind": "literal",
+                "text": "+"
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "escape",
+                    "text": "\\."
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "n"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "u"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              }
+            ]
+          },
+          {
+            "kind": "literal",
+            "text": "{"
+          },
+          {
+            "kind": "literal",
+            "text": "0"
+          },
+          {
+            "kind": "literal",
+            "text": "}"
+          },
+          {
+            "kind": "literal",
+            "text": "^"
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "*"
+          },
+          {
+            "kind": "group",
+            "head": "",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "literal",
+                    "text": "e"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "x"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "p"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "o"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "r"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "t"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": " "
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "literal",
+                "text": "u"
+              },
+              {
+                "kind": "literal",
+                "text": "s"
+              },
+              {
+                "kind": "literal",
+                "text": "e"
+              }
+            ]
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "+"
+          },
+          {
+            "kind": "group",
+            "head": "",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "literal",
+                "text": "\""
+              },
+              {
+                "kind": "call",
+                "target": "path"
+              },
+              {
+                "kind": "literal",
+                "text": "\""
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "literal",
+                "text": "'"
+              },
+              {
+                "kind": "call",
+                "target": "path"
+              },
+              {
+                "kind": "escape",
+                "text": "\\'"
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "group",
+                "head": "?!",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[\"']"
+                  }
+                ]
+              },
+              {
+                "kind": "call",
+                "target": "path"
+              }
+            ]
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "+"
+          },
+          {
+            "kind": "escape",
+            "text": "\\["
+          }
+        ],
+        "loweredAst": [
+          {
+            "kind": "literal",
+            "text": "^"
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "*"
+          },
+          {
+            "kind": "group",
+            "head": "",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "literal",
+                    "text": "e"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "x"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "p"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "o"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "r"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "t"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": " "
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "literal",
+                "text": "u"
+              },
+              {
+                "kind": "literal",
+                "text": "s"
+              },
+              {
+                "kind": "literal",
+                "text": "e"
+              }
+            ]
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "+"
+          },
+          {
+            "kind": "group",
+            "head": "",
+            "capture": true,
+            "nodes": [
+              {
+                "kind": "literal",
+                "text": "\""
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "literal",
+                        "text": "/"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\\\"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "~"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "?"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[^\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "*"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "",
+                    "capture": true,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[\\w\\- ]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "n"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "u"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "\""
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "literal",
+                "text": "'"
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "literal",
+                        "text": "/"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\\\"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "~"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "?"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[^\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "*"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "",
+                    "capture": true,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[\\w\\- ]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "n"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "u"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  }
+                ]
+              },
+              {
+                "kind": "escape",
+                "text": "\\'"
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "group",
+                "head": "?!",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[\"']"
+                  }
+                ]
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "literal",
+                        "text": "/"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\\\"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "~"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "|"
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "?"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[^\\/\\\\]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      },
+                      {
+                        "kind": "class",
+                        "text": "[\\/\\\\]"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "*"
+                  },
+                  {
+                    "kind": "group",
+                    "head": "",
+                    "capture": true,
+                    "nodes": [
+                      {
+                        "kind": "class",
+                        "text": "[\\w\\- ]"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "+"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "group",
+                    "head": "?:",
+                    "capture": false,
+                    "nodes": [
+                      {
+                        "kind": "escape",
+                        "text": "\\."
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "n"
+                      },
+                      {
+                        "kind": "literal",
+                        "text": "u"
+                      }
+                    ]
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "?"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "escape",
+            "text": "\\s"
+          },
+          {
+            "kind": "literal",
+            "text": "+"
+          },
+          {
+            "kind": "escape",
+            "text": "\\["
+          }
+        ],
+        "recursive": false,
+        "removedDeclarationCapture": 1,
+        "addedBasenameCaptures": [
+          3,
+          4,
+          5
+        ],
+        "captureRemap": {
+          "old2": 1,
+          "old3": 2,
+          "namespace": [
+            3,
+            4,
+            5
+          ],
+          "old4": 6
+        }
+      },
+      "captureRemap": {
+        "old2": 1,
+        "old3": 2,
+        "namespace": [
+          3,
+          4,
+          5
+        ],
+        "old4": 6
+      }
+    },
+    {
+      "owner": "N04",
+      "lowering": "validate full original head, split keyword/variable/in then iterable/context transition at block opener",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N05",
+      "lowering": "record key double opens enclosing entry, variable key wrapper/content then paren-expression; colon/body transition",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N06",
+      "lowering": "same with single interpolation",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N07",
+      "lowering": "declaration head, optional colon/type context, assignment transition",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N08",
+      "lowering": "assignment prioritizes literal-space operator predicate then plain fallback",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N09",
+      "lowering": "alias head context then operator conditional assignment",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N10",
+      "lowering": "proof-context \\w immediately before = excludes #operators-symbols; base scope retained, value/end unchanged",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N11",
+      "lowering": "zero-width validated command begin; head priority control/ansi/builtin/external/value then args",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N12",
+      "lowering": "builtin trie match owner head only followed by value argument context",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N13",
+      "lowering": "external quoted wrapper, paren context only interpolated capture",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N14",
+      "lowering": "bare external head then same bounded value args",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "SH02",
+      "lowering": "function parameters close arms after-params, colon bracket no variable lookbehind",
+      "expectedByIndependentOracle": true
+    },
+    {
+      "owner": "N05",
+      "revision": "SHP01/SHP02",
+      "sourceBegin": "(\\$\"((?:[^\"\\\\]|\\\\.)*)\")\\s*(:)\\s*",
+      "ownerGate": "complete original zero-width before region",
+      "capture2Gate": "(?=\\$\"((?:[^\"\\\\]|\\\\.)*)(\"\\s*:\\s*.*)$)(\\$\")",
+      "clipEscape": "(?=\\2$)(\")\\s*(:)\\s*",
+      "clipSuffixCapture": 2,
+      "openingCapture": 3,
+      "openingScopes": [
+        "variable.other.nushell"
+      ],
+      "interiorScopes": [
+        "variable.other.nushell",
+        "variable.other.nushell"
+      ],
+      "closingEscapeCaptures": {
+        "1": "variable.other.nushell",
+        "2": "keyword.control.nushell"
+      },
+      "nestedRetokenization": "fixed own context #paren-expression with native escape propagated; no state after capture b"
+    },
+    {
+      "owner": "N06",
+      "revision": "SHP01/SHP02",
+      "sourceBegin": "(\\$'([^']*)')\\s*(:)\\s*",
+      "ownerGate": "complete original zero-width before region",
+      "capture2Gate": "(?=\\$'([^']*)('\\s*:\\s*.*)$)(\\$')",
+      "clipEscape": "(?=\\2$)(')\\s*(:)\\s*",
+      "clipSuffixCapture": 2,
+      "openingCapture": 3,
+      "openingScopes": [
+        "variable.other.nushell"
+      ],
+      "interiorScopes": [
+        "variable.other.nushell",
+        "variable.other.nushell"
+      ],
+      "closingEscapeCaptures": {
+        "1": "variable.other.nushell",
+        "2": "keyword.control.nushell"
+      },
+      "nestedRetokenization": "fixed own context #paren-expression with native escape propagated; no state after capture b"
+    }
+  ],
+  "regions": [
+    {
+      "source": "/repository/string-raw",
+      "region": "region_1",
+      "endLast": false
+    },
+    {
+      "source": "/repository/string-single-quote",
+      "region": "region_2",
+      "endLast": false
+    },
+    {
+      "source": "/repository/string-backtick",
+      "region": "region_3",
+      "endLast": false
+    },
+    {
+      "source": "/repository/string-double-quote",
+      "region": "region_4",
+      "endLast": false
+    },
+    {
+      "source": "/repository/string-interpolated-double",
+      "region": "region_5",
+      "endLast": false
+    },
+    {
+      "source": "/repository/string-interpolated-single",
+      "region": "region_6",
+      "endLast": false
+    },
+    {
+      "source": "/repository/binary",
+      "region": "region_7",
+      "endLast": false
+    },
+    {
+      "source": "/repository/table",
+      "region": "region_8",
+      "endLast": false
+    },
+    {
+      "source": "/repository/types/patterns/0",
+      "region": "region_9",
+      "endLast": false
+    },
+    {
+      "source": "/repository/types/patterns/1",
+      "region": "region_10",
+      "endLast": false
+    },
+    {
+      "source": "/repository/function-parameter/patterns/1",
+      "region": "region_11",
+      "endLast": false
+    },
+    {
+      "source": "/repository/function-parameter/patterns/2",
+      "region": "region_12",
+      "endLast": false
+    },
+    {
+      "source": "/repository/function-parameter/patterns/3",
+      "region": "region_13",
+      "endLast": false
+    },
+    {
+      "source": "/repository/function-parameters",
+      "region": "region_14",
+      "endLast": false
+    },
+    {
+      "source": "/repository/function-body",
+      "region": "region_15",
+      "endLast": false
+    },
+    {
+      "source": "/repository/function",
+      "region": "region_16",
+      "endLast": false
+    },
+    {
+      "source": "/repository/extern",
+      "region": "region_17",
+      "endLast": false
+    },
+    {
+      "source": "/repository/module",
+      "region": "region_18",
+      "endLast": false
+    },
+    {
+      "source": "/repository/use-module/patterns/1",
+      "region": "region_19",
+      "endLast": false
+    },
+    {
+      "source": "/repository/use-module/patterns/3",
+      "region": "region_20",
+      "endLast": false
+    },
+    {
+      "source": "/repository/paren-expression",
+      "region": "region_21",
+      "endLast": false
+    },
+    {
+      "source": "/repository/braced-expression/patterns/0",
+      "region": "region_23",
+      "endLast": false
+    },
+    {
+      "source": "/repository/braced-expression/patterns/1",
+      "region": "region_24",
+      "endLast": false
+    },
+    {
+      "source": "/repository/braced-expression/patterns/3",
+      "region": "region_25",
+      "endLast": false
+    },
+    {
+      "source": "/repository/braced-expression/patterns/5",
+      "region": "region_26",
+      "endLast": false
+    },
+    {
+      "source": "/repository/braced-expression",
+      "region": "region_22",
+      "endLast": false
+    },
+    {
+      "source": "/repository/pre-command",
+      "region": "region_27",
+      "endLast": false
+    }
+  ],
+  "clarifications": [
+    {
+      "id": "N10",
+      "scopeDecision": "upstream exact: base only when word immediately precedes =; not an intentional enhancement",
+      "beforeCandidate": true
+    },
+    {
+      "id": "N04",
+      "captureRemapAfterSixLookaheadGroups": {
+        "1": 7,
+        "2": 8,
+        "3": 9
+      },
+      "clip": "embed escape at last opening brace with literal suffix backref6 anchored to same line"
+    },
+    {
+      "id": "N11",
+      "singleMetaCommand": "persistent outer owner, head/args contexts do not duplicate wrapper"
+    }
+  ]
+}

@@ -1,0 +1,343 @@
+{
+  "patches": [
+    {
+      "kind": "fixed-AST-subroutine-lowering",
+      "source": "/repository/unicodeEscape/patterns/0/match",
+      "original": "`u\\{(?:(?:10)?([0-9a-fA-F]){1,4}|0?\\g<1>{1,5})}",
+      "emitted": "`u\\{(?:(?:10)?([0-9a-fA-F]){1,4}|0?(?:[0-9a-fA-F]){1,5})}",
+      "astCapture1": "Class(hex)",
+      "call1Replacement": "NonCapturing(Class(hex))",
+      "captureRemap": {
+        "1": 1
+      },
+      "recursive": false,
+      "ast": {
+        "sourceAst": [
+          {
+            "kind": "literal",
+            "text": "`"
+          },
+          {
+            "kind": "literal",
+            "text": "u"
+          },
+          {
+            "kind": "escape",
+            "text": "\\{"
+          },
+          {
+            "kind": "group",
+            "head": "?:",
+            "capture": false,
+            "nodes": [
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "literal",
+                    "text": "1"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "0"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "group",
+                "head": "",
+                "capture": true,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[0-9a-fA-F]"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "{"
+              },
+              {
+                "kind": "literal",
+                "text": "1"
+              },
+              {
+                "kind": "literal",
+                "text": ","
+              },
+              {
+                "kind": "literal",
+                "text": "4"
+              },
+              {
+                "kind": "literal",
+                "text": "}"
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "literal",
+                "text": "0"
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "call",
+                "target": "1"
+              },
+              {
+                "kind": "literal",
+                "text": "{"
+              },
+              {
+                "kind": "literal",
+                "text": "1"
+              },
+              {
+                "kind": "literal",
+                "text": ","
+              },
+              {
+                "kind": "literal",
+                "text": "5"
+              },
+              {
+                "kind": "literal",
+                "text": "}"
+              }
+            ]
+          },
+          {
+            "kind": "literal",
+            "text": "}"
+          }
+        ],
+        "loweredAst": [
+          {
+            "kind": "literal",
+            "text": "`"
+          },
+          {
+            "kind": "literal",
+            "text": "u"
+          },
+          {
+            "kind": "escape",
+            "text": "\\{"
+          },
+          {
+            "kind": "group",
+            "head": "?:",
+            "capture": false,
+            "nodes": [
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "literal",
+                    "text": "1"
+                  },
+                  {
+                    "kind": "literal",
+                    "text": "0"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "group",
+                "head": "",
+                "capture": true,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[0-9a-fA-F]"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "{"
+              },
+              {
+                "kind": "literal",
+                "text": "1"
+              },
+              {
+                "kind": "literal",
+                "text": ","
+              },
+              {
+                "kind": "literal",
+                "text": "4"
+              },
+              {
+                "kind": "literal",
+                "text": "}"
+              },
+              {
+                "kind": "literal",
+                "text": "|"
+              },
+              {
+                "kind": "literal",
+                "text": "0"
+              },
+              {
+                "kind": "literal",
+                "text": "?"
+              },
+              {
+                "kind": "group",
+                "head": "?:",
+                "capture": false,
+                "nodes": [
+                  {
+                    "kind": "class",
+                    "text": "[0-9a-fA-F]"
+                  }
+                ]
+              },
+              {
+                "kind": "literal",
+                "text": "{"
+              },
+              {
+                "kind": "literal",
+                "text": "1"
+              },
+              {
+                "kind": "literal",
+                "text": ","
+              },
+              {
+                "kind": "literal",
+                "text": "5"
+              },
+              {
+                "kind": "literal",
+                "text": "}"
+              }
+            ]
+          },
+          {
+            "kind": "literal",
+            "text": "}"
+          }
+        ],
+        "recursive": false,
+        "captureRemap": {
+          "1": 1
+        }
+      }
+    }
+  ],
+  "regions": [
+    {
+      "source": "/patterns/0",
+      "region": "region_1",
+      "endLast": false
+    },
+    {
+      "source": "/patterns/14",
+      "region": "region_2",
+      "endLast": true
+    },
+    {
+      "source": "/patterns/15",
+      "region": "region_3",
+      "endLast": false
+    },
+    {
+      "source": "/patterns/16",
+      "region": "region_4",
+      "endLast": false
+    },
+    {
+      "source": "/patterns/18",
+      "region": "region_5",
+      "endLast": false
+    },
+    {
+      "source": "/patterns/19",
+      "region": "region_6",
+      "endLast": false
+    },
+    {
+      "source": "/patterns/23",
+      "region": "region_7",
+      "endLast": false
+    },
+    {
+      "source": "/repository/commentLine",
+      "region": "region_8",
+      "endLast": false
+    },
+    {
+      "source": "/repository/attribute/patterns/0",
+      "region": "region_10",
+      "endLast": false
+    },
+    {
+      "source": "/repository/attribute",
+      "region": "region_9",
+      "endLast": false
+    },
+    {
+      "source": "/repository/function",
+      "region": "region_11",
+      "endLast": false
+    },
+    {
+      "source": "/repository/subexpression",
+      "region": "region_12",
+      "endLast": false
+    },
+    {
+      "source": "/repository/interpolation",
+      "region": "region_13",
+      "endLast": false
+    },
+    {
+      "source": "/repository/scriptblock",
+      "region": "region_14",
+      "endLast": false
+    },
+    {
+      "source": "/repository/type",
+      "region": "region_15",
+      "endLast": false
+    },
+    {
+      "source": "/repository/RequiresDirective",
+      "region": "region_16",
+      "endLast": false
+    },
+    {
+      "source": "/repository/hashtable",
+      "region": "region_17",
+      "endLast": false
+    },
+    {
+      "source": "/repository/doubleQuotedString",
+      "region": "region_18",
+      "endLast": true
+    }
+  ]
+}

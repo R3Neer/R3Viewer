@@ -1,0 +1,752 @@
+name: Nushell
+scope: source.nushell
+file_extensions:
+- nu
+contexts:
+  main:
+  - meta_include_prototype: false
+  - include: define-variable
+  - include: define-alias
+  - include: function
+  - include: extern
+  - include: module
+  - include: use-module
+  - include: expression
+  - include: comment
+  string:
+  - meta_include_prototype: false
+  - include: string-single-quote
+  - include: string-backtick
+  - include: string-double-quote
+  - include: string-interpolated-double
+  - include: string-interpolated-single
+  - include: string-raw
+  - include: string-bare
+  string-escape:
+  - meta_include_prototype: false
+  - match: \\(?:[abefnrt\\'"/(){}$^#|~]|u\{[0-9a-fA-F]{1,6}\}|u[0-9a-fA-F]{4})
+    scope: constant.character.escape.nushell
+  string-bare:
+  - meta_include_prototype: false
+  - match: '[^$\[{("'',|#\s|;][^\[\]{}()"''\s,|;]*'
+    scope: string.bare.nushell
+  region_1:
+  - meta_include_prototype: false
+  - meta_scope: string.raw.nushell
+  - match: '''\1'
+    pop: true
+    captures:
+      0: punctuation.definition.string.end.nushell
+  string-raw:
+  - meta_include_prototype: false
+  - match: r(#+)'
+    push: region_1
+    captures:
+      0: punctuation.definition.string.begin.nushell
+  region_2:
+  - meta_include_prototype: false
+  - meta_scope: string.quoted.single.nushell
+  - match: ''''
+    pop: true
+    captures:
+      0: punctuation.definition.string.end.nushell
+  string-single-quote:
+  - meta_include_prototype: false
+  - match: ''''
+    push: region_2
+    captures:
+      0: punctuation.definition.string.begin.nushell
+  region_3:
+  - meta_include_prototype: false
+  - meta_scope: string.quoted.single.nushell
+  - match: '`'
+    pop: true
+    captures:
+      0: punctuation.definition.string.end.nushell
+  string-backtick:
+  - meta_include_prototype: false
+  - match: '`'
+    push: region_3
+    captures:
+      0: punctuation.definition.string.begin.nushell
+  region_4:
+  - meta_include_prototype: false
+  - meta_scope: string.quoted.double.nushell
+  - match: '"'
+    pop: true
+    captures:
+      0: punctuation.definition.string.end.nushell
+  - match: \w+
+  - include: string-escape
+  string-double-quote:
+  - meta_include_prototype: false
+  - match: '"'
+    push: region_4
+    captures:
+      0: punctuation.definition.string.begin.nushell
+  region_5:
+  - meta_include_prototype: false
+  - meta_scope: string.interpolated.double.nushell
+  - match: '"'
+    pop: true
+    captures:
+      0: punctuation.definition.string.end.nushell
+  - match: \\[()]
+    scope: constant.character.escape.nushell
+  - include: string-escape
+  - include: paren-expression
+  string-interpolated-double:
+  - meta_include_prototype: false
+  - match: \$"
+    push: region_5
+    captures:
+      0: punctuation.definition.string.begin.nushell
+  region_6:
+  - meta_include_prototype: false
+  - meta_scope: string.interpolated.single.nushell
+  - match: ''''
+    pop: true
+    captures:
+      0: punctuation.definition.string.end.nushell
+  - include: paren-expression
+  string-interpolated-single:
+  - meta_include_prototype: false
+  - match: \$'
+    push: region_6
+    captures:
+      0: punctuation.definition.string.begin.nushell
+  control-keywords:
+  - meta_include_prototype: false
+  - match: '(?<![0-9a-zA-Z_\-.\/:\\])(?:break|continue|else(?: if)?|for|if|loop|mut|return|try|while)(?![0-9a-zA-Z_\-.\/:\\])'
+    scope: keyword.control.nushell
+  comment:
+  - meta_include_prototype: false
+  - match: (#.*)$
+    scope: comment.nushell
+  keyword:
+  - meta_include_prototype: false
+  - match: (?:def(?:-env)?)
+    scope: keyword.other.nushell
+  parameters:
+  - meta_include_prototype: false
+  - match: (?<=\s)(-{1,2})[a-zA-Z_][\w-]*
+    scope: variable.parameter.nushell
+    captures:
+      1: keyword.control.nushell
+  variables:
+  - meta_include_prototype: false
+  - match: (\$(?:nu|env|in)\b)((?:\.(?:[\w-]+|"[\w\- ]+"))*)
+    captures:
+      1: variable.language.nushell
+      2: variable.other.nushell
+  - match: (\$[a-zA-Z0-9_]+)((?:\.(?:[\w-]+|"[\w\- ]+"))*)
+    captures:
+      1: variable.other.nushell
+      2: variable.other.nushell
+  variable-fields:
+  - meta_include_prototype: false
+  - match: (?<=\)|\}|\])(?:\.(?:[\w-]+|"[\w\- ]+"))+
+    scope: variable.other.nushell
+  internal-variables:
+  - meta_include_prototype: false
+  - match: \$(?:nu|env|in)\b
+    scope: variable.language.nushell
+  datetime:
+  - meta_include_prototype: false
+  - match: \b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:[+-]\d{2}:\d{2}|Z)?)?\b
+    scope: constant.numeric.nushell
+  numbers-hexa:
+  - meta_include_prototype: false
+  - match: (?<![\w-])_*+0_*+x_*+[0-9a-fA-F][0-9a-fA-F_]*+(?![\w.])
+    scope: constant.numeric.nushell
+  numbers-octal:
+  - meta_include_prototype: false
+  - match: (?<![\w-])_*+0_*+o_*+[0-7][0-7_]*+(?![\w.])
+    scope: constant.numeric.nushell
+  numbers-binary:
+  - meta_include_prototype: false
+  - match: (?<![\w-])_*+0_*+b_*+[01][01_]*+(?![\w.])
+    scope: constant.numeric.nushell
+  numbers:
+  - meta_include_prototype: false
+  - match: (?<![\w-])_*+[-+]?_*+(?:(?i:NaN|infinity|inf)_*+|(?:\d[\d_]*+\.?|\._*+\d)[\d_]*+(?i:E_*+[-+]?_*+\d[\d_]*+)?)(?i:ns|us|µs|ms|sec|min|hr|day|wk|b|kb|mb|gb|tb|pb|eb|kib|mib|gib|tib|pib|eib)?(?:(?![\w.])|(?=\.\.))
+    scope: constant.numeric.nushell
+  region_7:
+  - meta_include_prototype: false
+  - meta_scope: constant.binary.nushell
+  - match: \]
+    pop: true
+    captures:
+      0: meta.brace.square.begin.nushell
+  - match: '[0-9a-fA-F]+'
+    scope: constant.numeric.nushell
+  binary:
+  - meta_include_prototype: false
+  - match: \b(0[xbo])(\[)
+    push: region_7
+    captures:
+      1: constant.numeric.nushell
+      2: meta.brace.square.begin.nushell
+  constant-keywords:
+  - meta_include_prototype: false
+  - match: \b(?:true|false|null)\b
+    scope: constant.language.nushell
+  constant-value:
+  - meta_include_prototype: false
+  - include: constant-keywords
+  - include: datetime
+  - include: binary
+  - include: numbers
+  - include: numbers-hexa
+  - include: numbers-octal
+  - include: numbers-binary
+  spread:
+  - meta_include_prototype: false
+  - match: \.\.\.(?=[^\s\]}])
+    scope: keyword.control.nushell
+  ranges:
+  - meta_include_prototype: false
+  - match: \.\.<?
+    scope: keyword.control.nushell
+  operators-word:
+  - meta_include_prototype: false
+  - match: (?<= |\()(?:mod|in|not-(?:in|like|has)|not|and|or|xor|bit-(?:or|and|xor|shl|shr)|starts-with|ends-with|like|has)(?= |\)|$)
+    scope: keyword.control.nushell
+  operators-symbols:
+  - meta_include_prototype: false
+  - match: (?<= )(?:(?:\+|\-|\*|\/)=?|\/\/|\*\*|!=|[<>=]=?|[!=]~|\+\+=?)(?= |$)
+    scope: keyword.control.nushell
+  operators-redirection:
+  - meta_include_prototype: false
+  - match: (?<= )(?:o\+e|e\+o|out\+err|err\+out|o|e|out|err)(?:>>?|>\|)(?= |$)
+    scope: keyword.control.nushell
+  operators:
+  - meta_include_prototype: false
+  - include: operators-word
+  - include: operators-redirection
+  - include: operators-symbols
+  - include: ranges
+  region_8:
+  - meta_include_prototype: false
+  - meta_scope: meta.table.nushell
+  - match: \]
+    pop: true
+    captures:
+      0: meta.brace.square.end.nushell
+  - include: spread
+  - include: value
+  - match: ','
+    scope: punctuation.separator.nushell
+  table:
+  - meta_include_prototype: false
+  - match: \[
+    push: region_8
+    captures:
+      0: meta.brace.square.begin.nushell
+  region_9:
+  - meta_include_prototype: false
+  - meta_scope: meta.list.nushell
+  - match: '>'
+    pop: true
+  - include: types
+  region_10:
+  - meta_include_prototype: false
+  - meta_scope: meta.record.nushell
+  - match: '>'
+    pop: true
+  - match: ([\w\-]+|"[\w\- ]+"|'[^']+')\s*:\s*
+    captures:
+      1: variable.parameter.nushell
+  - include: types
+  types:
+  - meta_include_prototype: false
+  - match: \b(list|oneof)\s*<
+    push: region_9
+    captures:
+      1: entity.name.type.nushell
+  - match: \b(record|table)\s*<
+    push: region_10
+    captures:
+      1: entity.name.type.nushell
+  - match: \b(\w+)\b
+    scope: entity.name.type.nushell
+  region_11:
+  - meta_include_prototype: false
+  - match: (?=(?:\s+(?:-{0,2}|\.{3})[\w-]+)|(?:\s*(?:,|\]|\||@|=|#|$)))
+    pop: true
+  - include: types
+  region_12:
+  - meta_include_prototype: false
+  - match: (?<="|')
+    pop: true
+  - include: string
+  region_13:
+  - meta_include_prototype: false
+  - meta_scope: default.value.nushell
+  - match: (?=(?:\s+-{0,2}[\w-]+)|(?:\s*(?:,|\]|\||#|$)))
+    pop: true
+  - include: value
+  function-parameter:
+  - meta_include_prototype: false
+  - match: (-{0,2}|\.{3})[\w-]+(?:\((-[\w?])\))?
+    scope: variable.parameter.nushell
+    captures:
+      1: keyword.control.nushell
+  - match: \??:\s*
+    push: region_11
+  - match: '@(?="|'')'
+    push: region_12
+  - match: =\s*
+    push: region_13
+  region_14:
+  - meta_include_prototype: false
+  - meta_scope: meta.function.parameters.nushell
+  - match: \]
+    captures:
+      0: meta.brace.square.end.nushell
+    set: nu-after-params
+  - include: function-parameter
+  - include: comment
+  function-parameters:
+  - meta_include_prototype: false
+  - match: \[
+    push: region_14
+    captures:
+      0: meta.brace.square.begin.nushell
+  function-multiple-inout:
+  - meta_include_prototype: false
+  function-inout:
+  - meta_include_prototype: false
+  - include: types
+  - match: ->
+    scope: keyword.operator.nushell
+  - include: function-multiple-inout
+  region_15:
+  - meta_include_prototype: false
+  - meta_scope: meta.function.body.nushell
+  - match: \}
+    pop: true
+    captures:
+      0: punctuation.definition.function.end.nushell
+  - include: main
+  function-body:
+  - meta_include_prototype: false
+  - match: \{
+    push: region_15
+    captures:
+      0: punctuation.definition.function.begin.nushell
+  region_16:
+  - meta_include_prototype: false
+  - match: (?<=\})
+    pop: true
+  - include: function-parameters
+  - include: function-body
+  - include: function-inout
+  function:
+  - meta_include_prototype: false
+  - match: ((?:export\s+)?def)(?:\s+((?:--\w+(?:\s+--\w+)*)))?\s+([\w\-]+|"[\w\- ]+"|'[\w\- ]+'|`[\w\- ]+`)(?:\s+((?:--\w+(?:\s+--\w+)*)))?
+    push: region_16
+    captures:
+      1: storage.type.function.nushell
+      2: storage.modifier.nushell
+      3: entity.name.function.nushell
+      4: storage.modifier.nushell
+  region_17:
+  - meta_include_prototype: false
+  - match: (?<=\])
+    pop: true
+    captures:
+      0: punctuation.definition.function.end.nushell
+  - include: function-parameters
+  extern:
+  - meta_include_prototype: false
+  - match: ((?:export\s+)?extern)\s+([\w\-]+|"[\w\- ]+")
+    push: region_17
+    captures:
+      1: storage.type.function.nushell
+      2: entity.name.function.nushell
+  region_18:
+  - meta_include_prototype: false
+  - meta_scope: meta.module.nushell
+  - match: \}
+    pop: true
+    captures:
+      0: punctuation.definition.module.end.nushell
+  - include: main
+  module:
+  - meta_include_prototype: false
+  - match: ((?:export\s+)?module)\s+([\w\-]+)\s*\{
+    push: region_18
+    captures:
+      1: storage.type.module.nushell
+      2: entity.name.namespace.nushell
+  region_19:
+  - meta_include_prototype: false
+  - match: (\])\s*;?\s*$
+    pop: true
+    captures:
+      1: meta.brace.square.end.nushell
+  - match: ([\w\-]+|"[\w\- ]+"|'[\w\- ]+'|\*),?
+    captures:
+      1: keyword.other.nushell
+  - include: comment
+  region_20:
+  - meta_include_prototype: false
+  - match: (\])\s*;?\s*$
+    pop: true
+    captures:
+      1: meta.brace.square.end.nushell
+  - match: ([\w\-]+|"[\w\- ]+"|'[\w\- ]+'|\*),?
+    captures:
+      0: keyword.other.nushell
+  - include: comment
+  use-module:
+  - meta_include_prototype: false
+  - match: ^\s*((?:export )?use)\s+([\w\-]+|"[\w\- ]+"|'[\w\- ]+')(?:\s+([\w\-]+|"[\w\- ]+"|'[\w\- ]+'|\*))?\s*;?$
+    captures:
+      1: keyword.control.import.nushell
+      2: entity.name.namespace.nushell
+      3: keyword.other.nushell
+  - match: ^\s*((?:export )?use)\s+([\w\-]+|"[\w\- ]+"|'[\w\- ]+')\s*\[
+    push: region_19
+    captures:
+      1: keyword.control.import.nushell
+      2: entity.name.namespace.nushell
+  - match: ^\s*((?:export )?use)\s+("(?:(?:/|\\|~[\/\\]|\.\.?[\/\\])?(?:[^\/\\]+[\/\\])*([\w\- ]+)(?:\.nu)?)"|'(?:(?:/|\\|~[\/\\]|\.\.?[\/\\])?(?:[^\/\\]+[\/\\])*([\w\- ]+)(?:\.nu)?)\'|(?!["'])(?:(?:/|\\|~[\/\\]|\.\.?[\/\\])?(?:[^\/\\]+[\/\\])*([\w\-
+      ]+)(?:\.nu)?))(?:\s+([\w\-]+|"[\w\- ]+"|'[^']+'|\*))?\s*;?$
+    captures:
+      1: keyword.control.import.nushell
+      2: string.bare.nushell
+      3: entity.name.namespace.nushell
+      4: entity.name.namespace.nushell
+      5: entity.name.namespace.nushell
+      6: keyword.other.nushell
+  - match: ^\s*((?:export )?use)\s+("(?:(?:/|\\|~[\/\\]|\.\.?[\/\\])?(?:[^\/\\]+[\/\\])*([\w\- ]+)(?:\.nu)?)"|'(?:(?:/|\\|~[\/\\]|\.\.?[\/\\])?(?:[^\/\\]+[\/\\])*([\w\- ]+)(?:\.nu)?)\'|(?!["'])(?:(?:/|\\|~[\/\\]|\.\.?[\/\\])?(?:[^\/\\]+[\/\\])*([\w\-
+      ]+)(?:\.nu)?))\s+\[
+    push: region_20
+    captures:
+      1: keyword.control.import.nushell
+      2: string.bare.nushell
+      3: entity.name.namespace.nushell
+      4: entity.name.namespace.nushell
+      5: entity.name.namespace.nushell
+  - match: ^\s*(?:export )?use\b
+    captures:
+      0: keyword.control.import.nushell
+  for-loop:
+  - meta_include_prototype: false
+  - match: (?=\b(for)\s+(\$?\w+)\s+(in)\s+(.+)\s*(\{))
+    push: nu-for-owner
+  region_21:
+  - meta_include_prototype: false
+  - meta_scope: meta.expression.parenthesis.nushell
+  - match: \)
+    pop: true
+    captures:
+      0: meta.brace.round.end.nushell
+  - include: expression
+  paren-expression:
+  - meta_include_prototype: false
+  - match: \(
+    push: region_21
+    captures:
+      0: meta.brace.round.begin.nushell
+  region_23:
+  - meta_include_prototype: false
+  - meta_scope: meta.closure.parameters.nushell
+  - match: \|
+    pop: true
+  - include: function-parameter
+  region_24:
+  - meta_include_prototype: false
+  - meta_scope: meta.record-entry.nushell
+  - match: (?=[,}])|(?<=[^\s:])(?=\s)
+    pop: true
+  - include: record-value
+  region_25:
+  - meta_include_prototype: false
+  - meta_scope: meta.record-entry.nushell
+  - match: (?=[,}])|(?<=[^\s:])(?=\s)
+    pop: true
+  - include: record-value
+  region_26:
+  - meta_include_prototype: false
+  - meta_scope: meta.record-entry.nushell
+  - match: (?=[,}])|(?<=[^\s:])(?=\s)
+    pop: true
+  - include: record-value
+  region_22:
+  - meta_include_prototype: false
+  - meta_scope: meta.expression.braced.nushell
+  - match: \}
+    pop: true
+    captures:
+      0: punctuation.section.block.end.bracket.curly.nushell
+  - match: (?<=\{)\s*\|
+    push: region_23
+  - match: (?!\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})([^\s:,|;(){}\["'$#][^\s:,|;(){}\["']*)\s*(:)\s*
+    push: region_24
+    captures:
+      1: string.bare.nushell variable.other.nushell
+      2: keyword.control.nushell
+  - match: ("(?:[^"\\]|\\.)*")\s*(:)\s*
+    push: region_25
+    captures:
+      1: string.quoted.double.nushell variable.other.nushell
+      2: keyword.control.nushell
+  - match: ('[^']*')\s*(:)\s*
+    push: region_26
+    captures:
+      1: string.quoted.single.nushell variable.other.nushell
+      2: keyword.control.nushell
+  - match: (?=(\$"((?:[^"\\]|\\.)*)")\s*(:)\s*)
+    push: nu-record-entry-dq
+  - match: (?=(\$'([^']*)')\s*(:)\s*)
+    push: nu-record-entry-sq
+  - include: spread
+  - include: main
+  braced-expression:
+  - meta_include_prototype: false
+  - match: \{
+    push: region_22
+    captures:
+      0: punctuation.section.block.begin.bracket.curly.nushell
+  define-variable:
+  - meta_include_prototype: false
+  - match: \b(let|mut|(?:export\s+)?const)\s+(\w+)(?=(?:\s*:\s*[^=]+?)?\s+=)
+    captures:
+      1: keyword.other.nushell
+      2: variable.other.nushell
+    push: nu-decl-head
+  define-alias:
+  - meta_include_prototype: false
+  - match: ((?:export )?alias)\s+([\w\-!]+)\s*(?==)
+    captures:
+      1: storage.type.alias.nushell
+      2: entity.name.function.nushell
+    push: nu-alias-assignment
+  region_27:
+  - meta_include_prototype: false
+  - match: (?=\s+)
+    pop: true
+  - include: value
+  pre-command:
+  - meta_include_prototype: false
+  - match: (\w+)(=)
+    push: region_27
+    captures:
+      1: variable.other.nushell
+  command:
+  - meta_include_prototype: false
+  - match: '(?=(?<!\w)(?:(\^)|(?![0-9]|\$))([\w.!]+(?:(?: (?!-)[\w\-.!]+(?:(?= |\))|$)|[\w\-.!]+))*|(?<=\^)\$?(?:"[^"]+"|''[^'']+'')))'
+    push: nu-command-owner
+  expression:
+  - meta_include_prototype: false
+  - include: pre-command
+  - include: for-loop
+  - include: operators
+  - match: \|
+    scope: keyword.control.nushell
+  - include: control-keywords
+  - include: constant-value
+  - include: string-raw
+  - include: command
+  - include: value
+  value:
+  - meta_include_prototype: false
+  - include: variables
+  - include: variable-fields
+  - include: control-keywords
+  - include: constant-value
+  - include: table
+  - include: operators
+  - include: paren-expression
+  - include: braced-expression
+  - include: string
+  - include: comment
+  record-value:
+  - meta_include_prototype: false
+  - include: variables
+  - include: variable-fields
+  - include: constant-value
+  - include: table
+  - include: spread
+  - include: ranges
+  - include: paren-expression
+  - include: braced-expression
+  - include: string
+  - include: comment
+  nu-for-owner:
+  - meta_include_prototype: false
+  - meta_scope: meta.for-loop.nushell
+  - match: (?=\b(for)\s+(\$?\w+)\s+(in)\s+(.+)\s*(\{)(.*)$)\b(for)\s+(\$?\w+)\s+(in)\s+
+    captures:
+      7: keyword.other.nushell
+      8: variable.other.nushell
+      9: keyword.other.nushell
+    embed: scope:source.nushell#value
+    escape: \{(?=\6$)
+    escape_captures:
+      0: punctuation.section.block.begin.bracket.curly.nushell
+  - match: \}
+    scope: punctuation.section.block.end.bracket.curly.nushell
+    pop: true
+  - include: main
+  nu-record-key-interior-dq:
+  - meta_include_prototype: false
+  - include: paren-expression
+  nu-record-entry-dq:
+  - meta_include_prototype: false
+  - meta_scope: meta.record-entry.nushell
+  - match: (?=\$"((?:[^"\\]|\\.)*)("\s*:\s*.*)$)(\$")
+    captures:
+      3: variable.other.nushell
+    embed: scope:source.nushell#nu-record-key-interior-dq
+    embed_scope: variable.other.nushell variable.other.nushell
+    escape: (?=\2$)(")\s*(:)\s*
+    escape_captures:
+      1: variable.other.nushell
+      2: keyword.control.nushell
+  - match: (?=[,}])|(?<=[^\s:])(?=\s)
+    pop: true
+  - include: record-value
+  nu-record-key-interior-sq:
+  - meta_include_prototype: false
+  - include: paren-expression
+  nu-record-entry-sq:
+  - meta_include_prototype: false
+  - meta_scope: meta.record-entry.nushell
+  - match: (?=\$'([^']*)('\s*:\s*.*)$)(\$')
+    captures:
+      3: variable.other.nushell
+    embed: scope:source.nushell#nu-record-key-interior-sq
+    embed_scope: variable.other.nushell variable.other.nushell
+    escape: (?=\2$)(')\s*(:)\s*
+    escape_captures:
+      1: variable.other.nushell
+      2: keyword.control.nushell
+  - match: (?=[,}])|(?<=[^\s:])(?=\s)
+    pop: true
+  - include: record-value
+  nu-decl-head:
+  - meta_include_prototype: false
+  - match: \s*(:)\s*
+    captures:
+      1: punctuation.separator.nushell
+    set: nu-decl-type
+  - &id001
+    match: (?<= )=(?= |$)
+    scope: keyword.control.nushell
+    pop: true
+  - &id002
+    match: '='
+    pop: true
+  nu-decl-type:
+  - meta_include_prototype: false
+  - *id001
+  - *id002
+  - include: types
+  nu-alias-assignment:
+  - meta_include_prototype: false
+  - *id001
+  - *id002
+  nu-command-external-dq:
+  - meta_include_prototype: false
+  - meta_scope: entity.name.type.external.nushell
+  - match: '"'
+    set: nu-command-args
+  - include: paren-expression
+  nu-command-external-sq:
+  - meta_include_prototype: false
+  - meta_scope: entity.name.type.external.nushell
+  - match: ''''
+    set: nu-command-args
+  - include: paren-expression
+  nu-command-owner:
+  - meta_include_prototype: false
+  - meta_scope: meta.command.nushell
+  - &id003
+    match: (?=\||\)|\}|;)|$
+    pop: true
+  - match: ''
+    push: nu-command-head
+  nu-command-head:
+  - meta_include_prototype: false
+  - *id003
+  - match: \^
+    scope: keyword.operator.nushell
+  - include: control-keywords
+  - match: (?:ansi|char) \w+
+    captures:
+      0: keyword.other.builtin.nushell
+    set: nu-command-args
+  - match: '(a(?:bbr(?: list)?|l(?:ias|l)|n(?:si(?: (?:gradient|link|strip))?|y)|ppend|st|ttr(?: (?:c(?:ategory|omplete(?: external)?)|deprecated|example|interactive|search-terms))?)|b(?:its(?: (?:and|not|or|ro(?:l|r)|sh(?:l|r)|xor))?|reak|ytes(?:
+      (?:a(?:dd|t)|build|collect|ends-with|index-of|length|re(?:move|place|verse)|s(?:plit|tarts-with)))?)|c(?:al|d|h(?:ar|unk(?:-by|s))|l(?:ear|ip(?: (?:copy|paste))?)|o(?:l(?:lect|umns)|m(?:binations|mandline(?:
+      (?:complete|edit|get-cursor|set-(?:cursor|prompt)))?|p(?:act|lete))|n(?:fig(?: (?:env|flatten|nu|reset|use-colors))?|st|tinue))|p)|d(?:ate(?: (?:f(?:ormat|rom-human)|humanize|list-timezone|now|to-timezone))?|e(?:bug(?:
+      (?:e(?:nv|xperimental-options)|info|profile))?|code(?: (?:base(?:32(?:hex)?|64)|hex))?|f(?:ault)?|scribe|tect(?: (?:columns|type))?)|ifference|o|rop(?: (?:column|nth))?|t(?: (?:add|diff|format|now|part|to|utcnow))?|u)|e(?:ach(?:
+      while)?|cho|moji|n(?:code(?: (?:base(?:32(?:hex)?|64)|hex))?|umerate)|rror(?: make)?|very|x(?:ec|it|p(?:l(?:ain|ore(?: (?:config|regex))?)|ort(?: (?:alias|const|def|extern|module|use)|-env)?)|tern))|f(?:i(?:l(?:e|l|ter)|nd|rst)|latten|or(?:mat(?:
+      (?:bits|d(?:ate|uration)|filesize|number|pattern))?)?|rom(?: (?:csv|eml|i(?:cs|ni)|json|kdl|m(?:d|sgpack(?:z)?)|nuon|ods|p(?:arquet|list)|ssv|t(?:o(?:ml|on)|sv)|url|vcf|x(?:lsx|ml)|y(?:aml|ml)))?)|g(?:e(?:nerate|t)|lob|r(?:id|oup-by)|stat)|h(?:ash(?:
+      (?:md5|sha(?:256|512)))?|e(?:aders|lp(?: (?:aliases|commands|e(?:scapes|xterns)|modules|operators|pipe-and-redirect))?)|i(?:de(?:-env)?|sto(?:gram|ry(?: (?:import|session))?))|ttp(?: (?:delete|get|head|options|p(?:atch|o(?:ol|st)|ut)))?)|i(?:dx(?:
+      (?:d(?:irs|rop)|fi(?:les|nd)|init|s(?:earch|tatus)|watch))?|f|gnore|n(?:c|put(?: list(?:en)?)?|s(?:ert|pect)|t(?:er(?:leave|sect)|o(?: (?:b(?:inary|ool)|cell-path|d(?:atetime|uration)|f(?:ilesize|loat)|glob|int|matrix|record|s(?:emver(?:-range)?|qlite|tring)|value))?))|s-(?:admin|empty|not-empty|redirected|terminal)|tems)|j(?:o(?:b(?:
+      (?:describe|flush|id|kill|list|recv|s(?:end|pawn)|unfreeze))?|in)|son path|walk)|k(?:eybindings(?: (?:default|list(?:en)?))?|ill)|l(?:ast|e(?:ngth|t(?:-env)?)|ines|o(?:ad-env|op)|s)|m(?:at(?:ch|h(?:
+      (?:a(?:bs|rc(?:cos(?:h)?|sin(?:h)?|tan(?:h)?)|vg)|c(?:brt|eil|os(?:h)?)|exp|floor|l(?:n|og)|m(?:ax|edian|in|ode)|product|round|s(?:in(?:h)?|qrt|tddev|um)|tan(?:h)?|variance))?|rix(?: (?:add|get-(?:col|row)|i(?:dentity|nto-nu)|m(?:a(?:p|x)|ean|ultiply)|re(?:duce|shape)|s(?:cale|et-(?:col|row)|u(?:btract|m))|transpose|zeros))?)|e(?:rge(?:
+      deep)?|tadata(?: (?:access|set))?)|k(?:dir|temp)|o(?:dule|ve)|ut|v)|nu-(?:check|highlight)|o(?:pen|verlay(?: (?:hide|list|new|use))?)|p(?:a(?:nic|r(?:-each|se)|th(?: (?:basename|dirname|ex(?:ists|pand)|join|parse|relative-to|s(?:elf|plit)|type))?)|e(?:ek|rmutations)|lugin(?:
+      (?:add|list|rm|stop|use))?|o(?:lars(?: (?:a(?:gg(?:-groups)?|ll-(?:false|true)|ppend|rg-(?:m(?:ax|in)|sort|true|unique|where)|s(?:-date(?:time)?)?)|c(?:a(?:che|st)|o(?:l(?:lect|umns)?|n(?:cat(?:-str)?|tains|vert-time-zone)|unt(?:-null)?)|u(?:mulative|t))|d(?:atepart|ecimal|rop(?:-(?:duplicates|nulls))?|ummies)|e(?:ntropy|xp(?:lode|r-not))|f(?:i(?:l(?:l-n(?:an|ull)|ter(?:-with)?)|rst)|latten)|g(?:et(?:-(?:day|hour|m(?:inute|onth)|nanosecond|ordinal|second|week(?:day)?|year))?|roup-by)|horizontal|i(?:mplode|nt(?:eger|o-(?:d(?:f|type)|lazy|nu|repr|schema))|s-(?:duplicated|in|n(?:ot-null|ull)|unique))|join(?:-where)?|l(?:ast|en|i(?:st-contains|t)|owercase)|m(?:a(?:p-batches|th(?:
+      (?:abs|bitwise-(?:and|count-(?:ones|zeros)|leading-(?:ones|zeros)|or|trailing-(?:ones|zeros)|xor)|cos|dot|exp|log(?:1p)?|s(?:i(?:gn|n)|qrt)))?|x)|e(?:an|dian)|in)|n(?:-unique|ot)|o(?:pen|therwise|ver)|p(?:ivot|rofile)|q(?:cut|u(?:antile|ery))|r(?:e(?:name|place(?:-time-zone)?|verse)|olling)|s(?:a(?:mple|ve)|chema|e(?:lect(?:or(?:
+      (?:a(?:l(?:l|pha(?:numeric)?)|rray)|b(?:inary|oolean|y-(?:dtype|index|name))|c(?:ategorical|ontains)|d(?:ate(?:time)?|ecimal|igit|uration)|e(?:mpty|n(?:ds-with|um)|xclude)|f(?:irst|loat)|integer|l(?:ast|ist)|matches|n(?:ested|ot|umeric)|object|s(?:igned-integer|t(?:arts-with|r(?:ing|uct)))|temporal|unsigned-integer))?)?|t(?:-with-idx)?)|h(?:ape|ift)|lice|ort-by|t(?:d|ore-(?:get|ls|rm)|r(?:-(?:join|lengths|replace(?:-all)?|s(?:lice|plit|trip-chars))|ftime|uct-json-encode))|um(?:mary)?)|t(?:ake|runcate)|u(?:n(?:ique|nest|pivot)|ppercase)|va(?:lue-counts|r)|w(?:hen|ith-column)))?|rt)|r(?:epend|int)|s)|query(?:
+      (?:db|git|json|web(?:page-info)?|xml))?|r(?:andom(?: (?:b(?:inary|ool)|chars|float|int|pass|uuid))?|e(?:duce|g(?:ex|istry(?: query)?)|ject|name|turn|verse)|m|o(?:ll(?: (?:down|left|right|up))?|tate)|un(?:-(?:external|internal))?)|s(?:ave|c(?:hema|ope(?:
+      (?:aliases|commands|e(?:ngine-stats|xterns)|modules|variables))?)|e(?:lect|mver(?: bump)?|q(?: (?:char|date))?)|huffle|kip(?: (?:until|while))?|l(?:eep|ice)|o(?:rt(?:-by)?|urce(?:-env)?)|plit(?: (?:c(?:ell-path|hars|olumn)|list|row|words))?|t(?:art|or(?:
+      (?:create|delete|export|i(?:mport|nsert)|open|reset|update))?|r(?: (?:a(?:fter|lign)|be(?:fore|tween)|c(?:a(?:mel-case|pitalize)|o(?:m(?:mon-prefix|press)|ntains))|d(?:e(?:compress|dent|unicode)|istance|owncase)|e(?:nds-with|scape-regex|xpand)|in(?:crement|de(?:nt|x-of))|join|kebab-case|l(?:ength|owercase)|pascal-case|re(?:place|verse)|s(?:creaming-snake-case|hl-(?:quote|split)|imilarity|lug|nake-case|ta(?:rts-with|ts)|ubstring)|t(?:itle-case|r(?:im|uncate))|u(?:nescape|p(?:case|percase))|wrap))?)|ys(?:
+      (?:cpu|disks|host|mem|net|temp|users))?)|t(?:a(?:ble|ke(?: (?:until|while))?)|e(?:e|rm(?: (?:query|size))?)|imeit|o(?: (?:csv|gui|html|json|kdl|m(?:d|sgpack(?:z)?)|nuon|p(?:arquet|list)|t(?:ext|o(?:ml|on)|sv|xt)|xml|y(?:aml|ml))|uch)?|r(?:anspose|ee|y)|u(?:i(?:
+      (?:b(?:ind|ox|utton)|debug|l(?:abel|og)|menu|pr(?:eview|ogress)|run|s(?:e(?:arch|lect)|plit)|t(?:ab(?:le)?|extbox|ree)))?|tor))|u(?:limit|mask|n(?:ame|i(?:on|q(?:-by)?)|let)|p(?:date(?: cells)?|sert)|rl(?:
+      (?:build-query|decode|encode|join|parse|split-query))?|se)|v(?:alues|ersion(?: check)?|iew(?: (?:blocks|files|ir|s(?:ource|pan)))?)|w(?:atch|h(?:ere|i(?:ch|le)|oami)|i(?:ndow|th-env)|rap)|zip)(?![\w-])'
+    captures:
+      1: keyword.other.builtin.nushell
+    set: nu-command-args
+  - match: \$?"
+    scope: entity.name.type.external.nushell
+    set: nu-command-external-dq
+  - match: \$?'
+    scope: entity.name.type.external.nushell
+    set: nu-command-external-sq
+  - match: ([\w.]+(?:-[\w.!]+)*)
+    captures:
+      1: entity.name.type.external.nushell
+    set: nu-command-args
+  - include: value
+  nu-command-args:
+  - meta_include_prototype: false
+  - *id003
+  - include: parameters
+  - include: spread
+  - include: value
+  nu-after-params:
+  - meta_include_prototype: false
+  - match: \s*(:)\s+(\[)
+    captures:
+      1: punctuation.definition.in-out.nushell
+      2: meta.brace.square.begin.nushell
+    set: nu-multiple-signature
+  - match: \s*(:)\s*
+    set: nu-simple-signature
+  - match: (?=\S)
+    pop: true
+  nu-multiple-signature:
+  - meta_include_prototype: false
+  - match: \]
+    scope: meta.brace.square.end.nushell
+    pop: true
+  - include: types
+  - match: \s*(,)\s*
+    captures:
+      1: punctuation.separator.nushell
+  - match: \s+(->)\s+
+    captures:
+      1: keyword.operator.nushell
+  nu-simple-signature:
+  - meta_include_prototype: false
+  - match: (?=\{)
+    pop: true
+  - include: types
+  - match: ->
+    scope: keyword.operator.nushell

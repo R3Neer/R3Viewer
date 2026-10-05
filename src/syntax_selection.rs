@@ -35,7 +35,12 @@ impl SyntaxSelection {
             }
         });
         if let Some(token) = token {
-            if let Some(name) = resolve(token) {
+            let explicit_alias = cli.language.is_some() && token.eq_ignore_ascii_case("pwsh");
+            if let Some(name) = if explicit_alias {
+                Some("PowerShell")
+            } else {
+                resolve(token)
+            } {
                 return if name == "Plain Text" {
                     Self::plain()
                 } else {
@@ -653,5 +658,64 @@ mod tests {
                 None
             );
         }
+    }
+    #[test]
+    fn shell_languages_alias_and_origin_are_separate() {
+        use clap::Parser;
+        for (token, expected) in [
+            ("nu", "Nushell"),
+            ("NUSHELL", "Nushell"),
+            ("ps1", "PowerShell"),
+            ("PSM1", "PowerShell"),
+            ("psd1", "PowerShell"),
+            ("PowerShell", "PowerShell"),
+            ("pwsh", "PowerShell"),
+            ("PWSH", "PowerShell"),
+        ] {
+            let cli = Cli::try_parse_from(["viewer", "--language", token]).unwrap();
+            assert_eq!(
+                SyntaxSelection::select(&cli, &SourceOrigin::Literal),
+                SyntaxSelection::Language(expected.into())
+            );
+        }
+        let cli = Cli::try_parse_from(["viewer"]).unwrap();
+        for (extension, expected) in [
+            ("nu", "Nushell"),
+            ("NU", "Nushell"),
+            ("ps1", "PowerShell"),
+            ("psm1", "PowerShell"),
+            ("PSD1", "PowerShell"),
+        ] {
+            assert_eq!(
+                SyntaxSelection::select(
+                    &cli,
+                    &SourceOrigin::LocalFile(format!("file.{extension}").into())
+                ),
+                SyntaxSelection::Language(expected.into())
+            );
+        }
+        assert_eq!(
+            SyntaxSelection::select(&cli, &SourceOrigin::LocalFile("file.pwsh".into())),
+            SyntaxSelection::plain()
+        );
+        assert_eq!(
+            SyntaxSelection::select(&cli, &SourceOrigin::Literal),
+            SyntaxSelection::plain()
+        );
+        assert_eq!(resolve("pwsh"), None);
+        assert!(
+            !LANGUAGES
+                .iter()
+                .flat_map(|(_, extensions)| *extensions)
+                .any(|extension| extension.eq_ignore_ascii_case("pwsh"))
+        );
+        let plain = Cli::try_parse_from(["viewer", "--format", "text"]).unwrap();
+        assert_eq!(
+            SyntaxSelection::select(&plain, &SourceOrigin::LocalFile("file.nu".into())),
+            SyntaxSelection::plain()
+        );
+        let conflict =
+            Cli::try_parse_from(["viewer", "--format", "text", "--language", "pwsh"]).unwrap();
+        assert!(conflict.validate().is_err());
     }
 }

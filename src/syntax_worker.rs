@@ -306,7 +306,7 @@ pub fn run_private_stdio() -> io::Result<()> {
 pub fn bundled_syntaxes() -> io::Result<syntect::parsing::SyntaxSet> {
     syntect::dumps::from_reader(std::io::Cursor::new(include_bytes!(concat!(
         env!("OUT_DIR"),
-        "/toml.syntax.pack"
+        "/bundled.syntax.pack"
     ))))
     .map_err(|_| invalid())
 }
@@ -513,6 +513,8 @@ struct Engine {
     span_limit: usize,
     checkpoint_limit: usize,
     roles: Vec<(syntect::parsing::Scope, SyntaxRole)>,
+    #[cfg(test)]
+    scope_trace: Option<Vec<(usize, usize, Vec<String>)>>,
 }
 #[cfg(windows)]
 impl Engine {
@@ -557,6 +559,8 @@ impl Engine {
             span_limit,
             checkpoint_limit,
             roles,
+            #[cfg(test)]
+            scope_trace: None,
         })
     }
     fn seek(&mut self, first: u32) {
@@ -627,6 +631,20 @@ impl Engine {
                 .map_err(|_| FallbackReason::GrammarError)?;
             if self.stack.len() > MAX_SCOPES {
                 return Err(FallbackReason::OperationBudget);
+            }
+            #[cfg(test)]
+            if !range.is_empty()
+                && let Some(trace) = &mut self.scope_trace
+            {
+                trace.push((
+                    self.offset + range.start,
+                    self.offset + range.end,
+                    self.stack
+                        .as_slice()
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect(),
+                ));
             }
             if emit && !range.is_empty() {
                 let role = self.role();
@@ -799,5 +817,132 @@ mod tests {
         let mut e = engine(format!("//{}\n", "x".repeat(MAX_LINE - 3)), MAX_SPANS, 32);
         e.step(true, &mut Vec::new()).unwrap();
         assert_eq!(e.offset, MAX_LINE);
+    }
+    #[cfg(windows)]
+    struct ShellAssertion {
+        line: usize,
+        start: usize,
+        end: usize,
+        scopes: &'static [&'static str],
+    }
+    #[cfg(windows)]
+    struct ShellEndStack {
+        line: usize,
+        scopes: &'static [&'static str],
+    }
+    #[cfg(windows)]
+    struct ShellFixture {
+        id: &'static str,
+        language: &'static str,
+        source: &'static str,
+        assertions: &'static [ShellAssertion],
+        end_stacks: &'static [ShellEndStack],
+    }
+    #[cfg(windows)]
+    include!("../resources/syntax/shell/oracle-fixtures.rs");
+
+    #[cfg(windows)]
+    #[test]
+    fn shell_oracles_use_real_engine_limits_scopes_and_seek() {
+        let mut assertions = 0;
+        let mut end_stacks = 0;
+        for fixture in SHELL_ORACLES {
+            let set = bundled_syntaxes().unwrap();
+            let parser = syntect::parsing::ParseState::new(
+                set.find_syntax_by_name(fixture.language).unwrap(),
+            );
+            let mut engine = Engine::new(
+                fixture.source.into(),
+                set,
+                parser,
+                MAX_SPANS,
+                MAX_CHECKPOINTS,
+            )
+            .unwrap();
+            engine.scope_trace = Some(Vec::new());
+            let mut roles = Vec::new();
+            let mut offsets = Vec::new();
+            while engine.offset < engine.source.len() {
+                offsets.push(engine.offset);
+                engine
+                    .step(true, &mut roles)
+                    .unwrap_or_else(|error| panic!("{}: {error:?}", fixture.id));
+                for expected in fixture
+                    .end_stacks
+                    .iter()
+                    .filter(|e| e.line + 1 == engine.line as usize)
+                {
+                    assert_eq!(
+                        engine
+                            .stack
+                            .as_slice()
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>(),
+                        expected.scopes,
+                        "{} endStack line {}",
+                        fixture.id,
+                        expected.line
+                    );
+                    end_stacks += 1;
+                }
+            }
+            let trace = engine.scope_trace.take().unwrap();
+            let mut offset = 0;
+            for (start, end, _) in &trace {
+                assert_eq!(*start, offset, "{} trace continuity", fixture.id);
+                assert!(
+                    *end > *start
+                        && fixture.source.is_char_boundary(*start)
+                        && fixture.source.is_char_boundary(*end)
+                );
+                offset = *end;
+            }
+            assert_eq!(offset, fixture.source.len());
+            assert_eq!(roles.first().unwrap().start, 0);
+            assert_eq!(roles.last().unwrap().end as usize, fixture.source.len());
+            assert!(roles.windows(2).all(|pair| pair[0].end == pair[1].start));
+            for expected in fixture.assertions {
+                let start = offsets[expected.line] + expected.start;
+                let end = offsets[expected.line] + expected.end;
+                let mut position = start;
+                for (a, b, scopes) in trace.iter().filter(|(a, b, _)| *b > start && *a < end) {
+                    assert_eq!(
+                        (*a).max(start),
+                        position,
+                        "{} assertion coverage",
+                        fixture.id
+                    );
+                    assert_eq!(
+                        scopes, expected.scopes,
+                        "{} interval {start}..{end}",
+                        fixture.id
+                    );
+                    position = (*b).min(end);
+                }
+                assert_eq!(position, end);
+                assertions += 1;
+            }
+            // The same Engine seek/step path must reconstruct spans and stacks.
+            engine.seek(0);
+            engine.scope_trace = Some(Vec::new());
+            let mut replay = Vec::new();
+            while engine.offset < engine.source.len() {
+                engine.step(true, &mut replay).unwrap();
+            }
+            assert_eq!(roles, replay, "{} role replay", fixture.id);
+            assert_eq!(
+                trace,
+                engine.scope_trace.take().unwrap(),
+                "{} scope replay",
+                fixture.id
+            );
+        }
+        assert_eq!(SHELL_ORACLES.len(), 84);
+        assert_eq!(assertions, 269);
+        assert_eq!(end_stacks, 16);
+        eprintln!(
+            "real Engine: 84 documents, 269 exact intervals, 16 endStacks, replay/roles/limits PASS"
+        );
     }
 }

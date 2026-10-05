@@ -227,3 +227,8 @@ Gramáticas shell: [prototipo R2](research/S03_SHELL_GRAMMAR_SPIKE.md) con revis
 PDF G1: [diseño de carga/ABI Windows](refinement/PDF-G1.md) revisado tras corregir flags a0x900. Candidato ctypes privado ejecutado por autor; revisión y AE independientes pendientes. No adopción del wrapper ni PDF de producto; mantiene RV204/matriz abiertos.
 
 PDF: [candidato privado G1 R2](research/PDF_G1_SPIKE.md) con revisión de código y AE independientes sin críticas en ABI/carga/fixtures pequeñas/cleanup. AE R1 encontró orphan en fallo de setup, corregido y controlado en R2; evidencia previa preservada. Sin adopción Rust/wrapper ni producto/QA; nativecallblocked/UTF16exhaustivo/budgets/Unix y RV204/G1 completo permanecen abiertos.
+
+
+## Integración shell vigente
+
+Gramáticas Nushell y PowerShell integradas con revisión de código y aceptación independientes sin críticas pendientes en el alcance funcional Windows: 215 pruebas workspace (cuatro ignores separados), 269 intervalos y 16 estados finales sobre 84 documentos, controlador real con Job y límites, 18 casos CLI/Nu y ConPTY funcional. Windows usa Onig; fancy-regex construye el pack. Auto .nu/.ps1 y alias explícito pwsh; .pwsh continúa texto plano. [Entrega y evidencia](research/S03_SHELL_INTEGRACION.md). QA visual, contención/runtime Unix y cierre RV-105/106/107/S03 permanecen pendientes.
