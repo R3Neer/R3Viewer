@@ -258,3 +258,6 @@ PDF Rust R3 rechazado por PRUST-ROOT02: error del reader al EOF posterior a comp
 
 
 Markdown gate privado R3: [evidencia final](research/MARKDOWN_PARSER_GATE.md) y revisión/AE independientes sin críticas pendientes; MD-AE01/02 cerrados para el experimento. Parser/procedencia viable, pendiente integración de documento enriquecido y todas sus capacidades gráficas/Obsidian. No cierre RV-301/302/303/305 ni recorte de alcance.
+
+
+PDF Rust R4: [estado y evidencia](research/PDF_RUST_GATE.md), revisión y AE independientes sin críticas pendientes en lifecycle/I/O; PRUST-ROOT02 cerrado para este corte. Extracción semántica nativa permanece Unverified con fallos originales conservados; investigar causa/alternativas e integrar producto antes de cerrar RV-204/G1.
