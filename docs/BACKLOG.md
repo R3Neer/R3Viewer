@@ -212,3 +212,5 @@ XML R1: [addendum inline](reviews/S03-XML-inline-r1.md) aporta timeout del contr
 
 
 Contención [Unix R2](refinement/CONTENCION-UNIX.md) revisada sin críticas de diseño: supervisor macOS externo y nacimiento/configuración cgroup delimitados, AS distinto de committed/RSS. Probes privados preparados antes de adopción; ejecución Linux/macOS pendiente y fallback transitorio no satisface el objetivo final. No habilitación de producción ni cierre de S03/matriz/RV por esta revisión.
+
+Gramáticas shell: [diseño R2](refinement/GRAMATICAS-SHELL.md) revisado sin críticas pendientes tras resolver retokenización y regex incompatibles; inventario exacto y review conservados. Prototipo privado y oracle independiente en preparación. No soporte Nu/PowerShell acreditado todavía ni cambios de producción; RV-105/106/107 y S03 continúan abiertos.

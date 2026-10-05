@@ -1,0 +1,1469 @@
+{
+  "sources": {
+    "D:\\Tools\\R3Viewer\\.tmp\\syntax-shell-research\\nushell__vscode-nushell-lang\\syntaxes\\nushell.tmLanguage.json": "017BEE0FC8A9822B12D1D9F194DB249A237F46FECBD434A16DB3BDB94D5AE2AC",
+    "D:\\Tools\\R3Viewer\\.tmp\\syntax-shell-research\\PowerShell__EditorSyntax\\PowerShellSyntax.tmLanguage": "7F4095D4CC0D33BAAE981AF206D4281DC7EB40EDAEACB6E9E888C9E721D37A0B"
+  },
+  "capture_count": 14,
+  "retokenized_captures": [
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/variables/captures/1",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#internal-variables"
+          },
+          {
+            "match": "\\$.+",
+            "name": "variable.other.nushell"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/2/captures/3",
+      "capture": {
+        "name": "string.bare.nushell",
+        "patterns": [
+          {
+            "match": "([\\w\\- ]+)(?:\\.nu)?(?=$|\"|')",
+            "captures": {
+              "1": {
+                "name": "entity.name.namespace.nushell"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/3/beginCaptures/3",
+      "capture": {
+        "name": "string.bare.nushell",
+        "patterns": [
+          {
+            "match": "([\\w\\- ]+)(?:\\.nu)?(?=$|\"|')",
+            "captures": {
+              "1": {
+                "name": "entity.name.namespace.nushell"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/for-loop/beginCaptures/4",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#value"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/2/beginCaptures/2",
+      "capture": {
+        "name": "variable.other.nushell",
+        "patterns": [
+          {
+            "include": "#paren-expression"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/4/beginCaptures/2",
+      "capture": {
+        "name": "variable.other.nushell",
+        "patterns": [
+          {
+            "include": "#paren-expression"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/define-variable/captures/4",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#types"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/define-variable/captures/5",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#operators"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/define-alias/captures/3",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#operators"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/pre-command/beginCaptures/2",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#operators"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/beginCaptures/2",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#control-keywords"
+          },
+          {
+            "match": "(?:ansi|char) \\w+",
+            "captures": {
+              "0": {
+                "name": "keyword.other.builtin.nushell"
+              }
+            }
+          },
+          {
+            "comment": "Regex generated with list-to-tree (https://github.com/glcraft/list-to-tree)",
+            "match": "(a(?:bbr(?: list)?|l(?:ias|l)|n(?:si(?: (?:gradient|link|strip))?|y)|ppend|st|ttr(?: (?:c(?:ategory|omplete(?: external)?)|deprecated|example|interactive|search-terms))?)|b(?:its(?: (?:and|not|or|ro(?:l|r)|sh(?:l|r)|xor))?|reak|ytes(?: (?:a(?:dd|t)|build|collect|ends-with|index-of|length|re(?:move|place|verse)|s(?:plit|tarts-with)))?)|c(?:al|d|h(?:ar|unk(?:-by|s))|l(?:ear|ip(?: (?:copy|paste))?)|o(?:l(?:lect|umns)|m(?:binations|mandline(?: (?:complete|edit|get-cursor|set-(?:cursor|prompt)))?|p(?:act|lete))|n(?:fig(?: (?:env|flatten|nu|reset|use-colors))?|st|tinue))|p)|d(?:ate(?: (?:f(?:ormat|rom-human)|humanize|list-timezone|now|to-timezone))?|e(?:bug(?: (?:e(?:nv|xperimental-options)|info|profile))?|code(?: (?:base(?:32(?:hex)?|64)|hex))?|f(?:ault)?|scribe|tect(?: (?:columns|type))?)|ifference|o|rop(?: (?:column|nth))?|t(?: (?:add|diff|format|now|part|to|utcnow))?|u)|e(?:ach(?: while)?|cho|moji|n(?:code(?: (?:base(?:32(?:hex)?|64)|hex))?|umerate)|rror(?: make)?|very|x(?:ec|it|p(?:l(?:ain|ore(?: (?:config|regex))?)|ort(?: (?:alias|const|def|extern|module|use)|-env)?)|tern))|f(?:i(?:l(?:e|l|ter)|nd|rst)|latten|or(?:mat(?: (?:bits|d(?:ate|uration)|filesize|number|pattern))?)?|rom(?: (?:csv|eml|i(?:cs|ni)|json|kdl|m(?:d|sgpack(?:z)?)|nuon|ods|p(?:arquet|list)|ssv|t(?:o(?:ml|on)|sv)|url|vcf|x(?:lsx|ml)|y(?:aml|ml)))?)|g(?:e(?:nerate|t)|lob|r(?:id|oup-by)|stat)|h(?:ash(?: (?:md5|sha(?:256|512)))?|e(?:aders|lp(?: (?:aliases|commands|e(?:scapes|xterns)|modules|operators|pipe-and-redirect))?)|i(?:de(?:-env)?|sto(?:gram|ry(?: (?:import|session))?))|ttp(?: (?:delete|get|head|options|p(?:atch|o(?:ol|st)|ut)))?)|i(?:dx(?: (?:d(?:irs|rop)|fi(?:les|nd)|init|s(?:earch|tatus)|watch))?|f|gnore|n(?:c|put(?: list(?:en)?)?|s(?:ert|pect)|t(?:er(?:leave|sect)|o(?: (?:b(?:inary|ool)|cell-path|d(?:atetime|uration)|f(?:ilesize|loat)|glob|int|matrix|record|s(?:emver(?:-range)?|qlite|tring)|value))?))|s-(?:admin|empty|not-empty|redirected|terminal)|tems)|j(?:o(?:b(?: (?:describe|flush|id|kill|list|recv|s(?:end|pawn)|unfreeze))?|in)|son path|walk)|k(?:eybindings(?: (?:default|list(?:en)?))?|ill)|l(?:ast|e(?:ngth|t(?:-env)?)|ines|o(?:ad-env|op)|s)|m(?:at(?:ch|h(?: (?:a(?:bs|rc(?:cos(?:h)?|sin(?:h)?|tan(?:h)?)|vg)|c(?:brt|eil|os(?:h)?)|exp|floor|l(?:n|og)|m(?:ax|edian|in|ode)|product|round|s(?:in(?:h)?|qrt|tddev|um)|tan(?:h)?|variance))?|rix(?: (?:add|get-(?:col|row)|i(?:dentity|nto-nu)|m(?:a(?:p|x)|ean|ultiply)|re(?:duce|shape)|s(?:cale|et-(?:col|row)|u(?:btract|m))|transpose|zeros))?)|e(?:rge(?: deep)?|tadata(?: (?:access|set))?)|k(?:dir|temp)|o(?:dule|ve)|ut|v)|nu-(?:check|highlight)|o(?:pen|verlay(?: (?:hide|list|new|use))?)|p(?:a(?:nic|r(?:-each|se)|th(?: (?:basename|dirname|ex(?:ists|pand)|join|parse|relative-to|s(?:elf|plit)|type))?)|e(?:ek|rmutations)|lugin(?: (?:add|list|rm|stop|use))?|o(?:lars(?: (?:a(?:gg(?:-groups)?|ll-(?:false|true)|ppend|rg-(?:m(?:ax|in)|sort|true|unique|where)|s(?:-date(?:time)?)?)|c(?:a(?:che|st)|o(?:l(?:lect|umns)?|n(?:cat(?:-str)?|tains|vert-time-zone)|unt(?:-null)?)|u(?:mulative|t))|d(?:atepart|ecimal|rop(?:-(?:duplicates|nulls))?|ummies)|e(?:ntropy|xp(?:lode|r-not))|f(?:i(?:l(?:l-n(?:an|ull)|ter(?:-with)?)|rst)|latten)|g(?:et(?:-(?:day|hour|m(?:inute|onth)|nanosecond|ordinal|second|week(?:day)?|year))?|roup-by)|horizontal|i(?:mplode|nt(?:eger|o-(?:d(?:f|type)|lazy|nu|repr|schema))|s-(?:duplicated|in|n(?:ot-null|ull)|unique))|join(?:-where)?|l(?:ast|en|i(?:st-contains|t)|owercase)|m(?:a(?:p-batches|th(?: (?:abs|bitwise-(?:and|count-(?:ones|zeros)|leading-(?:ones|zeros)|or|trailing-(?:ones|zeros)|xor)|cos|dot|exp|log(?:1p)?|s(?:i(?:gn|n)|qrt)))?|x)|e(?:an|dian)|in)|n(?:-unique|ot)|o(?:pen|therwise|ver)|p(?:ivot|rofile)|q(?:cut|u(?:antile|ery))|r(?:e(?:name|place(?:-time-zone)?|verse)|olling)|s(?:a(?:mple|ve)|chema|e(?:lect(?:or(?: (?:a(?:l(?:l|pha(?:numeric)?)|rray)|b(?:inary|oolean|y-(?:dtype|index|name))|c(?:ategorical|ontains)|d(?:ate(?:time)?|ecimal|igit|uration)|e(?:mpty|n(?:ds-with|um)|xclude)|f(?:irst|loat)|integer|l(?:ast|ist)|matches|n(?:ested|ot|umeric)|object|s(?:igned-integer|t(?:arts-with|r(?:ing|uct)))|temporal|unsigned-integer))?)?|t(?:-with-idx)?)|h(?:ape|ift)|lice|ort-by|t(?:d|ore-(?:get|ls|rm)|r(?:-(?:join|lengths|replace(?:-all)?|s(?:lice|plit|trip-chars))|ftime|uct-json-encode))|um(?:mary)?)|t(?:ake|runcate)|u(?:n(?:ique|nest|pivot)|ppercase)|va(?:lue-counts|r)|w(?:hen|ith-column)))?|rt)|r(?:epend|int)|s)|query(?: (?:db|git|json|web(?:page-info)?|xml))?|r(?:andom(?: (?:b(?:inary|ool)|chars|float|int|pass|uuid))?|e(?:duce|g(?:ex|istry(?: query)?)|ject|name|turn|verse)|m|o(?:ll(?: (?:down|left|right|up))?|tate)|un(?:-(?:external|internal))?)|s(?:ave|c(?:hema|ope(?: (?:aliases|commands|e(?:ngine-stats|xterns)|modules|variables))?)|e(?:lect|mver(?: bump)?|q(?: (?:char|date))?)|huffle|kip(?: (?:until|while))?|l(?:eep|ice)|o(?:rt(?:-by)?|urce(?:-env)?)|plit(?: (?:c(?:ell-path|hars|olumn)|list|row|words))?|t(?:art|or(?: (?:create|delete|export|i(?:mport|nsert)|open|reset|update))?|r(?: (?:a(?:fter|lign)|be(?:fore|tween)|c(?:a(?:mel-case|pitalize)|o(?:m(?:mon-prefix|press)|ntains))|d(?:e(?:compress|dent|unicode)|istance|owncase)|e(?:nds-with|scape-regex|xpand)|in(?:crement|de(?:nt|x-of))|join|kebab-case|l(?:ength|owercase)|pascal-case|re(?:place|verse)|s(?:creaming-snake-case|hl-(?:quote|split)|imilarity|lug|nake-case|ta(?:rts-with|ts)|ubstring)|t(?:itle-case|r(?:im|uncate))|u(?:nescape|p(?:case|percase))|wrap))?)|ys(?: (?:cpu|disks|host|mem|net|temp|users))?)|t(?:a(?:ble|ke(?: (?:until|while))?)|e(?:e|rm(?: (?:query|size))?)|imeit|o(?: (?:csv|gui|html|json|kdl|m(?:d|sgpack(?:z)?)|nuon|p(?:arquet|list)|t(?:ext|o(?:ml|on)|sv|xt)|xml|y(?:aml|ml))|uch)?|r(?:anspose|ee|y)|u(?:i(?: (?:b(?:ind|ox|utton)|debug|l(?:abel|og)|menu|pr(?:eview|ogress)|run|s(?:e(?:arch|lect)|plit)|t(?:ab(?:le)?|extbox|ree)))?|tor))|u(?:limit|mask|n(?:ame|i(?:on|q(?:-by)?)|let)|p(?:date(?: cells)?|sert)|rl(?: (?:build-query|decode|encode|join|parse|split-query))?|se)|v(?:alues|ersion(?: check)?|iew(?: (?:blocks|files|ir|s(?:ource|pan)))?)|w(?:atch|h(?:ere|i(?:ch|le)|oami)|i(?:ndow|th-env)|rap)|zip)(?![\\w-])( (.*))?",
+            "captures": {
+              "1": {
+                "name": "keyword.other.builtin.nushell"
+              },
+              "2": {
+                "patterns": [
+                  {
+                    "include": "#value"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "match": "(?<=\\^)(?:\\$(\"[^\"]+\"|'[^']+')|\"[^\"]+\"|'[^']+')",
+            "name": "entity.name.type.external.nushell",
+            "captures": {
+              "1": {
+                "patterns": [
+                  {
+                    "include": "#paren-expression"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "match": "([\\w.]+(?:-[\\w.!]+)*)(?: (.*))?",
+            "captures": {
+              "1": {
+                "name": "entity.name.type.external.nushell"
+              },
+              "2": {
+                "patterns": [
+                  {
+                    "include": "#value"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "include": "#value"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/beginCaptures/2/patterns/2/captures/2",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#value"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/beginCaptures/2/patterns/3/captures/1",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#paren-expression"
+          }
+        ]
+      }
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/beginCaptures/2/patterns/4/captures/2",
+      "capture": {
+        "patterns": [
+          {
+            "include": "#value"
+          }
+        ]
+      }
+    }
+  ],
+  "regex_count": 205,
+  "regex_inventory": [
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-escape/match",
+      "regex": "\\\\(?:[abefnrt\\\\'\"/(){}$^#|~]|u\\{[0-9a-fA-F]{1,6}\\}|u[0-9a-fA-F]{4})",
+      "sha256": "159E8F4202FC316DE6C140994B6F5F9E3F753D0ECB556F6FB039CCE83FBF117D"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-bare/match",
+      "regex": "[^$\\[{(\"',|#\\s|;][^\\[\\]{}()\"'\\s,|;]*",
+      "sha256": "87C7D8A65107D774B0B02724C2F687DDF018DEC1799FC45D4FBC42F0E74CCC3C"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-raw/begin",
+      "regex": "r(#+)'",
+      "sha256": "18FDFAD0C095C133FF69B0C667651F71255D8E828BEEBA5C2ECDDA676AD752EE"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-raw/end",
+      "regex": "'\\1",
+      "sha256": "DA300ABB1F743B3138F6BB3FFB902460D45AC208F68C9F768D8C8F0705DFFFF2"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-single-quote/begin",
+      "regex": "'",
+      "sha256": "265FDA17A34611B1533D8A281FF680DC5791B0CE0A11C25B35E11C8E75685509"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-single-quote/end",
+      "regex": "'",
+      "sha256": "265FDA17A34611B1533D8A281FF680DC5791B0CE0A11C25B35E11C8E75685509"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-backtick/begin",
+      "regex": "`",
+      "sha256": "8D33F520A3C4CEF80D2453AEF81B612BFE1CB44C8B2025630AD38662763F13D3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-backtick/end",
+      "regex": "`",
+      "sha256": "8D33F520A3C4CEF80D2453AEF81B612BFE1CB44C8B2025630AD38662763F13D3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-double-quote/begin",
+      "regex": "\"",
+      "sha256": "8A331FDDE7032F33A71E1B2E257D80166E348E00FCB17914F48BDB57A1C63007"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-double-quote/end",
+      "regex": "\"",
+      "sha256": "8A331FDDE7032F33A71E1B2E257D80166E348E00FCB17914F48BDB57A1C63007"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-double-quote/patterns/0/match",
+      "regex": "\\w+",
+      "sha256": "87AF34EB99F460AAB948B7FB62E0F3EF589CCE792C7E20F4F0DBF71455BC5C87"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-interpolated-double/begin",
+      "regex": "\\$\"",
+      "sha256": "603596FC449B43CF6FE7EA516802DE381B64C3F6EC1CF1A538A26E5D167EDDA6"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-interpolated-double/end",
+      "regex": "\"",
+      "sha256": "8A331FDDE7032F33A71E1B2E257D80166E348E00FCB17914F48BDB57A1C63007"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-interpolated-double/patterns/0/match",
+      "regex": "\\\\[()]",
+      "sha256": "4C93102D6677539E8785AE5BD4945B50895DAE4A78235BB9B51D5E4ED2C3A428"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-interpolated-single/begin",
+      "regex": "\\$'",
+      "sha256": "06C856EB87173ACF6611720760C11C03EAADB7AED4B5D43BCA63338B612AC3AB"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/string-interpolated-single/end",
+      "regex": "'",
+      "sha256": "265FDA17A34611B1533D8A281FF680DC5791B0CE0A11C25B35E11C8E75685509"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/control-keywords/match",
+      "regex": "(?<![0-9a-zA-Z_\\-.\\/:\\\\])(?:break|continue|else(?: if)?|for|if|loop|mut|return|try|while)(?![0-9a-zA-Z_\\-.\\/:\\\\])",
+      "sha256": "5883ECEACB93CCE986F69DAFB7D231879B70951E520793CF31DD2C753249E076"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/comment/match",
+      "regex": "(#.*)$",
+      "sha256": "AD5A67938D81EBDDADBC03B32C0BF455818C710B5DA554B893F1A7FB46BD83F7"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/keyword/match",
+      "regex": "(?:def(?:-env)?)",
+      "sha256": "0B636040740CA15CC6BB6BFDCC96AD711EEEEA635692226F9827E520444CA49B"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/parameters/match",
+      "regex": "(?<=\\s)(-{1,2})[a-zA-Z_][\\w-]*",
+      "sha256": "21DF44BD17F52327345E3664F06915BC7A8BE30153D8B2883ADAEE4A92F94BA3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/variables/match",
+      "regex": "(\\$[a-zA-Z0-9_]+)((?:\\.(?:[\\w-]+|\"[\\w\\- ]+\"))*)",
+      "sha256": "841CA8D2B07BAEBF3F99DEC1B8BC9B9D30D07BE8B101D1674725CA0474297026"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/variables/captures/1/patterns/1/match",
+      "regex": "\\$.+",
+      "sha256": "681F1B641A793FEA49264EB01016244F34FF901C2C8B7BFAF77D0E260FE14F23"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/variable-fields/match",
+      "regex": "(?<=\\)|\\}|\\])(?:\\.(?:[\\w-]+|\"[\\w\\- ]+\"))+",
+      "sha256": "C01C4A457DE7D2FADCDAD9754B5971AA723CC84E8EF9613B204E83821CAA2C6E"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/internal-variables/match",
+      "regex": "\\$(?:nu|env|in)\\b",
+      "sha256": "217A1459957BFA6F1E5C727F4FBB2DA0C3D9A8C7E1476AE667F308DC9873C740"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/datetime/match",
+      "regex": "\\b\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[+-]\\d{2}:\\d{2}|Z)?)?\\b",
+      "sha256": "48AFF77A945DACBFD50D2232AE083354DC9720909D44788DAE0C6DB78AB3C36B"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/numbers-hexa/match",
+      "regex": "(?<![\\w-])_*+0_*+x_*+[0-9a-fA-F][0-9a-fA-F_]*+(?![\\w.])",
+      "sha256": "89915DA7C09BDE501334ACB3AAE241DF12499ACB51CC44F36286E16CE4844716"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/numbers-octal/match",
+      "regex": "(?<![\\w-])_*+0_*+o_*+[0-7][0-7_]*+(?![\\w.])",
+      "sha256": "94AE89BEDF274DD0083B79BF5393BF3E27E2C38CA4FC4E03D9B0FDBFCDAF4CC7"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/numbers-binary/match",
+      "regex": "(?<![\\w-])_*+0_*+b_*+[01][01_]*+(?![\\w.])",
+      "sha256": "5B97465423D2F8F5E3AB802FB23752B8D10DEEB7D910B5FBA17544D09C83E66F"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/numbers/match",
+      "regex": "(?<![\\w-])_*+[-+]?_*+(?:(?i:NaN|infinity|inf)_*+|(?:\\d[\\d_]*+\\.?|\\._*+\\d)[\\d_]*+(?i:E_*+[-+]?_*+\\d[\\d_]*+)?)(?i:ns|us|µs|ms|sec|min|hr|day|wk|b|kb|mb|gb|tb|pb|eb|kib|mib|gib|tib|pib|eib)?(?:(?![\\w.])|(?=\\.\\.))",
+      "sha256": "5D17E571877BF7DC694989E6F9C9E33C7C987993EF95AECE644FF5A5224426F7"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/binary/begin",
+      "regex": "\\b(0[xbo])(\\[)",
+      "sha256": "B6E0AEAAD4EA661F0F7E81ADDA970F2086937278B5D4CC95F9CBCF6758E292E3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/binary/end",
+      "regex": "\\]",
+      "sha256": "C9D6FCD1D11B34248EAAC74A6B1E0E733115CE9D55F05EC4BBAD2E29618D1FF6"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/binary/patterns/0/match",
+      "regex": "[0-9a-fA-F]+",
+      "sha256": "727C34C52B2131E1E83E1E2976B21DB1D1347E942F6D503719D7FA5218D93EDC"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/constant-keywords/match",
+      "regex": "\\b(?:true|false|null)\\b",
+      "sha256": "AC1A4DF6F2A0816F3DBC36FED8924D9E70CB5F3899A95BA01962DD76B4209457"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/spread/match",
+      "regex": "\\.\\.\\.(?=[^\\s\\]}])",
+      "sha256": "123DFC5691D04A2D57097A1AB0CF8E47756646BF8C23D8146914C83F1352DF34"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/ranges/match",
+      "regex": "\\.\\.<?",
+      "sha256": "06DD788B273491C2DBAEC3583365468294FFBDAC6CF84456511691CDB7F39B6B"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/operators-word/match",
+      "regex": "(?<= |\\()(?:mod|in|not-(?:in|like|has)|not|and|or|xor|bit-(?:or|and|xor|shl|shr)|starts-with|ends-with|like|has)(?= |\\)|$)",
+      "sha256": "2B30C50379778B4B57AD61DA9C135E21AC68EDE1C8F53808445475CFA92B162F"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/operators-symbols/match",
+      "regex": "(?<= )(?:(?:\\+|\\-|\\*|\\/)=?|\\/\\/|\\*\\*|!=|[<>=]=?|[!=]~|\\+\\+=?)(?= |$)",
+      "sha256": "0EB83FA690298BF61BE2FBA4EDB35BFC0203DF47578AC364F79B3FD223EE230B"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/operators-redirection/match",
+      "regex": "(?<= )(?:o\\+e|e\\+o|out\\+err|err\\+out|o|e|out|err)(?:>>?|>\\|)(?= |$)",
+      "sha256": "5F2C30ACF9A3B20E429E40A98AF4B55BE13F8047F6C3323762DC1D8D6245F311"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/table/begin",
+      "regex": "\\[",
+      "sha256": "8B1F60FADE5D66C6281A3B1D4C1F7C45E9A22EF0FFD1177DDCB1B0E6E4AB7F8E"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/table/end",
+      "regex": "\\]",
+      "sha256": "C9D6FCD1D11B34248EAAC74A6B1E0E733115CE9D55F05EC4BBAD2E29618D1FF6"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/table/patterns/2/match",
+      "regex": ",",
+      "sha256": "D03502C43D74A30B936740A9517DC4EA2B2AD7168CAA0A774CEFE793CE0B33E7"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/types/patterns/0/begin",
+      "regex": "\\b(list|oneof)\\s*<",
+      "sha256": "71CFD791317EF3006C945F74B2294D582181C0E446C160A545F5B6D187F94670"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/types/patterns/0/end",
+      "regex": ">",
+      "sha256": "62B67E1F685B7FEF51102005DDDD27774BE3FEE38C42965C53AAB035D0B6B221"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/types/patterns/1/begin",
+      "regex": "\\b(record|table)\\s*<",
+      "sha256": "3D75E879F1E9F60F0FCE586DD52AEB8B6618972EA5181E3A8494D922BD6F3A9A"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/types/patterns/1/end",
+      "regex": ">",
+      "sha256": "62B67E1F685B7FEF51102005DDDD27774BE3FEE38C42965C53AAB035D0B6B221"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/types/patterns/1/patterns/0/match",
+      "regex": "([\\w\\-]+|\"[\\w\\- ]+\"|'[^']+')\\s*:\\s*",
+      "sha256": "6453044E6FAD4461990D1E18C1BF9F539241BB6699408AE0AF27EE7E916EC05B"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/types/patterns/2/match",
+      "regex": "\\b(\\w+)\\b",
+      "sha256": "B0F7AA1557483050D896339B613BABA54A2ED26CEB0B66A76592BCBD2F6ABBFB"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameter/patterns/0/match",
+      "regex": "(-{0,2}|\\.{3})[\\w-]+(?:\\((-[\\w?])\\))?",
+      "sha256": "3E3BAF01A66DC1822611E902245B1CFAA3B9D26640FE09B7DE138C48B2D381EE"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameter/patterns/1/begin",
+      "regex": "\\??:\\s*",
+      "sha256": "7C66CC983787D2ADA8C89A087A1E84D1B14D6FBC0AC775684B71DDABCA3F2C1C"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameter/patterns/1/end",
+      "regex": "(?=(?:\\s+(?:-{0,2}|\\.{3})[\\w-]+)|(?:\\s*(?:,|\\]|\\||@|=|#|$)))",
+      "sha256": "20A64F759D73FC34AD8E5104E008FBF5AAF7BFF7E3EE01A5FC17FE9529655A08"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameter/patterns/2/begin",
+      "regex": "@(?=\"|')",
+      "sha256": "1C13CDB92FDAEA62E3976E2B08EDE2079B4DB6343043B7F25FA08EF5DA6CE1FF"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameter/patterns/2/end",
+      "regex": "(?<=\"|')",
+      "sha256": "9059537B7550E80C43518B5061CC1A99284474368CC13EA24689776A0DE208DF"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameter/patterns/3/begin",
+      "regex": "=\\s*",
+      "sha256": "1A7EEB4F19BEE03231932C7BCD0E3D4E6EF1DC6F3DE455F4D3482BF0E4296E5A"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameter/patterns/3/end",
+      "regex": "(?=(?:\\s+-{0,2}[\\w-]+)|(?:\\s*(?:,|\\]|\\||#|$)))",
+      "sha256": "03A48A54DD89D5D5D506F7CE3EEC073700590AD853464C3148E88F53DD3F4D4E"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameters/begin",
+      "regex": "\\[",
+      "sha256": "8B1F60FADE5D66C6281A3B1D4C1F7C45E9A22EF0FFD1177DDCB1B0E6E4AB7F8E"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-parameters/end",
+      "regex": "\\]",
+      "sha256": "C9D6FCD1D11B34248EAAC74A6B1E0E733115CE9D55F05EC4BBAD2E29618D1FF6"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-multiple-inout/begin",
+      "regex": "(?<=]\\s*)(:)\\s+(\\[)",
+      "sha256": "3FB6CD4D4F698FD0A651B3E217729E73CDD74E250D10DEBFD6C77C31FAE233D0"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-multiple-inout/end",
+      "regex": "\\]",
+      "sha256": "C9D6FCD1D11B34248EAAC74A6B1E0E733115CE9D55F05EC4BBAD2E29618D1FF6"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-multiple-inout/patterns/1/match",
+      "regex": "\\s*(,)\\s*",
+      "sha256": "B884CC9BDEFBD62EBBBE17DF190E7C69654BA9CED0CFB73B452AB810699710D5"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-multiple-inout/patterns/2/match",
+      "regex": "\\s+(->)\\s+",
+      "sha256": "C7D8CE7CA3367CEBA4A8F163EA49F62DCFD46C686C8018D715580B5790D8A0F1"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-inout/patterns/1/match",
+      "regex": "->",
+      "sha256": "71B37B9A8A57B848ECE344578AAE47E20D4A7ADEF967E33F39E69AEB231340FD"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-body/begin",
+      "regex": "\\{",
+      "sha256": "5728B7D3CDAA808DAF1373BF707E6FDD8D39E1C0BB6AE971FB49F94B1EECAF16"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function-body/end",
+      "regex": "\\}",
+      "sha256": "C7354723E6131B5EC74C8F01425BEC37D342F01160F79FDC915AD7C57DCCE262"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function/begin",
+      "regex": "((?:export\\s+)?def)(?:\\s+((?:--\\w+(?:\\s+--\\w+)*)))?\\s+([\\w\\-]+|\"[\\w\\- ]+\"|'[\\w\\- ]+'|`[\\w\\- ]+`)(?:\\s+((?:--\\w+(?:\\s+--\\w+)*)))?",
+      "sha256": "8218583074947933B0EBA8583585B720C8259307047FD4C7F0C508820F295576"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/function/end",
+      "regex": "(?<=\\})",
+      "sha256": "3357BCF53F12EAA3EA7A747D2C0A3E6E0C127000BA9C9AD16F466FC0E6C0CB96"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/extern/begin",
+      "regex": "((?:export\\s+)?extern)\\s+([\\w\\-]+|\"[\\w\\- ]+\")",
+      "sha256": "C15E10075D7EDD5AC7AE0B7BE0AA5D38DC13AD4931EF6A135900AD72AB7942E7"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/extern/end",
+      "regex": "(?<=\\])",
+      "sha256": "30A01A7387CA5CE1BCB5F9AC6ADFC6F92DE01CE29CB457761A412D3EFA5CF0B9"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/module/begin",
+      "regex": "((?:export\\s+)?module)\\s+([\\w\\-]+)\\s*\\{",
+      "sha256": "7B1F453E31077B5EC0FFEEFC0B3EFFE894DF13AA02FE8F44E2074356FF47DE47"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/module/end",
+      "regex": "\\}",
+      "sha256": "C7354723E6131B5EC74C8F01425BEC37D342F01160F79FDC915AD7C57DCCE262"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/0/match",
+      "regex": "^\\s*((?:export )?use)\\s+([\\w\\-]+|\"[\\w\\- ]+\"|'[\\w\\- ]+')(?:\\s+([\\w\\-]+|\"[\\w\\- ]+\"|'[\\w\\- ]+'|\\*))?\\s*;?$",
+      "sha256": "8DA76E30EC8333C23491B7D7C573650B1EE548A22BCC4558C3B3AFC75A653056"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/1/begin",
+      "regex": "^\\s*((?:export )?use)\\s+([\\w\\-]+|\"[\\w\\- ]+\"|'[\\w\\- ]+')\\s*\\[",
+      "sha256": "B3C2CC36BE71E64B4188DE634079950898569209F8E88898E732B235DB9AC596"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/1/end",
+      "regex": "(\\])\\s*;?\\s*$",
+      "sha256": "5F8997A1B80AA8BB4365B02C760B1B15D3D34634803C02312D9A3418ACA55580"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/1/patterns/0/match",
+      "regex": "([\\w\\-]+|\"[\\w\\- ]+\"|'[\\w\\- ]+'|\\*),?",
+      "sha256": "7D3EF01008A779D1E31094F3F6BF2FE2FC5F294073D024BBD2C849F4AD0DEEB9"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/2/match",
+      "regex": "(?<path>(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*[\\w\\- ]+(?:\\.nu)?){0}^\\s*((?:export )?use)\\s+(\"\\g<path>\"|'\\g<path>\\'|(?![\"'])\\g<path>)(?:\\s+([\\w\\-]+|\"[\\w\\- ]+\"|'[^']+'|\\*))?\\s*;?$",
+      "sha256": "C99921CEFCAAA7347C33D2CD3E01EDF39F7BE45636742EABCDD43D577A1DB538"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/2/captures/3/patterns/0/match",
+      "regex": "([\\w\\- ]+)(?:\\.nu)?(?=$|\"|')",
+      "sha256": "B8B7882701EAD436447D705204A3C470A30CD6B76B5D379FC4ED50B0DC2BA5C3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/3/begin",
+      "regex": "(?<path>(?:/|\\\\|~[\\/\\\\]|\\.\\.?[\\/\\\\])?(?:[^\\/\\\\]+[\\/\\\\])*[\\w\\- ]+(?:\\.nu)?){0}^\\s*((?:export )?use)\\s+(\"\\g<path>\"|'\\g<path>\\'|(?![\"'])\\g<path>)\\s+\\[",
+      "sha256": "7E7329920E7C03430FA1EA0695B1EE6831FAE9FBCFF2F020835C6CE508D16984"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/3/beginCaptures/3/patterns/0/match",
+      "regex": "([\\w\\- ]+)(?:\\.nu)?(?=$|\"|')",
+      "sha256": "B8B7882701EAD436447D705204A3C470A30CD6B76B5D379FC4ED50B0DC2BA5C3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/3/end",
+      "regex": "(\\])\\s*;?\\s*$",
+      "sha256": "5F8997A1B80AA8BB4365B02C760B1B15D3D34634803C02312D9A3418ACA55580"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/3/patterns/0/match",
+      "regex": "([\\w\\-]+|\"[\\w\\- ]+\"|'[\\w\\- ]+'|\\*),?",
+      "sha256": "7D3EF01008A779D1E31094F3F6BF2FE2FC5F294073D024BBD2C849F4AD0DEEB9"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/use-module/patterns/4/match",
+      "regex": "^\\s*(?:export )?use\\b",
+      "sha256": "93483FC0CCE72B9E899796D77E0437649279695D02FA5A07A9B8F7D6BC2CCC77"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/for-loop/begin",
+      "regex": "\\b(for)\\s+(\\$?\\w+)\\s+(in)\\s+(.+)\\s*(\\{)",
+      "sha256": "C44A6EE7415471358AD13941099F425CB0ACC4706E2F59593AB8881E66C7DB88"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/for-loop/end",
+      "regex": "\\}",
+      "sha256": "C7354723E6131B5EC74C8F01425BEC37D342F01160F79FDC915AD7C57DCCE262"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/paren-expression/begin",
+      "regex": "\\(",
+      "sha256": "2C0FFEE95A99EC5379FDA46384A686371C62A047F258D053AE3F55D331F84AD1"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/paren-expression/end",
+      "regex": "\\)",
+      "sha256": "C07F428D83FAD2182ACDF9C417641FF91254749A98F1D55C1FA35ACA4CF758D7"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/begin",
+      "regex": "\\{",
+      "sha256": "5728B7D3CDAA808DAF1373BF707E6FDD8D39E1C0BB6AE971FB49F94B1EECAF16"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/end",
+      "regex": "\\}",
+      "sha256": "C7354723E6131B5EC74C8F01425BEC37D342F01160F79FDC915AD7C57DCCE262"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/0/begin",
+      "regex": "(?<=\\{)\\s*\\|",
+      "sha256": "F760247576CCE12F30E7DAE4E5E554776E553048AB61F5ACF245ACCE3D89A429"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/0/end",
+      "regex": "\\|",
+      "sha256": "0A03773BD3A7CD4F4F9FE306F5C469992DB68DBC60DEF84DF32A7B42055543D5"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/1/begin",
+      "regex": "(?!\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2})([^\\s:,|;(){}\\[\"'$#][^\\s:,|;(){}\\[\"']*)\\s*(:)\\s*",
+      "sha256": "A84E9815E2C0169388C89526DE7EE5009D4A062EBA184A1ED83F2B3A437B5741"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/1/end",
+      "regex": "(?=[,}])|(?<=[^\\s:])(?=\\s)",
+      "sha256": "0C6F06339DEB797893E7228725957D824B7D53789F182370A291F0D89D3DD6D3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/2/begin",
+      "regex": "(\\$\"((?:[^\"\\\\]|\\\\.)*)\")\\s*(:)\\s*",
+      "sha256": "941D2BA7A38EAD08E5D70635D3CF64BB5A619E862665F7F3017CE9F02B9448CA"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/2/end",
+      "regex": "(?=[,}])|(?<=[^\\s:])(?=\\s)",
+      "sha256": "0C6F06339DEB797893E7228725957D824B7D53789F182370A291F0D89D3DD6D3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/3/begin",
+      "regex": "(\"(?:[^\"\\\\]|\\\\.)*\")\\s*(:)\\s*",
+      "sha256": "54D5D1DFB05759ED13E39D831A0A1BC73B38922CDDA631BC46EAE4B3E01A879D"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/3/end",
+      "regex": "(?=[,}])|(?<=[^\\s:])(?=\\s)",
+      "sha256": "0C6F06339DEB797893E7228725957D824B7D53789F182370A291F0D89D3DD6D3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/4/begin",
+      "regex": "(\\$'([^']*)')\\s*(:)\\s*",
+      "sha256": "AB2BDCD62764446854F3A169FFDB8037E278C9171378DADEBE160B2687CFA6E4"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/4/end",
+      "regex": "(?=[,}])|(?<=[^\\s:])(?=\\s)",
+      "sha256": "0C6F06339DEB797893E7228725957D824B7D53789F182370A291F0D89D3DD6D3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/5/begin",
+      "regex": "('[^']*')\\s*(:)\\s*",
+      "sha256": "D9D8AF515CCDF75D30FF22A4E91D4C9AF84BE27308C6EC8634292C42ACF94A27"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/braced-expression/patterns/5/end",
+      "regex": "(?=[,}])|(?<=[^\\s:])(?=\\s)",
+      "sha256": "0C6F06339DEB797893E7228725957D824B7D53789F182370A291F0D89D3DD6D3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/define-variable/match",
+      "regex": "\\b(let|mut|(?:export\\s+)?const)\\s+(\\w+)(?:\\s*(:)\\s*([^=]+?))?\\s+(=)",
+      "sha256": "7500C739EC7DD145CF81DCE31849C481F89FE9B1BCC936895D3416A6084B3AB3"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/define-alias/match",
+      "regex": "((?:export )?alias)\\s+([\\w\\-!]+)\\s*(=)",
+      "sha256": "7BC294255466A00EF54736B24CA19A6874534F303004C78C07BECE8142FDB12A"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/pre-command/begin",
+      "regex": "(\\w+)(=)",
+      "sha256": "21EA0925CFCE8A4481520D43236700A4C4BCAF76EE6D4D54F95B3458E3D64768"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/pre-command/end",
+      "regex": "(?=\\s+)",
+      "sha256": "05A69B4DA64B9E7E51DB811E7244E0DF60DFEA79783BDB385EBAC0C6E5A76AFC"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/begin",
+      "regex": "(?<!\\w)(?:(\\^)|(?![0-9]|\\$))([\\w.!]+(?:(?: (?!-)[\\w\\-.!]+(?:(?= |\\))|$)|[\\w\\-.!]+))*|(?<=\\^)\\$?(?:\"[^\"]+\"|'[^']+'))",
+      "sha256": "15D07DD8F6083D4CC248DB4C838F26DB7233FF3BDACD93157CA4F9023640EB26"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/beginCaptures/2/patterns/1/match",
+      "regex": "(?:ansi|char) \\w+",
+      "sha256": "15E9317F0C9D15BF98C7CAF647B311F59623F7840D8AAE4E29291EF8D4BC4C12"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/beginCaptures/2/patterns/2/match",
+      "regex": "(a(?:bbr(?: list)?|l(?:ias|l)|n(?:si(?: (?:gradient|link|strip))?|y)|ppend|st|ttr(?: (?:c(?:ategory|omplete(?: external)?)|deprecated|example|interactive|search-terms))?)|b(?:its(?: (?:and|not|or|ro(?:l|r)|sh(?:l|r)|xor))?|reak|ytes(?: (?:a(?:dd|t)|build|collect|ends-with|index-of|length|re(?:move|place|verse)|s(?:plit|tarts-with)))?)|c(?:al|d|h(?:ar|unk(?:-by|s))|l(?:ear|ip(?: (?:copy|paste))?)|o(?:l(?:lect|umns)|m(?:binations|mandline(?: (?:complete|edit|get-cursor|set-(?:cursor|prompt)))?|p(?:act|lete))|n(?:fig(?: (?:env|flatten|nu|reset|use-colors))?|st|tinue))|p)|d(?:ate(?: (?:f(?:ormat|rom-human)|humanize|list-timezone|now|to-timezone))?|e(?:bug(?: (?:e(?:nv|xperimental-options)|info|profile))?|code(?: (?:base(?:32(?:hex)?|64)|hex))?|f(?:ault)?|scribe|tect(?: (?:columns|type))?)|ifference|o|rop(?: (?:column|nth))?|t(?: (?:add|diff|format|now|part|to|utcnow))?|u)|e(?:ach(?: while)?|cho|moji|n(?:code(?: (?:base(?:32(?:hex)?|64)|hex))?|umerate)|rror(?: make)?|very|x(?:ec|it|p(?:l(?:ain|ore(?: (?:config|regex))?)|ort(?: (?:alias|const|def|extern|module|use)|-env)?)|tern))|f(?:i(?:l(?:e|l|ter)|nd|rst)|latten|or(?:mat(?: (?:bits|d(?:ate|uration)|filesize|number|pattern))?)?|rom(?: (?:csv|eml|i(?:cs|ni)|json|kdl|m(?:d|sgpack(?:z)?)|nuon|ods|p(?:arquet|list)|ssv|t(?:o(?:ml|on)|sv)|url|vcf|x(?:lsx|ml)|y(?:aml|ml)))?)|g(?:e(?:nerate|t)|lob|r(?:id|oup-by)|stat)|h(?:ash(?: (?:md5|sha(?:256|512)))?|e(?:aders|lp(?: (?:aliases|commands|e(?:scapes|xterns)|modules|operators|pipe-and-redirect))?)|i(?:de(?:-env)?|sto(?:gram|ry(?: (?:import|session))?))|ttp(?: (?:delete|get|head|options|p(?:atch|o(?:ol|st)|ut)))?)|i(?:dx(?: (?:d(?:irs|rop)|fi(?:les|nd)|init|s(?:earch|tatus)|watch))?|f|gnore|n(?:c|put(?: list(?:en)?)?|s(?:ert|pect)|t(?:er(?:leave|sect)|o(?: (?:b(?:inary|ool)|cell-path|d(?:atetime|uration)|f(?:ilesize|loat)|glob|int|matrix|record|s(?:emver(?:-range)?|qlite|tring)|value))?))|s-(?:admin|empty|not-empty|redirected|terminal)|tems)|j(?:o(?:b(?: (?:describe|flush|id|kill|list|recv|s(?:end|pawn)|unfreeze))?|in)|son path|walk)|k(?:eybindings(?: (?:default|list(?:en)?))?|ill)|l(?:ast|e(?:ngth|t(?:-env)?)|ines|o(?:ad-env|op)|s)|m(?:at(?:ch|h(?: (?:a(?:bs|rc(?:cos(?:h)?|sin(?:h)?|tan(?:h)?)|vg)|c(?:brt|eil|os(?:h)?)|exp|floor|l(?:n|og)|m(?:ax|edian|in|ode)|product|round|s(?:in(?:h)?|qrt|tddev|um)|tan(?:h)?|variance))?|rix(?: (?:add|get-(?:col|row)|i(?:dentity|nto-nu)|m(?:a(?:p|x)|ean|ultiply)|re(?:duce|shape)|s(?:cale|et-(?:col|row)|u(?:btract|m))|transpose|zeros))?)|e(?:rge(?: deep)?|tadata(?: (?:access|set))?)|k(?:dir|temp)|o(?:dule|ve)|ut|v)|nu-(?:check|highlight)|o(?:pen|verlay(?: (?:hide|list|new|use))?)|p(?:a(?:nic|r(?:-each|se)|th(?: (?:basename|dirname|ex(?:ists|pand)|join|parse|relative-to|s(?:elf|plit)|type))?)|e(?:ek|rmutations)|lugin(?: (?:add|list|rm|stop|use))?|o(?:lars(?: (?:a(?:gg(?:-groups)?|ll-(?:false|true)|ppend|rg-(?:m(?:ax|in)|sort|true|unique|where)|s(?:-date(?:time)?)?)|c(?:a(?:che|st)|o(?:l(?:lect|umns)?|n(?:cat(?:-str)?|tains|vert-time-zone)|unt(?:-null)?)|u(?:mulative|t))|d(?:atepart|ecimal|rop(?:-(?:duplicates|nulls))?|ummies)|e(?:ntropy|xp(?:lode|r-not))|f(?:i(?:l(?:l-n(?:an|ull)|ter(?:-with)?)|rst)|latten)|g(?:et(?:-(?:day|hour|m(?:inute|onth)|nanosecond|ordinal|second|week(?:day)?|year))?|roup-by)|horizontal|i(?:mplode|nt(?:eger|o-(?:d(?:f|type)|lazy|nu|repr|schema))|s-(?:duplicated|in|n(?:ot-null|ull)|unique))|join(?:-where)?|l(?:ast|en|i(?:st-contains|t)|owercase)|m(?:a(?:p-batches|th(?: (?:abs|bitwise-(?:and|count-(?:ones|zeros)|leading-(?:ones|zeros)|or|trailing-(?:ones|zeros)|xor)|cos|dot|exp|log(?:1p)?|s(?:i(?:gn|n)|qrt)))?|x)|e(?:an|dian)|in)|n(?:-unique|ot)|o(?:pen|therwise|ver)|p(?:ivot|rofile)|q(?:cut|u(?:antile|ery))|r(?:e(?:name|place(?:-time-zone)?|verse)|olling)|s(?:a(?:mple|ve)|chema|e(?:lect(?:or(?: (?:a(?:l(?:l|pha(?:numeric)?)|rray)|b(?:inary|oolean|y-(?:dtype|index|name))|c(?:ategorical|ontains)|d(?:ate(?:time)?|ecimal|igit|uration)|e(?:mpty|n(?:ds-with|um)|xclude)|f(?:irst|loat)|integer|l(?:ast|ist)|matches|n(?:ested|ot|umeric)|object|s(?:igned-integer|t(?:arts-with|r(?:ing|uct)))|temporal|unsigned-integer))?)?|t(?:-with-idx)?)|h(?:ape|ift)|lice|ort-by|t(?:d|ore-(?:get|ls|rm)|r(?:-(?:join|lengths|replace(?:-all)?|s(?:lice|plit|trip-chars))|ftime|uct-json-encode))|um(?:mary)?)|t(?:ake|runcate)|u(?:n(?:ique|nest|pivot)|ppercase)|va(?:lue-counts|r)|w(?:hen|ith-column)))?|rt)|r(?:epend|int)|s)|query(?: (?:db|git|json|web(?:page-info)?|xml))?|r(?:andom(?: (?:b(?:inary|ool)|chars|float|int|pass|uuid))?|e(?:duce|g(?:ex|istry(?: query)?)|ject|name|turn|verse)|m|o(?:ll(?: (?:down|left|right|up))?|tate)|un(?:-(?:external|internal))?)|s(?:ave|c(?:hema|ope(?: (?:aliases|commands|e(?:ngine-stats|xterns)|modules|variables))?)|e(?:lect|mver(?: bump)?|q(?: (?:char|date))?)|huffle|kip(?: (?:until|while))?|l(?:eep|ice)|o(?:rt(?:-by)?|urce(?:-env)?)|plit(?: (?:c(?:ell-path|hars|olumn)|list|row|words))?|t(?:art|or(?: (?:create|delete|export|i(?:mport|nsert)|open|reset|update))?|r(?: (?:a(?:fter|lign)|be(?:fore|tween)|c(?:a(?:mel-case|pitalize)|o(?:m(?:mon-prefix|press)|ntains))|d(?:e(?:compress|dent|unicode)|istance|owncase)|e(?:nds-with|scape-regex|xpand)|in(?:crement|de(?:nt|x-of))|join|kebab-case|l(?:ength|owercase)|pascal-case|re(?:place|verse)|s(?:creaming-snake-case|hl-(?:quote|split)|imilarity|lug|nake-case|ta(?:rts-with|ts)|ubstring)|t(?:itle-case|r(?:im|uncate))|u(?:nescape|p(?:case|percase))|wrap))?)|ys(?: (?:cpu|disks|host|mem|net|temp|users))?)|t(?:a(?:ble|ke(?: (?:until|while))?)|e(?:e|rm(?: (?:query|size))?)|imeit|o(?: (?:csv|gui|html|json|kdl|m(?:d|sgpack(?:z)?)|nuon|p(?:arquet|list)|t(?:ext|o(?:ml|on)|sv|xt)|xml|y(?:aml|ml))|uch)?|r(?:anspose|ee|y)|u(?:i(?: (?:b(?:ind|ox|utton)|debug|l(?:abel|og)|menu|pr(?:eview|ogress)|run|s(?:e(?:arch|lect)|plit)|t(?:ab(?:le)?|extbox|ree)))?|tor))|u(?:limit|mask|n(?:ame|i(?:on|q(?:-by)?)|let)|p(?:date(?: cells)?|sert)|rl(?: (?:build-query|decode|encode|join|parse|split-query))?|se)|v(?:alues|ersion(?: check)?|iew(?: (?:blocks|files|ir|s(?:ource|pan)))?)|w(?:atch|h(?:ere|i(?:ch|le)|oami)|i(?:ndow|th-env)|rap)|zip)(?![\\w-])( (.*))?",
+      "sha256": "3079141FAAF64FAB3AB6A216D1C268B9F640F2F91EBEF051219CC21929E0505D"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/beginCaptures/2/patterns/3/match",
+      "regex": "(?<=\\^)(?:\\$(\"[^\"]+\"|'[^']+')|\"[^\"]+\"|'[^']+')",
+      "sha256": "35CC771DB847A25DA328B24545C34CA15EEC5C74A4365DE64088B9C58B23A966"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/beginCaptures/2/patterns/4/match",
+      "regex": "([\\w.]+(?:-[\\w.!]+)*)(?: (.*))?",
+      "sha256": "D081603F01366EE8CA71F74C1B67C3A749DF6B51F8E64FFC7445DD206679425A"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/command/end",
+      "regex": "(?=\\||\\)|\\}|;)|$",
+      "sha256": "6F44793FCA047837BF2CF9DEB4CCD7A8494F18DDEAB3490AF4A8CED3C3CEE7D0"
+    },
+    {
+      "source": "nushell.tmLanguage.json",
+      "pointer": "/repository/expression/patterns/3/match",
+      "regex": "\\|",
+      "sha256": "0A03773BD3A7CD4F4F9FE306F5C469992DB68DBC60DEF84DF32A7B42055543D5"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/0/begin",
+      "regex": "<#",
+      "sha256": "AB5246AC69BA88BF39BCA52107076AA88F7412022288AAFB076CEF1521ABEDD3"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/0/end",
+      "regex": "#>",
+      "sha256": "956568A2C99A4FF8A20903043EDB9EBB14683350A0589C4B51284CBE27DCE6DE"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/1/match",
+      "regex": "[2-6]>&1|>>|>|<<|<|>|>\\||[1-6]>|[1-6]>>",
+      "sha256": "FBF43B9186989D0FB98849966AAE2324CF7703774B1B5DF3B5F8B0E2E21BAB0A"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/14/begin",
+      "regex": "['\\x{2018}-\\x{201B}]",
+      "sha256": "2D87FACC3AB62F23C1C32F4CD516E462F5F998405189A71737BF5F659A946553"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/14/end",
+      "regex": "['\\x{2018}-\\x{201B}]",
+      "sha256": "2D87FACC3AB62F23C1C32F4CD516E462F5F998405189A71737BF5F659A946553"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/14/patterns/0/match",
+      "regex": "['\\x{2018}-\\x{201B}]{2}",
+      "sha256": "8AF34C9D6BBD04B1F04764ED1250CB2B3809DC37997D53D88B167B9669B86DBA"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/15/begin",
+      "regex": "(@[\"\\x{201C}-\\x{201E}])\\s*$",
+      "sha256": "775BFBA2FD055624D3CDC00247F8FCFB15208F10BFD775A1B61851130A8286FD"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/15/end",
+      "regex": "^[\"\\x{201C}-\\x{201E}]@",
+      "sha256": "009AF6EE18AAC179A664B29F9AC096F1EFEF7ECC8CF3EA4B90CD51099954F901"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/16/begin",
+      "regex": "(@['\\x{2018}-\\x{201B}])\\s*$",
+      "sha256": "1460FD526D98548A6DB2F7BA081C36B679227CD0FA409F1DC8EFC520F23B59EF"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/16/end",
+      "regex": "^['\\x{2018}-\\x{201B}]@",
+      "sha256": "6B522341787DB8D90F5DA264507EFEAFC212D2ACE2FBAF5A1FCDD637E5A2D7A6"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/18/begin",
+      "regex": "(@)(\\()",
+      "sha256": "D7277C7AC88C414A2F61B021CD2AA794656F38DDCC5675C8FD09C6A355C4A7AE"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/18/end",
+      "regex": "\\)",
+      "sha256": "C07F428D83FAD2182ACDF9C417641FF91254749A98F1D55C1FA35ACA4CF758D7"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/19/begin",
+      "regex": "((\\$))(\\()",
+      "sha256": "42AA7243CA7A1F32B6006ED1ADEC2E262C5FEA6338FB3A97498162D9EFF5893B"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/19/end",
+      "regex": "\\)",
+      "sha256": "C07F428D83FAD2182ACDF9C417641FF91254749A98F1D55C1FA35ACA4CF758D7"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/20/match",
+      "regex": "(\\b(([A-Za-z0-9\\-_\\.]+)\\.(?i:exe|com|cmd|bat))\\b)",
+      "sha256": "EB42637F590CEC35895E0997AC23194AD7A42BABAFB0BCCA99EAAA62F11FB59E"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/21/match",
+      "regex": "(?<!\\w|-|\\.)((?i:begin|break|catch|clean|continue|data|default|define|do|dynamicparam|else|elseif|end|exit|finally|for|from|if|in|inlinescript|parallel|param|process|return|sequence|switch|throw|trap|try|until|var|while)|%|\\?)(?!\\w)",
+      "sha256": "2D702124ED8F5F2EB0613A4129F4DF9EACB0B2FC1F6DCE3B66E1C5895DEAF529"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/22/match",
+      "regex": "(?<!\\w|-|[^\\)]\\.)((?i:(foreach|where)(?!-object))|%|\\?)(?!\\w)",
+      "sha256": "F17352A070FEA6B336C3E5349B74F8DB747D84C90A882E951707F52DAFFC1834"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/23/begin",
+      "regex": "(?<!\\w)(--%)(?!\\w)",
+      "sha256": "C1BC970C9093C82AA9452660EC5FB27AF14A56C37B843A6AED37461A2FB5E295"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/23/end",
+      "regex": "$",
+      "sha256": "09FC96082D34C2DFC1295D92073B5EA1DC8EF8DA95F14DFDED011FFB96D3E54B"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/23/patterns/0/match",
+      "regex": ".+",
+      "sha256": "BB93E85B6301B6970DA83AB4EEB3357A62B6B516FA846C96F024466E42E6F3A6"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/24/match",
+      "regex": "(?<!\\w)((?i:hidden|static))(?!\\w)",
+      "sha256": "01F6DDF5DFFA4116A6BDF9786A603A672A503D911692791A1DD2AB8091D23279"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/25/match",
+      "regex": "(?<!\\w|-)((?i:class)|%|\\?)(?:\\s)+((?:\\p{L}|\\d|_|-|)+)\\b",
+      "sha256": "76234523F5E9106A8FC1CD6EA9ED5C7F84CD600B2A3272929C6F638277285848"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/26/match",
+      "regex": "(?<!\\w)-(?i:is(?:not)?|as)\\b",
+      "sha256": "F297A70F06A7003B8FD43030D765A57E479DABFB924900B2A71E9829DA58F05D"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/27/match",
+      "regex": "(?<!\\w)-(?i:[ic]?(?:eq|ne|[gl][te]|(?:not)?(?:like|match|contains|in)|replace))(?!\\p{L})",
+      "sha256": "F6E97354A656B8B1A7B66AF5F9A955AC083B93BA11C97CB42156F59FE2C59C5F"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/28/match",
+      "regex": "(?<!\\w)-(?i:join|split)(?!\\p{L})|!",
+      "sha256": "6D3D718C7258CA746DDEBB200D69EAC532227B90A27396C5326E9DAF33AD40B0"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/29/match",
+      "regex": "(?<!\\w)-(?i:and|or|not|xor)(?!\\p{L})|!",
+      "sha256": "25B5CA07D8B25AAFB2DBF2C261B4B4CBA1DAD6317385C24C90D9101AA7CE415F"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/30/match",
+      "regex": "(?<!\\w)-(?i:band|bor|bnot|bxor|shl|shr)(?!\\p{L})",
+      "sha256": "70FD63F73CA5C8870F4FAB9219D0225CD2EA08A9CFCD072BFA830F613DFF3827"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/31/match",
+      "regex": "(?<!\\w)-(?i:f)(?!\\p{L})",
+      "sha256": "31FF4B707F0FA8DEFF84F10DFB2907558E4E675FA0BEEDA97514BE0E1BB1F8D6"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/32/match",
+      "regex": "[+%*/-]?=|[+/*%-]",
+      "sha256": "0D2E1EECA9CCE8CBA8112985F95A69DE48987400D8B901C840A25924C33C5732"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/33/match",
+      "regex": "\\|{2}|&{2}|;",
+      "sha256": "584F3F3DB61F656F7243C9834BD9E228C7938C8382B95BF2AFCAA06C7076537B"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/34/match",
+      "regex": "&|(?<!\\w)\\.(?= )|`|,|\\|",
+      "sha256": "680838F6712297C71713BA7D803638D2421B435BE089D72BCE23B5CC07AD6A20"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/patterns/35/match",
+      "regex": "(?<!\\s|^)\\.\\.(?=\\-?\\d|\\(|\\$)",
+      "sha256": "543517874500C62050592EEC83BC5BEDA26C55566765649FC2433B56DCC6D3A1"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commentLine/begin",
+      "regex": "(?<![`\\\\-])(#)#*",
+      "sha256": "EA61CDB4B8389B3E40E95EA4D72F7FE49BDF2BA42BEBDC680B22E5583693D99E"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commentLine/end",
+      "regex": "$\\n?",
+      "sha256": "3021A3E72AE1B62065A33F13492522439EDE5D5BA2A53FEC53454E1E0F3E82E4"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/attribute/begin",
+      "regex": "(\\[)\\s*\\b(?i)(cmdletbinding|alias|outputtype|parameter|validatenotnull|validatenotnullorempty|validatecount|validateset|allownull|allowemptycollection|allowemptystring|validatescript|validaterange|validatepattern|validatelength|supportswildcards)\\b",
+      "sha256": "74D62B2CCEA3EC8964C1514285D86E67FC92F539366FD88824300E04FF187D25"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/attribute/end",
+      "regex": "(\\])",
+      "sha256": "ED08E53D23118CF4DD2B407DC5C9115E53BDA9258DC27A93A5BE167F0CBA56C3"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/attribute/patterns/0/begin",
+      "regex": "\\(",
+      "sha256": "2C0FFEE95A99EC5379FDA46384A686371C62A047F258D053AE3F55D331F84AD1"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/attribute/patterns/0/end",
+      "regex": "\\)",
+      "sha256": "C07F428D83FAD2182ACDF9C417641FF91254749A98F1D55C1FA35ACA4CF758D7"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/attribute/patterns/0/patterns/1/match",
+      "regex": "(?i)\\b(mandatory|valuefrompipeline|valuefrompipelinebypropertyname|valuefromremainingarguments|position|parametersetname|defaultparametersetname|supportsshouldprocess|supportspaging|positionalbinding|helpuri|confirmimpact|helpmessage)\\b(?:\\s+)?(=)?",
+      "sha256": "09C8D73CFB162563211F183F6E7A5AD0ED18E951756C64056A41A4BF17963CDB"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commands/patterns/0/match",
+      "regex": "(?:(\\p{L}|\\d|_|-|\\\\|\\:)*\\\\)?\\b(?i:Add|Approve|Assert|Backup|Block|Build|Checkpoint|Clear|Close|Compare|Complete|Compress|Confirm|Connect|Convert|ConvertFrom|ConvertTo|Copy|Debug|Deny|Deploy|Disable|Disconnect|Dismount|Edit|Enable|Enter|Exit|Expand|Export|Find|Format|Get|Grant|Group|Hide|Import|Initialize|Install|Invoke|Join|Limit|Lock|Measure|Merge|Mount|Move|New|Open|Optimize|Out|Ping|Pop|Protect|Publish|Push|Read|Receive|Redo|Register|Remove|Rename|Repair|Request|Reset|Resize|Resolve|Restart|Restore|Resume|Revoke|Save|Search|Select|Send|Set|Show|Skip|Split|Start|Step|Stop|Submit|Suspend|Switch|Sync|Test|Trace|Unblock|Undo|Uninstall|Unlock|Unprotect|Unpublish|Unregister|Update|Use|Wait|Watch|Write)\\-.+?(?:\\.(?i:exe|cmd|bat|ps1))?\\b",
+      "sha256": "63EE9EB887CB052C260F6DAA7C09AFE861058D83FAF22C66E300B222D8BC3A82"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commands/patterns/1/match",
+      "regex": "(?<!\\w)(?i:foreach-object)(?!\\w)",
+      "sha256": "7BB247A2D487E6CE8D84D1185A56494BFB6776ECBD87259FA069E324DF93CD0B"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commands/patterns/2/match",
+      "regex": "(?<!\\w)(?i:where-object)(?!\\w)",
+      "sha256": "07AE203302C55102C9DA827F21D327CDC3619EA2D82F3EA32E7ACDFA47241AF3"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commands/patterns/3/match",
+      "regex": "(?<!\\w)(?i:sort-object)(?!\\w)",
+      "sha256": "913D4BF947973F4EC41C905DCE7D68DC6E1AE0B42A42264E461D02074B1B5DF9"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commands/patterns/4/match",
+      "regex": "(?<!\\w)(?i:tee-object)(?!\\w)",
+      "sha256": "EBCB9C1828D5908C69E74622933F7C9FB2FDCB8D28336B0856FEB647E939A17D"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commentEmbeddedDocs/patterns/0/match",
+      "regex": "(?:^|\\G)(?i:\\s*(\\.)(COMPONENT|DESCRIPTION|EXAMPLE|FUNCTIONALITY|INPUTS|LINK|NOTES|OUTPUTS|ROLE|SYNOPSIS))\\s*$",
+      "sha256": "020B78C3167853A463B4DFCA7B08A227DAEA9FE8567A5B70F850579ACD9BBD1E"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/commentEmbeddedDocs/patterns/1/match",
+      "regex": "(?:^|\\G)(?i:\\s*(\\.)(EXTERNALHELP|FORWARDHELP(?:CATEGORY|TARGETNAME)|PARAMETER|REMOTEHELPRUNSPACE))\\s+(.+?)\\s*$",
+      "sha256": "15D4C5A59E9038E487AB30983E030F55405D54B51B4CA38CEE750E599DBFBB24"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/doubleQuotedStringEscapes/patterns/0/match",
+      "regex": "`[`0abefnrtv'\"\\x{2018}-\\x{201E}$]",
+      "sha256": "AFFC70F9898CFD73A66DEE976892771518A9CE3CFE68D0432B3660A0A556C35D"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/unicodeEscape/patterns/0/match",
+      "regex": "`u\\{(?:(?:10)?([0-9a-fA-F]){1,4}|0?\\g<1>{1,5})}",
+      "sha256": "A72F1AB2899EF671AC318318744DDF9894F3801C67DF613748A0718E9B36205A"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/unicodeEscape/patterns/1/match",
+      "regex": "`u(?:\\{[0-9a-fA-F]{,6}.)?",
+      "sha256": "A2F4D32BF711FF24DE7849D6D28D4ADBA995ED47FEC04080018CFB2603B44E04"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/function/begin",
+      "regex": "^(?:\\s*+)(?i)(function|filter|configuration|workflow)\\s+(?:(global|local|script|private):)?((?:\\p{L}|\\d|_|-|\\.)+)",
+      "sha256": "A02DECFE04DA9F09FE0D5A79B0029B36056560EC1D9423893CB9870A065CE48D"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/function/end",
+      "regex": "(?=\\{|\\()",
+      "sha256": "AD3A89BDB9C63772B2E0A1819427E1FA1FB84CEF68736307E19907C57ADA4212"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/subexpression/begin",
+      "regex": "\\(",
+      "sha256": "2C0FFEE95A99EC5379FDA46384A686371C62A047F258D053AE3F55D331F84AD1"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/subexpression/end",
+      "regex": "\\)",
+      "sha256": "C07F428D83FAD2182ACDF9C417641FF91254749A98F1D55C1FA35ACA4CF758D7"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/interpolation/begin",
+      "regex": "(((\\$)))((\\())",
+      "sha256": "9FBB4FBEB3F2E3EB1611D8770B79DD8A336FB854264CB33F8B9A741E42E1A6B6"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/interpolation/end",
+      "regex": "(\\))",
+      "sha256": "5D5498C7C7A383EC78B53187CC1BC7785CB776A5808007F34FD0B3850DC697C2"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/numericConstant/patterns/0/match",
+      "regex": "(?<!\\w)([-+]?0(?:x|X)[0-9a-fA-F_]+(?:U|u|L|l|UL|Ul|uL|ul|LU|Lu|lU|lu)?)((?i:[kmgtp]b)?)\\b",
+      "sha256": "ADA34EB6754A9B624D38BDEC0916C65561BF9F9119E87A2FEA36C35037A452C0"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/numericConstant/patterns/1/match",
+      "regex": "(?<!\\w)([-+]?(?:[0-9_]+)?\\.[0-9_]+(?:(?:e|E)[0-9]+)?(?:F|f|D|d|M|m)?)((?i:[kmgtp]b)?)\\b",
+      "sha256": "8A3130E88E3BC68A9BF27437C257044C01F9982AC9B4AD7659F9E6AD7123AB8F"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/numericConstant/patterns/2/match",
+      "regex": "(?<!\\w)([-+]?0(?:b|B)[01_]+(?:U|u|L|l|UL|Ul|uL|ul|LU|Lu|lU|lu)?)((?i:[kmgtp]b)?)\\b",
+      "sha256": "CE79C4292754BDDF9EBB69BD3E02C2F3AF5F4F7943D7D4DC77E06ED45D23AD3F"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/numericConstant/patterns/3/match",
+      "regex": "(?<!\\w)([-+]?[0-9_]+(?:e|E)(?:[0-9_])?+(?:F|f|D|d|M|m)?)((?i:[kmgtp]b)?)\\b",
+      "sha256": "575413796594EEC9165316077BFCB5A7ADD24C7EA1DEEC99A6F81D5548BE8987"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/numericConstant/patterns/4/match",
+      "regex": "(?<!\\w)([-+]?[0-9_]+\\.(?:e|E)(?:[0-9_])?+(?:F|f|D|d|M|m)?)((?i:[kmgtp]b)?)\\b",
+      "sha256": "8B3B8D28517AF358168C2D67443AAA635FAE92A71D452DB4D4C0644651F277E1"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/numericConstant/patterns/5/match",
+      "regex": "(?<!\\w)([-+]?[0-9_]+[\\.]?(?:F|f|D|d|M|m))((?i:[kmgtp]b)?)\\b",
+      "sha256": "A289FAFF8105BCA823ED607DF6C185DBF13AD9A7371A026B1AAAC4158CED6F9F"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/numericConstant/patterns/6/match",
+      "regex": "(?<!\\w)([-+]?[0-9_]+[\\.]?(?:U|u|L|l|UL|Ul|uL|ul|LU|Lu|lU|lu)?)((?i:[kmgtp]b)?)\\b",
+      "sha256": "2E7AF0E5FE99575769437A7BD819424256C6892CD56E7C6A474F0F29D1D9527B"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/scriptblock/begin",
+      "regex": "\\{",
+      "sha256": "5728B7D3CDAA808DAF1373BF707E6FDD8D39E1C0BB6AE971FB49F94B1EECAF16"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/scriptblock/end",
+      "regex": "\\}",
+      "sha256": "C7354723E6131B5EC74C8F01425BEC37D342F01160F79FDC915AD7C57DCCE262"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/type/begin",
+      "regex": "\\[",
+      "sha256": "8B1F60FADE5D66C6281A3B1D4C1F7C45E9A22EF0FFD1177DDCB1B0E6E4AB7F8E"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/type/end",
+      "regex": "\\]",
+      "sha256": "C9D6FCD1D11B34248EAAC74A6B1E0E733115CE9D55F05EC4BBAD2E29618D1FF6"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/type/patterns/0/match",
+      "regex": "(?!\\d+|\\.)(?:\\p{L}|\\p{N}|\\.)+",
+      "sha256": "54BC6F4F9BCF64E60745DF1FB064F6463E8C407C0C0AD7B5174784CF76C7A97F"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variable/patterns/0/match",
+      "regex": "(\\$)(?i:(False|Null|True))\\b",
+      "sha256": "EB0887970B9283828058FAE2F8A6A060D5CCB16F0B11475C90296557A04E0CD7"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variable/patterns/1/match",
+      "regex": "(\\$)(?i:(Error|ExecutionContext|Host|Home|PID|PsHome|PsVersionTable|ShellID))((?:\\.(?:\\p{L}|\\d|_)+)*\\b)?\\b",
+      "sha256": "6C92C8BB35A2C9F325212848B3632CCE271F289E9A9797BD77B3A38AE91DF2AA"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variable/patterns/2/match",
+      "regex": "(\\$)((?:[$^?])|(?i:_|Args|ConsoleFileName|Event|EventArgs|EventSubscriber|ForEach|Input|LastExitCode|Matches|MyInvocation|NestedPromptLevel|Profile|PSBoundParameters|PsCmdlet|PsCulture|PSDebugContext|PSItem|PSCommandPath|PSScriptRoot|PsUICulture|Pwd|Sender|SourceArgs|SourceEventArgs|StackTrace|Switch|This)\\b)((?:\\.(?:\\p{L}|\\d|_)+)*\\b)?",
+      "sha256": "40E75549C91187D981934FC19296BD6FDF0C47BF290F6365375AA417D210354C"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variable/patterns/3/match",
+      "regex": "(\\$)(?i:(ConfirmPreference|DebugPreference|ErrorActionPreference|ErrorView|FormatEnumerationLimit|InformationPreference|LogCommandHealthEvent|LogCommandLifecycleEvent|LogEngineHealthEvent|LogEngineLifecycleEvent|LogProviderHealthEvent|LogProviderLifecycleEvent|MaximumAliasCount|MaximumDriveCount|MaximumErrorCount|MaximumFunctionCount|MaximumHistoryCount|MaximumVariableCount|OFS|OutputEncoding|PSCulture|PSDebugContext|PSDefaultParameterValues|PSEmailServer|PSItem|PSModuleAutoLoadingPreference|PSModuleAutoloadingPreference|PSSenderInfo|PSSessionApplicationName|PSSessionConfigurationName|PSSessionOption|ProgressPreference|VerbosePreference|WarningPreference|WhatIfPreference))((?:\\.(?:\\p{L}|\\d|_)+)*\\b)?\\b",
+      "sha256": "267559E9D80DEC3992C1E901C942DE7D1F0E0AB2EB9F77B7A64A20CE35BDCD73"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variable/patterns/4/match",
+      "regex": "(?i:(\\$|@)(global|local|private|script|using|workflow):((?:\\p{L}|\\d|_)+))((?:\\.(?:\\p{L}|\\d|_)+)*\\b)?",
+      "sha256": "C9D6EAFFC77F685860C8762A5DFD42B168395A1CA90746899DAC99541E29D8A4"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variable/patterns/5/match",
+      "regex": "(?i:(\\$)(\\{)(global|local|private|script|using|workflow):([^}]*[^}`])(\\}))((?:\\.(?:\\p{L}|\\d|_)+)*\\b)?",
+      "sha256": "3D47FD6636A5F5979706A84B589681B40F6B83C018CCF97597DC58E5D396AEC9"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variable/patterns/6/match",
+      "regex": "(?i:(\\$|@)((?:\\p{L}|\\d|_)+:)?((?:\\p{L}|\\d|_)+))((?:\\.(?:\\p{L}|\\d|_)+)*\\b)?",
+      "sha256": "9F95C4405F28745EDCABD9D3AB92490C6749E17AC97B1752F03EE9A2C5893322"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variable/patterns/7/match",
+      "regex": "(?i:(\\$)(\\{)((?:\\p{L}|\\d|_)+:)?([^}]*[^}`])(\\}))((?:\\.(?:\\p{L}|\\d|_)+)*\\b)?",
+      "sha256": "628F7DD7CFE69079542ECDBFC54C10EBF7CCF74F531189E8DD98E9F2D1D2D5AC"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/UsingDirective/match",
+      "regex": "(?<!\\w)(?i:(using))\\s+(?i:(namespace|module))\\s+(?i:((?:\\w+(?:\\.)?)+))",
+      "sha256": "CE23E2746AD7A9F59A8BCCEA85DE834EE1D1838962ADCA5AE344D1439FE48749"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/RequiresDirective/begin",
+      "regex": "(?<=#)(?i:(requires))\\s",
+      "sha256": "3C8287EAA194BBD49181C775220649007E166ACF2C56D156BAC94762844DF3C5"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/RequiresDirective/end",
+      "regex": "$",
+      "sha256": "09FC96082D34C2DFC1295D92073B5EA1DC8EF8DA95F14DFDED011FFB96D3E54B"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/RequiresDirective/patterns/0/match",
+      "regex": "\\-(?i:Modules|PSSnapin|RunAsAdministrator|ShellId|Version|Assembly|PSEdition)",
+      "sha256": "702C023435DADE771820D9460F8C2BC89B78DA8D2A0CADE84932CB686CD5C415"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/RequiresDirective/patterns/1/match",
+      "regex": "(?<!-)\\b\\p{L}+|\\d+(?:\\.\\d+)*",
+      "sha256": "27D75A64EF1ECD15274AE171807007C3B17BEB2D10B4E0E7949FDC7C5E340B45"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variableNoProperty/patterns/0/match",
+      "regex": "(\\$)(?i:(False|Null|True))\\b",
+      "sha256": "EB0887970B9283828058FAE2F8A6A060D5CCB16F0B11475C90296557A04E0CD7"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variableNoProperty/patterns/1/match",
+      "regex": "(\\$)(?i:(Error|ExecutionContext|Host|Home|PID|PsHome|PsVersionTable|ShellID))\\b",
+      "sha256": "0008D3C4B25EC9B2C718275F977EC1C2710CA953C2815E4A7F3660D38D10AE84"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variableNoProperty/patterns/2/match",
+      "regex": "(\\$)((?:[$^?])|(?i:_|Args|ConsoleFileName|Event|EventArgs|EventSubscriber|ForEach|Input|LastExitCode|Matches|MyInvocation|NestedPromptLevel|Profile|PSBoundParameters|PsCmdlet|PsCulture|PSDebugContext|PSItem|PSCommandPath|PSScriptRoot|PsUICulture|Pwd|Sender|SourceArgs|SourceEventArgs|StackTrace|Switch|This)\\b)",
+      "sha256": "38E16B9469BD37DE939153839F1F2604FC4F8AF634DD878EA5700A8A71363CF1"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variableNoProperty/patterns/3/match",
+      "regex": "(\\$)(?i:(ConfirmPreference|DebugPreference|ErrorActionPreference|ErrorView|FormatEnumerationLimit|InformationPreference|LogCommandHealthEvent|LogCommandLifecycleEvent|LogEngineHealthEvent|LogEngineLifecycleEvent|LogProviderHealthEvent|LogProviderLifecycleEvent|MaximumAliasCount|MaximumDriveCount|MaximumErrorCount|MaximumFunctionCount|MaximumHistoryCount|MaximumVariableCount|OFS|OutputEncoding|PSCulture|PSDebugContext|PSDefaultParameterValues|PSEmailServer|PSItem|PSModuleAutoLoadingPreference|PSModuleAutoloadingPreference|PSSenderInfo|PSSessionApplicationName|PSSessionConfigurationName|PSSessionOption|ProgressPreference|VerbosePreference|WarningPreference|WhatIfPreference))\\b",
+      "sha256": "99666364672DE7D408ED96C260337D1E13C188639E357DBFF053C8C97D72E040"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variableNoProperty/patterns/4/match",
+      "regex": "(?i:(\\$)(global|local|private|script|using|workflow):((?:\\p{L}|\\d|_)+))",
+      "sha256": "07E5BC509A9E0A5174AD7794DEC87560EFEDF414831644CC69254A70BE70F9C8"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variableNoProperty/patterns/5/match",
+      "regex": "(?i:(\\$)(\\{)(global|local|private|script|using|workflow):([^}]*[^}`])(\\}))",
+      "sha256": "4336BCD0E436E3CB815452584BD7CC9535DBDB474FBBDE5254054355E8E76C3D"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variableNoProperty/patterns/6/match",
+      "regex": "(?i:(\\$)((?:\\p{L}|\\d|_)+:)?((?:\\p{L}|\\d|_)+))",
+      "sha256": "E2647DA81EAE80459D07D0A7EC38B5B9A9458D0608AD91FFDA17EDDEF18C3C7D"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/variableNoProperty/patterns/7/match",
+      "regex": "(?i:(\\$)(\\{)((?:\\p{L}|\\d|_)+:)?([^}]*[^}`])(\\}))",
+      "sha256": "E0DB73AE0866C63AF5F142167A91F253A198E495931B229120015F59D3CAEB9D"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/hashtable/begin",
+      "regex": "(@)(\\{)",
+      "sha256": "9A8F4B949F25109CF0DB12DC9DB2E33F37CEBB824EB8B5ED1E099786D2C4A21F"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/hashtable/end",
+      "regex": "(\\})",
+      "sha256": "7BD3720998FD5117AAD680AFD3E8BEEF40A5CE5D90DA3A04EF5134DDF00D012F"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/hashtable/patterns/0/match",
+      "regex": "\\b((?:\\'|\\\")?)(\\w+)((?:\\'|\\\")?)(?:\\s+)?(=)(?:\\s+)?",
+      "sha256": "52F2D0F49DEF04EDB6723F46892E58720BB38D3C748B7640B50E24479F4D25FE"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/doubleQuotedString/begin",
+      "regex": "[\"\\x{201C}-\\x{201E}]",
+      "sha256": "925A8DF1FB09BFC6EADA16198A0DB43B694DFC7F3FD3A3E02191C9E25A29A164"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/doubleQuotedString/end",
+      "regex": "[\"\\x{201C}-\\x{201E}]",
+      "sha256": "925A8DF1FB09BFC6EADA16198A0DB43B694DFC7F3FD3A3E02191C9E25A29A164"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/doubleQuotedString/patterns/0/match",
+      "regex": "(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,64}\\b",
+      "sha256": "798BB0A4121D37FA8813ABF1545C277DB61551E0960B407E93287FD53C1A7531"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/doubleQuotedString/patterns/3/match",
+      "regex": "[\"\\x{201C}-\\x{201E}]{2}",
+      "sha256": "827156B3B48A5F70A77C1C482B6539CD4FAE155C08A77586C36260E572097852"
+    },
+    {
+      "source": "PowerShellSyntax.tmLanguage",
+      "pointer": "/repository/doubleQuotedString/patterns/5/match",
+      "regex": "`\\s*$",
+      "sha256": "3357F35EF20A6FEFB10ABB3D6B2D3CAD93F6B67391BECB1D312D0FBD08C524FE"
+    }
+  ]
+}
