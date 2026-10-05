@@ -28,4 +28,3 @@ Los controles de ownership son inyectados; ambos native controls y suite conserv
 ## Estado final
 
 [Revisión independiente R4](../reviews/S03-Unix-probes-r4.md): SIN_CRITICAS_PENDIENTES en la preparación del harness privado; UP-04 cerrado. La receta nativa anterior sigue sin ejecución: únicamente disponemos de Windows, por respuesta directa del usuario. Una futura matriz GitHub Actions requiere su preparación y destino autorizado; no sustituye QA visual. U-G1–5, runtime Unix y producción permanecen abiertos. Esta copia conserva la entrega previa y añade el cierre; no modifica snapshots.
-

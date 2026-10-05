@@ -52,4 +52,3 @@ PDFG0-01: inline/redirección primera o seleccionada, header total y resto ident
 ## Estado de aceptación
 
 Revisión independiente final [PDF G0 R2](../reviews/PDF-G0-r2.md). Contrato observable aprobado para preparar gates, sin código, artefacto PDFium fijado, ejecución ni capacidad PDF acreditada. Documento temporal revisado SHA256 138387EF5223C35BA09A7D223E336E547C922DBB9658076708962324D49BCB04; la copia canónica añade este estado.
-

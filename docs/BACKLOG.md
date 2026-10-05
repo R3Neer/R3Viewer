@@ -219,3 +219,5 @@ Gráficos: [raster por filas R2](research/GRAFICOS_FILAS_SPIKE.md) revisado inde
 
 PDF: [contrato G0 R2](refinement/PDF-G0.md) revisado sin críticas de diseño; gate binario/ABI/corpus, implementación y aceptación siguen pendientes. No cerrar RV-204 ni demás capacidades. Unix: [harness R4](research/S03_UNIX_PROBES.md) revisado sin críticas en preparación, corrige UP-04; no ejecución nativa. Solo Windows disponible confirmado por el usuario; futura matriz GitHub Actions pendiente. No cierre U-G1–5/S03 ni soporte Linux/macOS por este resultado.
 
+
+Sixel: [diseño experimental G2](refinement/GRAFICOS-SIXEL-G2.md) revisado sin críticas pendientes. Cuerpo acotado RGB332, dos pases y validador independiente por implementar/probar; no soporte de terminal ni cierre de G2/RV por revisión de diseño.
