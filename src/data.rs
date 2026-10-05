@@ -1187,6 +1187,15 @@ impl<'a> InspectionRef<'a> {
             Self::Nu(node) => node.summary(max_chars),
             Self::File(node) => {
                 let name = file_kind_name(node.kind());
+                if let Some(alias) = node.metadata().and_then(|meta| meta.alias) {
+                    return cap_safe(
+                        &format!(
+                            "alias(anchorID={}, targetNode={}; Enter sigue)",
+                            alias.anchor, alias.target.0
+                        ),
+                        max_chars,
+                    );
+                }
                 if let Some(leaf) = node.leaf() {
                     cap_safe(
                         &format!("{name}({:?})", prefix(leaf.text(), max_chars)),
@@ -1215,6 +1224,10 @@ pub fn file_kind_name(kind: crate::structure_model::StructureKind) -> &'static s
         LocalTime => "local_time",
         Null => "null",
         JsonNumber => "number",
+        YamlStream => "yaml_stream",
+        YamlDocument => "yaml_document",
+        Alias => "alias",
+        YamlTaggedScalar => "tagged_scalar (categoría no resuelta)",
     }
 }
 #[derive(Clone, Copy)]

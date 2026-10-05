@@ -541,3 +541,41 @@ fn json_file_infers_structure_but_literal_and_metadata_do_not() {
     assert!(transformed.status.success());
     assert_eq!(transformed.stdout, raw.as_bytes());
 }
+
+#[test]
+fn yaml_default_source_and_nontext_nu_payload_preserve_their_contract() {
+    let raw = "---\r\né: &name [1, *name] # source\r\n";
+    let result = invoke(&["--format", "yaml", "--value", "--", raw], None);
+    assert!(result.status.success(), "{:?}", result.stderr);
+    assert_eq!(result.stdout, raw.as_bytes());
+    let wire = nu_value_wire(r3viewer_wire::Value::Nothing);
+    let result = invoke(
+        &["--nu-wire", "--format", "yaml", "--structure"],
+        Some(&wire),
+    );
+    assert_eq!(result.status.code(), Some(2));
+    assert!(result.stdout.is_empty());
+    assert!(
+        String::from_utf8(result.stderr)
+            .unwrap()
+            .contains("requiere texto")
+    );
+}
+#[cfg(windows)]
+#[test]
+fn yaml_stream_failure_preserves_whole_source_including_earlier_documents() {
+    for raw in [
+        "---\nx: 1\n...\n---\nx: [\n",
+        "%YAML 1.1\n---\nyes\n",
+        "---\nx: 1\n...\n%YAML 1.3\n---\nyes\n",
+        "x: !!int \"wrong\"\r\n",
+    ] {
+        let result = invoke(
+            &["--format", "yaml", "--structure", "--value", "--", raw],
+            None,
+        );
+        assert!(result.status.success(), "{:?}", result.stderr);
+        assert_eq!(result.stdout, raw.as_bytes());
+        assert!(!result.stderr.is_empty(), "{raw}");
+    }
+}

@@ -90,7 +90,7 @@ Un fallo detectado o presupuesto excedido del motor deja el documento entero pla
 
 ## Estructura opcional de archivos de datos
 
-TOML y candidato JSON conservan Fuente como vista inicial. Para un archivo real .toml/.json, Tab/BackTab cambia a Estructura y vuelve manteniendo posición/búsquedas; `--structure` pide Estructura inicialmente. `--format toml|json` selecciona parser para literal/stdin/string de Nu. `--language` solo selecciona resaltado, no parser; `--format text --structure` es error2.
+TOML, JSON y YAML conservan Fuente como vista inicial. Para un archivo real .toml/.json/.yaml/.yml, Tab/BackTab cambia a Estructura y vuelve manteniendo posición/búsquedas; `--structure` pide Estructura inicialmente. `--format toml|json|yaml` selecciona parser para literal/stdin/string de Nu. `--language` solo selecciona resaltado, no parser; `--format text --structure` es error2.
 
 ```nu
 viewer config.toml
@@ -98,6 +98,8 @@ viewer datos.json --structure
 '{"a":1,"a":2}' | viewer --format json --structure -i
 ```
 
-Estructura conserva orden y lexemas originales, incluidas todas las ocurrencias JSON con claves repetidas y una advertencia; no convierte números enormes a float. Buscar Estructura compara contenido decodificado, con identidad separada de placeholders de controles. `o` salta al span original completo acreditado; si no existe, conserva la vista y diagnostica. Fallo de parseo/límite mantiene Fuente completa con diagnóstico y código0; cancelar devuelve130. Datos Nu ya tipados mantienen navegación y no se reabren ni se convierten a JSON/TOML.
+Estructura conserva orden y lexemas originales, incluidas todas las ocurrencias JSON con claves repetidas y una advertencia; no convierte números enormes a float. Buscar Estructura compara contenido decodificado, con identidad separada de placeholders de controles. `o` salta al span original completo acreditado; si no existe, conserva la vista y diagnostica. Fallo de parseo/límite mantiene Fuente completa con diagnóstico y código0; cancelar devuelve130. Datos Nu ya tipados mantienen navegación y no se reabren ni se convierten a JSON/TOML/YAML.
 
-[Estado JSON y rondas](docs/reviews/S03-JSON-producto.md), [TOML](docs/reviews/S03-TOML-producto.md). Aceptación de candidato no certifica visual/matriz ni completa RV-106; YAML/XML siguen pendientes. [YAML](docs/sprints/S03-D3-YAML.md) tiene contrato y gate de parser revisados; diseño de integración revisado e implementación iniciada. [XML](docs/sprints/S03-D4-XML.md) tiene contrato revisado y experimentos preliminares, sin implementación.
+YAML conserva documentos, claves complejas, anchors y alias por identidad. Enter sigue alias explícitamente; Backspace restaura hasta128retornos sin expansión automática. Tags desconocidos quedan inertes; versiones distintas de1.2 dejan Fuente completa. Búsqueda distingue contenido decoded, URI y descriptor alias de los placeholders visibles. No aplica merge YAML1.1 ni ejecuta constructores.
+
+[Estado JSON y rondas](docs/reviews/S03-JSON-producto.md), [TOML](docs/reviews/S03-TOML-producto.md), [YAML R3](docs/reviews/S03-YAML-producto.md). Aceptación funcional parcial Windows; no certifica visual/matriz, presupuestos completos ni RV-106. [XML](docs/sprints/S03-D4-XML.md) tiene contrato y arquitectura revisados; gates experimentales pendientes, sin implementación integrada.

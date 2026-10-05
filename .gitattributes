@@ -17,3 +17,5 @@ resources/syntax/toml/*.patch -text
 
 # Vendored parser provenance is byte-exact.
 vendor/jiter/** -text
+
+vendor/saphyr-parser/** -text

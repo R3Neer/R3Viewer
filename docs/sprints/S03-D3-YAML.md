@@ -33,3 +33,6 @@ Fuentes y gate experimental: [investigación YAML](../research/S03_YAML_PARSER_S
 
 
 [Diseño de integración R2](S03-D3-core.md) revisado sin críticas pendientes; implementación autorizada sobre sus gates y aceptación prevista, sin cierre de producto.
+
+
+YAML D3 R3 integrado:188tests workspace/fmt/Clippy/build PASS, revisión sin críticas y aceptación funcional parcial Windows. [Evidencia y límites](../reviews/S03-YAML-producto.md). Fuentes/estructura,95spans y12sesionesConPTY comprobadas; máximos/lifecycle/visual/runtimeUnix siguen pendientes. XML sigue en gates experimentales, RV-106 y objetivo S03 abiertos.

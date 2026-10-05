@@ -7,7 +7,7 @@ use std::{
     io,
     sync::{Arc, atomic::AtomicBool},
 };
-fn output(
+pub(crate) fn output(
     model: &Structure,
     format: StructureFormat,
     syntax: usize,
@@ -34,6 +34,8 @@ fn output(
             root: model.root().id(),
             syntax_depth: syntax as u32,
             key_components: key_max as u32,
+            metadata: model.raw_metadata().len() as u32,
+            alias_edges: model.alias_edges() as u32,
         }),
     )?;
     let mut batch = Vec::new();
@@ -94,6 +96,15 @@ fn output(
             Message::Declaration {
                 spec,
                 parts: parts.to_vec(),
+            },
+        )?;
+    }
+    for (offset, records) in model.raw_metadata().chunks(ipc::BATCH).enumerate() {
+        send(
+            out,
+            Message::Metadata {
+                offset: (offset * ipc::BATCH) as u32,
+                records: records.to_vec(),
             },
         )?;
     }
@@ -194,6 +205,7 @@ pub fn run_private_stdio() -> io::Result<()> {
     let result = match format {
         StructureFormat::Toml => crate::toml_worker::project(source, generation, &cancel),
         StructureFormat::Json => crate::json_worker::project(source, generation, &cancel),
+        StructureFormat::Yaml => crate::yaml_worker::project(source, generation, &cancel),
     };
     match result {
         Ok((model, syntax, key_max)) => output(

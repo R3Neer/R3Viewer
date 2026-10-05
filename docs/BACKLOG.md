@@ -179,3 +179,6 @@ JSON integrado sobre TOML,159tests workspace/fmt/Clippy/build PASS. R1 revisión
 
 
 XML D4 tiene [detalle técnico del núcleo](sprints/S03-D4-core.md) revisado independientemente sin críticas pendientes; [trazabilidad](reviews/S03-D4-core.md). G1–G7 siguen abiertos: no hay implementación XML ni aceptación del parser/producto. YAML D3 está en revisión de candidato R3 tras corregir identidad de controles, unidades de metadatos y proyección repetida en búsqueda hacia atrás; aceptación y cierre de integración pendientes. RV-106 sigue abierto.
+
+
+YAML D3 R3 integrado y revisado sin críticas con aceptación funcional parcial Windows:188tests y95spans comprobados. [Evidencia](reviews/S03-YAML-producto.md). Límites máximos/lifecycle/visual/runtimeUnix pendientes; XML en gates experimentales. No completar RV-106 ni S03 ni retirar tareas por este corte.

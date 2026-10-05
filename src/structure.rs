@@ -34,10 +34,22 @@ pub enum StructureFailure {
     ContainmentFailed,
     InvalidJson,
     UnicodeRepresentation,
+    InvalidYaml,
+    UnsupportedYamlVersion,
+    InvalidYamlCoreTag,
+    YamlRepresentation,
 }
 impl StructureFailure {
     pub fn description(self) -> &'static str {
         match self {
+            Self::InvalidYaml => "YAML no válido; se conserva la fuente",
+            Self::UnsupportedYamlVersion => "versión YAML explícita no soportada; se requiere 1.2",
+            Self::InvalidYamlCoreTag => {
+                "etiqueta Core YAML incompatible con contenido o forma; se conserva la fuente"
+            }
+            Self::YamlRepresentation => {
+                "rango o representación YAML no acreditado; se conserva la fuente"
+            }
             Self::InvalidJson => "JSON no válido; se conserva la fuente",
             Self::UnicodeRepresentation => {
                 "surrogate Unicode aislado no representable; se conserva la fuente"
@@ -68,6 +80,10 @@ impl StructureFailure {
             8 => Self::ContainmentFailed,
             9 => Self::InvalidJson,
             10 => Self::UnicodeRepresentation,
+            11 => Self::InvalidYaml,
+            12 => Self::UnsupportedYamlVersion,
+            13 => Self::InvalidYamlCoreTag,
+            14 => Self::YamlRepresentation,
             _ => return None,
         })
     }
@@ -658,17 +674,35 @@ fn receive_model(
     request: &Request,
     cancel: &AtomicBool,
 ) -> Result<Structure, WorkError> {
+    receive_sequence(
+        request.source.clone(),
+        request.generation,
+        request.id,
+        request.format,
+        || connection.next(shared, request, cancel),
+        || status(shared, request, cancel),
+    )
+}
+fn receive_sequence(
+    source: Arc<String>,
+    generation: u64,
+    id: u64,
+    format: StructureFormat,
+    mut read: impl FnMut() -> Result<Option<Frame>, WorkError>,
+    mut check: impl FnMut() -> Result<(), WorkError>,
+) -> Result<Structure, WorkError> {
     let invalid = || WorkError::Failure(StructureFailure::InvalidIpc);
-    let next = || -> Result<Frame, WorkError> {
-        let f = connection
-            .next(shared, request, cancel)?
-            .ok_or_else(invalid)?;
-        if f.generation != request.generation || f.request != request.id {
+    let mut next = || -> Result<Option<Frame>, WorkError> {
+        let frame = read()?;
+        if frame
+            .as_ref()
+            .is_some_and(|f| f.generation != generation || f.request != id)
+        {
             return Err(invalid());
         }
-        Ok(f)
+        Ok(frame)
     };
-    let counts = match next()?.message {
+    let counts = match next()?.ok_or_else(invalid)?.message {
         Message::Begin(c) => c,
         Message::Failure(n) => {
             return Err(WorkError::Failure(
@@ -677,7 +711,7 @@ fn receive_model(
         }
         _ => return Err(invalid()),
     };
-    if counts.format != request.format
+    if counts.format != format
         || counts.nodes == 0
         || counts.nodes as usize + counts.entries as usize > MAX_STRUCTURE_ITEMS
         || counts.cooked as usize > MAX_STRUCTURE_BYTES
@@ -685,17 +719,36 @@ fn receive_model(
         || counts.parts as usize > MAX_STRUCTURE_BYTES / 12
         || counts.syntax_depth as usize > MAX_STRUCTURE_DEPTH
         || counts.key_components as usize > MAX_STRUCTURE_DEPTH
+        || counts.metadata > counts.nodes
+        || counts.alias_edges > counts.nodes
+        || (counts.format != StructureFormat::Yaml
+            && (counts.metadata != 0 || counts.alias_edges != 0))
+        || (counts.format == StructureFormat::Yaml
+            && (counts.declarations != 0 || counts.parts != 0 || counts.key_components != 0))
     {
         return Err(invalid());
     }
-    let mut builder =
-        StructureBuilder::new(request.source.clone(), request.generation).map_err(model_error)?;
+    let mut builder = StructureBuilder::new_for_format(source.clone(), generation, format)
+        .map_err(model_error)?;
     let mut expected = Vec::<u32>::new();
+    let transport_headroom = if format == StructureFormat::Yaml {
+        4 * ipc::MAX_FRAME
+    } else {
+        0
+    };
+    builder
+        .set_scratch_bytes(
+            (counts.nodes as usize)
+                .checked_mul(std::mem::size_of::<u32>())
+                .and_then(|n| n.checked_add(transport_headroom))
+                .ok_or_else(invalid)?,
+        )
+        .map_err(model_error)?;
     expected
         .try_reserve_exact(counts.nodes as usize)
         .map_err(|_| WorkError::Failure(StructureFailure::ArenaBudget))?;
     builder
-        .set_scratch_bytes(expected.capacity() * std::mem::size_of::<u32>())
+        .set_scratch_bytes(expected.capacity() * std::mem::size_of::<u32>() + transport_headroom)
         .map_err(model_error)?;
     let mut nodes = 0u32;
     let mut expected_total = 0u64;
@@ -705,9 +758,26 @@ fn receive_model(
     let mut cooked = 0u32;
     let mut declarations = 0u32;
     let mut parts = 0u32;
+    let mut metadata = 0u32;
+    let mut aliases = 0u32;
+    let mut phase = 0u8;
     loop {
-        status(shared, request, cancel)?;
-        let frame = next()?;
+        check()?;
+        let frame = next()?.ok_or_else(invalid)?;
+        let incoming_phase = match &frame.message {
+            Message::Nodes { .. } => 1,
+            Message::Entries { .. } => 2,
+            Message::Cooked { .. } => 3,
+            Message::Declaration { .. } => 4,
+            Message::Metadata { .. } => 5,
+            Message::End => 6,
+            Message::Failure(_) => phase,
+            _ => return Err(invalid()),
+        };
+        if incoming_phase < phase {
+            return Err(invalid());
+        }
+        phase = incoming_phase;
         match frame.message {
             Message::Nodes {
                 offset,
@@ -720,6 +790,38 @@ fn receive_model(
                     return Err(invalid());
                 }
                 for node in batch {
+                    let valid_kind = match format {
+                        StructureFormat::Yaml => !matches!(
+                            node.spec.kind,
+                            StructureKind::ArrayOfTables
+                                | StructureKind::JsonNumber
+                                | StructureKind::OffsetDateTime
+                                | StructureKind::LocalDateTime
+                                | StructureKind::LocalDate
+                                | StructureKind::LocalTime
+                        ),
+                        StructureFormat::Json => matches!(
+                            node.spec.kind,
+                            StructureKind::Mapping
+                                | StructureKind::Sequence
+                                | StructureKind::String
+                                | StructureKind::Boolean
+                                | StructureKind::Null
+                                | StructureKind::JsonNumber
+                        ),
+                        StructureFormat::Toml => !matches!(
+                            node.spec.kind,
+                            StructureKind::Null
+                                | StructureKind::JsonNumber
+                                | StructureKind::YamlStream
+                                | StructureKind::YamlDocument
+                                | StructureKind::Alias
+                                | StructureKind::YamlTaggedScalar
+                        ),
+                    };
+                    if !valid_kind {
+                        return Err(invalid());
+                    }
                     builder.push_node(node.spec).map_err(model_error)?;
                     expected_total += node.entries as u64;
                     if expected_total > counts.entries as u64 {
@@ -782,6 +884,25 @@ fn receive_model(
                 builder.push_declaration(spec, batch).map_err(model_error)?;
                 declarations += 1;
             }
+            Message::Metadata { offset, records } => {
+                if format != StructureFormat::Yaml
+                    || nodes != counts.nodes
+                    || entries != counts.entries
+                    || cooked != counts.cooked
+                    || declarations != counts.declarations
+                    || parts != counts.parts
+                    || offset != metadata
+                    || records.is_empty()
+                    || metadata as usize + records.len() > counts.metadata as usize
+                {
+                    return Err(invalid());
+                }
+                for record in records {
+                    aliases += u32::from(record.alias.is_some());
+                    builder.push_metadata(record).map_err(model_error)?;
+                    metadata += 1;
+                }
+            }
             Message::Failure(n) => {
                 return Err(WorkError::Failure(
                     StructureFailure::decode(n).ok_or_else(invalid)?,
@@ -794,10 +915,12 @@ fn receive_model(
                     || cooked != counts.cooked
                     || declarations != counts.declarations
                     || parts != counts.parts
+                    || metadata != counts.metadata
+                    || aliases != counts.alias_edges
                 {
                     return Err(invalid());
                 }
-                if connection.next(shared, request, cancel)?.is_some() {
+                if next()?.is_some() {
                     return Err(invalid());
                 }
                 break;
@@ -806,30 +929,221 @@ fn receive_model(
         }
         if builder
             .persistent_bytes()
-            .checked_add(expected.capacity() * std::mem::size_of::<u32>())
+            .checked_add(expected.capacity() * std::mem::size_of::<u32>() + transport_headroom)
             .is_none_or(|n| n > MAX_STRUCTURE_BYTES)
         {
             return Err(WorkError::Failure(StructureFailure::ArenaBudget));
         }
     }
     drop(expected);
-    builder.set_scratch_bytes(0).map_err(model_error)?;
+    builder
+        .set_scratch_bytes(transport_headroom)
+        .map_err(model_error)?;
     let model = builder
         .finish_with(
             counts.root,
             counts.syntax_depth as usize,
             counts.key_components as usize,
-            || status(shared, request, cancel).is_err(),
+            || check().is_err(),
         )
         .map_err(|error| {
             if error == ModelError::Cancelled {
-                status(shared, request, cancel)
-                    .err()
-                    .unwrap_or(WorkError::Cancelled)
+                check().err().unwrap_or(WorkError::Cancelled)
             } else {
                 model_error(error)
             }
         })?;
-    status(shared, request, cancel)?;
+    check()?;
     Ok(model)
+}
+
+#[cfg(test)]
+mod receiver_tests {
+    use super::*;
+    fn frames() -> (Arc<String>, Vec<Frame>) {
+        let source = Arc::new("{a: &x [*x], b: \"\\e\"}".to_owned());
+        let (model, depth, keys) =
+            crate::yaml_worker::project(source.clone(), 31, &AtomicBool::new(false)).unwrap();
+        let mut bytes = Vec::new();
+        crate::structure_worker::output(
+            &model,
+            StructureFormat::Yaml,
+            depth,
+            keys,
+            31,
+            9,
+            &mut bytes,
+        )
+        .unwrap();
+        let mut input = bytes.as_slice();
+        let mut frames = Vec::new();
+        while let Some(frame) = ipc::read_frame(&mut input).unwrap() {
+            frames.push(frame);
+        }
+        (source, frames)
+    }
+    fn receive(source: Arc<String>, frames: Vec<Frame>) -> Result<Structure, WorkError> {
+        let mut frames = frames.into_iter();
+        receive_sequence(
+            source,
+            31,
+            9,
+            StructureFormat::Yaml,
+            || Ok(frames.next()),
+            || Ok(()),
+        )
+    }
+    #[test]
+    fn whole_sequence_roundtrip_revalidates_yaml_and_derives_parents() {
+        let (source, frames) = frames();
+        let model = receive(source.clone(), frames).unwrap();
+        assert!(Arc::ptr_eq(&source, &model.source_handle()));
+        assert_eq!(model.format(), StructureFormat::Yaml);
+        let doc = model.root().entry(0).unwrap().value();
+        assert_eq!(model.parent(doc.id()).unwrap().owner, model.root().id());
+        let root = doc.entry(0).unwrap().value();
+        let target = root.entry(0).unwrap().value();
+        let alias = target.entry(0).unwrap().value();
+        assert_eq!(alias.metadata().unwrap().alias.unwrap().target, target.id());
+        assert_eq!(root.entry(1).unwrap().value().decoded(), Some("\u{1b}"));
+    }
+    #[test]
+    fn malformed_phases_counts_identity_scope_alias_offsets_and_eof_never_publish() {
+        for alteration in 0..14 {
+            let (source, mut frames) = frames();
+            match alteration {
+                0 => {
+                    if let Message::Begin(c) = &mut frames[0].message {
+                        c.format = StructureFormat::Json;
+                    }
+                }
+                1 => {
+                    if let Message::Begin(c) = &mut frames[0].message {
+                        c.metadata -= 1;
+                    }
+                }
+                2 => {
+                    if let Message::Begin(c) = &mut frames[0].message {
+                        c.alias_edges += 1;
+                    }
+                }
+                3 => frames[1].generation += 1,
+                4 => {
+                    let meta = frames
+                        .iter()
+                        .position(|f| matches!(f.message, Message::Metadata { .. }))
+                        .unwrap();
+                    frames.swap(1, meta);
+                }
+                5 => {
+                    let cooked = frames
+                        .iter()
+                        .position(|f| matches!(f.message, Message::Cooked { .. }))
+                        .unwrap();
+                    let entries = frames
+                        .iter()
+                        .position(|f| matches!(f.message, Message::Entries { .. }))
+                        .unwrap();
+                    frames.swap(cooked, entries);
+                }
+                6 => {
+                    if let Some(Frame {
+                        message: Message::Metadata { offset, .. },
+                        ..
+                    }) = frames
+                        .iter_mut()
+                        .find(|f| matches!(f.message, Message::Metadata { .. }))
+                    {
+                        *offset = 1;
+                    }
+                }
+                7 => {
+                    if let Some(Frame {
+                        message: Message::Metadata { records, .. },
+                        ..
+                    }) = frames
+                        .iter_mut()
+                        .find(|f| matches!(f.message, Message::Metadata { .. }))
+                    {
+                        records.last_mut().unwrap().document = 99;
+                    }
+                }
+                8 => {
+                    if let Some(Frame {
+                        message: Message::Metadata { records, .. },
+                        ..
+                    }) = frames
+                        .iter_mut()
+                        .find(|f| matches!(f.message, Message::Metadata { .. }))
+                    {
+                        let m = records.iter_mut().find(|m| m.alias.is_some()).unwrap();
+                        m.alias.as_mut().unwrap().target = m.node;
+                    }
+                }
+                9 => {
+                    if let Some(Frame {
+                        message: Message::Entries { parent, .. },
+                        ..
+                    }) = frames
+                        .iter_mut()
+                        .find(|f| matches!(f.message, Message::Entries { .. }))
+                    {
+                        *parent = NodeId(u32::MAX);
+                    }
+                }
+                10 => {
+                    if let Some(Frame {
+                        message: Message::Cooked { bytes, .. },
+                        ..
+                    }) = frames
+                        .iter_mut()
+                        .find(|f| matches!(f.message, Message::Cooked { .. }))
+                    {
+                        bytes[0] = 255;
+                    }
+                }
+                11 => {
+                    frames.pop();
+                }
+                12 => frames.push(Frame::new(31, 9, Message::End)),
+                _ => {
+                    if let Message::Begin(c) = &mut frames[0].message {
+                        c.syntax_depth += 1;
+                    }
+                }
+            }
+            assert!(receive(source, frames).is_err(), "alteration {alteration}");
+        }
+    }
+    #[test]
+    fn cancellation_during_receive_and_failure_midstream_invalidate_everything() {
+        let (source, frames) = frames();
+        let mut frames = frames.into_iter();
+        let mut ticks = 0;
+        let result = receive_sequence(
+            source,
+            31,
+            9,
+            StructureFormat::Yaml,
+            || Ok(frames.next()),
+            || {
+                ticks += 1;
+                if ticks >= 2 {
+                    Err(WorkError::Cancelled)
+                } else {
+                    Ok(())
+                }
+            },
+        );
+        assert!(matches!(result, Err(WorkError::Cancelled)));
+        let (source, mut frames) = self::frames();
+        frames.insert(
+            2,
+            Frame::new(31, 9, Message::Failure(StructureFailure::InvalidYaml as u8)),
+        );
+        assert!(matches!(
+            receive(source, frames),
+            Err(WorkError::Failure(StructureFailure::InvalidYaml))
+        ));
+    }
 }

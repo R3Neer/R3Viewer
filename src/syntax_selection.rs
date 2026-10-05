@@ -22,6 +22,9 @@ impl SyntaxSelection {
             if cli.format == Format::Json {
                 return Some("json");
             }
+            if cli.format == Format::Yaml {
+                return Some("yaml");
+            }
             if let SourceOrigin::LocalFile(path) = origin {
                 path.extension().and_then(|e| e.to_str())
             } else {
@@ -71,6 +74,7 @@ pub enum StructureSelection {
     None { diagnostic: Option<String> },
     Toml,
     Json,
+    Yaml,
 }
 impl StructureSelection {
     pub fn select(
@@ -78,17 +82,17 @@ impl StructureSelection {
         origin: &SourceOrigin,
         typed: Option<&r3viewer_wire::TypedInput>,
     ) -> Result<Self, crate::input::InputError> {
-        if matches!(cli.format, Format::Toml | Format::Json) {
+        if matches!(cli.format, Format::Toml | Format::Json | Format::Yaml) {
             if !textual_input(typed) {
                 return Err(crate::input::InputError::new(
                     2,
-                    "--format toml/json requiere texto; los valores Nu tipados conservan su inspección sin ese selector",
+                    "--format toml/json/yaml requiere texto; los valores Nu tipados conservan su inspección sin ese selector",
                 ));
             }
-            return Ok(if cli.format == Format::Json {
-                Self::Json
-            } else {
-                Self::Toml
+            return Ok(match cli.format {
+                Format::Json => Self::Json,
+                Format::Yaml => Self::Yaml,
+                _ => Self::Toml,
             });
         }
         if cli.format != Format::Text
@@ -102,10 +106,13 @@ impl StructureSelection {
             if ext.eq_ignore_ascii_case("json") {
                 return Ok(Self::Json);
             }
+            if ext.eq_ignore_ascii_case("yaml") || ext.eq_ignore_ascii_case("yml") {
+                return Ok(Self::Yaml);
+            }
         }
         Ok(Self::None {
             diagnostic: if cli.structure && typed.is_none() {
-                Some("no hay intérprete estructural para esta fuente; indica --format toml o json para interpretar datos".into())
+                Some("no hay intérprete estructural para esta fuente; indica --format toml, json o yaml para interpretar datos".into())
             } else {
                 None
             },
@@ -116,6 +123,7 @@ impl StructureSelection {
         match self {
             Self::Toml => Some(StructureFormat::Toml),
             Self::Json => Some(StructureFormat::Json),
+            Self::Yaml => Some(StructureFormat::Yaml),
             Self::None { .. } => None,
         }
     }
@@ -125,7 +133,7 @@ impl StructureSelection {
     pub fn diagnostic(&self) -> Option<&str> {
         match self {
             Self::None { diagnostic } => diagnostic.as_deref(),
-            Self::Toml | Self::Json => None,
+            Self::Toml | Self::Json | Self::Yaml => None,
         }
     }
 }
@@ -380,6 +388,123 @@ mod tests {
             assert!(selected.diagnostic().is_none());
         }
     }
+    #[test]
+    fn yaml_selector_separates_file_origin_language_and_typed_payload() {
+        use r3viewer_wire::{ByteStreamKind, Origin, Payload, Start, TypedInput, VERSION, Value};
+        let auto = Cli::parse_from(["viewer", "--structure"]);
+        for path in ["actual.yaml", "actual.YML"] {
+            assert_eq!(
+                StructureSelection::select(&auto, &SourceOrigin::LocalFile(path.into()), None)
+                    .unwrap(),
+                StructureSelection::Yaml
+            );
+        }
+        let explicit = Cli::parse_from(["viewer", "--format", "yaml"]);
+        let language = Cli::parse_from(["viewer", "--language", "yaml"]);
+        for origin in [
+            SourceOrigin::Literal,
+            SourceOrigin::StandardInput,
+            SourceOrigin::Nushell,
+        ] {
+            assert_eq!(
+                StructureSelection::select(&explicit, &origin, None).unwrap(),
+                StructureSelection::Yaml
+            );
+            assert_eq!(
+                StructureSelection::select(&language, &origin, None)
+                    .unwrap()
+                    .format(),
+                None
+            );
+            assert_eq!(
+                StructureSelection::select(&auto, &origin, None)
+                    .unwrap()
+                    .format(),
+                None
+            );
+        }
+        assert_eq!(
+            SyntaxSelection::select(&explicit, &SourceOrigin::Literal),
+            SyntaxSelection::Language("YAML".into())
+        );
+        let override_language = Cli::parse_from(["viewer", "--language", "rs"]);
+        let origin = SourceOrigin::LocalFile("actual.yaml".into());
+        assert_eq!(
+            StructureSelection::select(&override_language, &origin, None).unwrap(),
+            StructureSelection::Yaml
+        );
+        assert_eq!(
+            SyntaxSelection::select(&override_language, &origin),
+            SyntaxSelection::Language("Rust".into())
+        );
+        let text = Cli::parse_from(["viewer", "--format", "text"]);
+        assert_eq!(
+            StructureSelection::select(&text, &origin, None)
+                .unwrap()
+                .format(),
+            None
+        );
+        for payload in [
+            Payload::SingleValue(Value::String("x: 1".into())),
+            Payload::ByteStream {
+                kind: ByteStreamKind::String,
+                bytes: b"x: 1".to_vec(),
+            },
+        ] {
+            let input = TypedInput {
+                start: Start {
+                    version: VERSION,
+                    cwd: "metadata.yaml".into(),
+                    origin: Origin::SingleValue,
+                },
+                payload,
+            };
+            assert_eq!(
+                StructureSelection::select(&explicit, &SourceOrigin::Nushell, Some(&input))
+                    .unwrap(),
+                StructureSelection::Yaml
+            );
+            assert_eq!(
+                StructureSelection::select(&auto, &SourceOrigin::Nushell, Some(&input))
+                    .unwrap()
+                    .format(),
+                None
+            );
+        }
+        for payload in [
+            Payload::SingleValue(Value::Nothing),
+            Payload::SingleValue(Value::Int(1)),
+            Payload::SingleValue(Value::Record(vec![])),
+            Payload::ListStream(vec![]),
+            Payload::ByteStream {
+                kind: ByteStreamKind::Unknown,
+                bytes: b"x: 1".to_vec(),
+            },
+            Payload::SingleValue(Value::Binary(b"x: 1".to_vec())),
+        ] {
+            let input = TypedInput {
+                start: Start {
+                    version: VERSION,
+                    cwd: "metadata.yaml".into(),
+                    origin: Origin::SingleValue,
+                },
+                payload,
+            };
+            assert_eq!(
+                StructureSelection::select(&explicit, &SourceOrigin::Nushell, Some(&input))
+                    .unwrap_err()
+                    .code,
+                2
+            );
+            assert_eq!(
+                StructureSelection::select(&auto, &SourceOrigin::Nushell, Some(&input))
+                    .unwrap()
+                    .format(),
+                None
+            );
+        }
+    }
+
     #[test]
     fn explicit_failures_are_diagnostic_not_document_errors() {
         let code = Cli::parse_from(["viewer", "--format", "code"]);

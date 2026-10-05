@@ -31,10 +31,27 @@ pub struct FileSearchHit {
     /// Safe cooked/descriptor byte range. Never a raw file coordinate.
     pub range: Range<usize>,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum YamlSearchDomain {
+    ScalarDecoded,
+    TagUri,
+    AliasDescriptor,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct YamlSearchHit {
+    pub generation: u64,
+    pub visit_index: usize,
+    pub node: crate::structure_model::NodeId,
+    pub domain: crate::yaml_view::Domain,
+    pub search_domain: YamlSearchDomain,
+    pub original_range: crate::yaml_view::HitRange,
+    pub range: crate::yaml_view::HitRange,
+}
 #[derive(Debug)]
 pub enum SearchOutcome {
     Found(SearchHit),
     FileFound(FileSearchHit),
+    YamlFound(YamlSearchHit),
     NotFound,
     Cancelled,
     Error(String),
@@ -725,5 +742,360 @@ mod file_search_control_identity_tests {
         };
         assert_eq!(control.path.0[0].ordinal, 0);
         assert_eq!(control.range, 0..3);
+    }
+}
+
+/// Decoded and metadata domains use the same borrowed fragments as the pane.
+/// No range is interpreted as a source coordinate and Alias never follows DFS.
+pub fn find_yaml(
+    structure: &crate::structure_model::Structure,
+    query: &str,
+    previous: Option<&YamlSearchHit>,
+    direction: Direction,
+    budget: &crate::yaml_view::Budget,
+    cancel: &AtomicBool,
+) -> SearchOutcome {
+    use crate::yaml_view::{Domain, Error, HitRange, Text, Visits};
+    let search = || -> Result<Option<YamlSearchHit>, Error> {
+        if query.is_empty() {
+            return Ok(None);
+        }
+        if query.len() > QUERY_LIMIT {
+            return Err(Error::Budget);
+        }
+        // KMP table + cloned query/editor strings, fixed DFS/fragments and staging.
+        let _charge = budget.charge(QUERY_LIMIT * std::mem::size_of::<usize>() + 65536)?;
+        let mut prefix = Vec::new();
+        prefix
+            .try_reserve_exact(query.len())
+            .map_err(|_| Error::Budget)?;
+        if prefix.capacity() > query.len() {
+            return Err(Error::Budget);
+        }
+        prefix.resize(query.len(), 0);
+        let needle = query.as_bytes();
+        let mut k = 0;
+        for i in 1..needle.len() {
+            if i.is_multiple_of(1024) && cancel.load(Ordering::Relaxed) {
+                return Err(Error::Cancelled);
+            }
+            while k > 0 && needle[k] != needle[i] {
+                k = prefix[k - 1]
+            }
+            if needle[k] == needle[i] {
+                k += 1
+            }
+            prefix[i] = k
+        }
+        for pass in 0..if previous.is_some() { 2 } else { 1 } {
+            let mut tentative = None;
+            let mut index = 0;
+            for node in Visits::new(structure, cancel) {
+                let node = node?;
+                let reference = structure.node(node).ok_or(Error::Invalid)?;
+                for domain in [Domain::Metadata, Domain::Decoded] {
+                    if domain == Domain::Decoded && reference.decoded().is_none() {
+                        continue;
+                    }
+                    let text = Text::new(structure, node, domain)?;
+                    for (unit_index, unit) in text.search_ranges().into_iter().enumerate() {
+                        let Some(unit) = unit else { continue };
+                        let search_domain = match (domain, unit_index) {
+                            (Domain::Decoded, _) => YamlSearchDomain::ScalarDecoded,
+                            (Domain::Metadata, 0) => YamlSearchDomain::TagUri,
+                            (Domain::Metadata, _) => YamlSearchDomain::AliasDescriptor,
+                        };
+                        let visit_index = index;
+                        index += 1;
+                        if let Some(last) = previous {
+                            let relevant = match (direction, pass) {
+                                (Direction::Forward, 0) | (Direction::Backward, 1) => {
+                                    visit_index >= last.visit_index
+                                }
+                                _ => visit_index <= last.visit_index,
+                            };
+                            if !relevant {
+                                continue;
+                            }
+                        }
+                        let mut from = unit.start;
+                        let mut to = unit.end;
+                        if let Some(last) = previous.filter(|last| last.visit_index == visit_index)
+                        {
+                            if last.generation != structure.generation()
+                                || last.node != node
+                                || last.domain != domain
+                                || last.search_domain != search_domain
+                                || last.original_range.end > unit.end - unit.start
+                                || last.original_range.start > last.original_range.end
+                            {
+                                return Err(Error::Invalid);
+                            }
+                            match (direction, pass) {
+                                (Direction::Forward, 0) => {
+                                    from = unit.start + last.original_range.end
+                                }
+                                (Direction::Backward, 0) => {
+                                    to = unit.start + last.original_range.start
+                                }
+                                (Direction::Forward, _) => {
+                                    to = unit.start + last.original_range.end
+                                }
+                                (Direction::Backward, _) => {
+                                    from = unit.start + last.original_range.start
+                                }
+                            }
+                        }
+                        let mut matched = 0;
+                        for (offset, byte) in text.raw_bytes().enumerate() {
+                            if offset.is_multiple_of(1024) {
+                                crate::yaml_view::check_search(cancel)?;
+                            }
+                            if offset < from {
+                                continue;
+                            }
+                            if offset >= to {
+                                break;
+                            }
+                            while matched > 0 && needle[matched] != byte {
+                                matched = prefix[matched - 1]
+                            }
+                            if needle[matched] == byte {
+                                matched += 1
+                            }
+                            if matched == needle.len() {
+                                let range = HitRange {
+                                    start: offset + 1 - needle.len(),
+                                    end: offset + 1,
+                                };
+                                let hit = YamlSearchHit {
+                                    generation: structure.generation(),
+                                    visit_index,
+                                    node,
+                                    domain,
+                                    search_domain,
+                                    original_range: HitRange {
+                                        start: range.start - unit.start,
+                                        end: range.end - unit.start,
+                                    },
+                                    // Tentative backward matches retain pane-original bytes.
+                                    // Project only the chosen hit, never every prefix match.
+                                    range,
+                                };
+                                if direction == Direction::Forward {
+                                    let mut hit = hit;
+                                    hit.range = text.visible_range(hit.range, cancel)?;
+                                    return Ok(Some(hit));
+                                }
+                                tentative = Some(hit);
+                                matched = prefix[needle.len() - 1];
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(mut hit) = tentative {
+                let text = Text::new(structure, hit.node, hit.domain)?;
+                hit.range = text.visible_range(hit.range, cancel)?;
+                return Ok(Some(hit));
+            }
+        }
+        Ok(None)
+    };
+    match search() {
+        Ok(Some(hit)) => SearchOutcome::YamlFound(hit),
+        Ok(None) => SearchOutcome::NotFound,
+        Err(Error::Cancelled) => SearchOutcome::Cancelled,
+        Err(error) => SearchOutcome::Error(error.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod yaml_search_tests {
+    use super::*;
+    fn model(raw: &str) -> crate::structure_model::Structure {
+        crate::yaml_worker::project(Arc::new(raw.to_owned()), 1, &AtomicBool::new(false))
+            .unwrap()
+            .0
+    }
+    #[test]
+    fn decoded_tagged_numbers_controls_and_metadata_domains_are_complete_and_alias_dfs_is_finite() {
+        use crate::yaml_view::{Budget, Domain};
+        let structure = model(
+            "a: !!int \"\\u0031\\u0032\"\nb: &x \"\\efoo ␛foo\"\nc: *x\nd: !<tag:example:needle> opaque\n",
+        );
+        let cancel = AtomicBool::new(false);
+        let budget = Budget::new(&structure).unwrap();
+        let SearchOutcome::YamlFound(number) =
+            find_yaml(&structure, "12", None, Direction::Forward, &budget, &cancel)
+        else {
+            panic!()
+        };
+        assert_eq!(number.domain, Domain::Decoded);
+        assert_eq!(number.range.start, 0);
+        assert!(matches!(
+            find_yaml(
+                &structure,
+                "\\u0031",
+                None,
+                Direction::Forward,
+                &budget,
+                &cancel
+            ),
+            SearchOutcome::NotFound
+        ));
+        let SearchOutcome::YamlFound(first) = find_yaml(
+            &structure,
+            "␛foo",
+            None,
+            Direction::Forward,
+            &budget,
+            &cancel,
+        ) else {
+            panic!()
+        };
+        let SearchOutcome::YamlFound(second) = find_yaml(
+            &structure,
+            "␛foo",
+            Some(&first),
+            Direction::Forward,
+            &budget,
+            &cancel,
+        ) else {
+            panic!()
+        };
+        assert_eq!(first.node, second.node);
+        assert_eq!(first.range, second.range);
+        let SearchOutcome::YamlFound(previous) = find_yaml(
+            &structure,
+            "␛foo",
+            Some(&second),
+            Direction::Backward,
+            &budget,
+            &cancel,
+        ) else {
+            panic!()
+        };
+        assert_eq!(previous, first);
+        let SearchOutcome::YamlFound(tag) = find_yaml(
+            &structure,
+            "tag:example:needle",
+            None,
+            Direction::Forward,
+            &budget,
+            &cancel,
+        ) else {
+            panic!()
+        };
+        assert_eq!(tag.domain, Domain::Metadata);
+        let cycle = model("&a [*a]");
+        let b = Budget::new(&cycle).unwrap();
+        assert!(matches!(
+            find_yaml(&cycle, "absent", None, Direction::Forward, &b, &cancel),
+            SearchOutcome::NotFound
+        ));
+        assert!(matches!(
+            find_yaml(&cycle, "target node", None, Direction::Forward, &b, &cancel),
+            SearchOutcome::NotFound
+        ));
+        assert!(matches!(
+            find_yaml(
+                &structure,
+                "12",
+                None,
+                Direction::Forward,
+                &budget,
+                &AtomicBool::new(true)
+            ),
+            SearchOutcome::Cancelled
+        ));
+        assert_eq!(budget.used(), 0);
+    }
+    #[test]
+    fn yaml_matches_original_controls_and_only_tag_alias_metadata() {
+        let structure = model(
+            "a: \"\\e\\u009b\"\nb: \"␛\\\\u{009b}\"\nc: !<tag:example:needle> opaque\nd: &cycle [*cycle]\n",
+        );
+        let budget = crate::yaml_view::Budget::new(&structure).unwrap();
+        let cancel = AtomicBool::new(false);
+        let find = |q: &str| find_yaml(&structure, q, None, Direction::Forward, &budget, &cancel);
+        let SearchOutcome::YamlFound(control) = find("\x1b") else {
+            panic!("ESC missing")
+        };
+        assert_eq!(
+            control.original_range,
+            crate::yaml_view::HitRange { start: 0, end: 1 }
+        );
+        assert_eq!(
+            control.range,
+            crate::yaml_view::HitRange { start: 0, end: 3 }
+        );
+        for query in ["␛", "\\u{009b}"] {
+            let SearchOutcome::YamlFound(literal) = find(query) else {
+                panic!("literal missing")
+            };
+            assert_ne!(literal.node, control.node);
+            for direction in [Direction::Forward, Direction::Backward] {
+                let SearchOutcome::YamlFound(next) = find_yaml(
+                    &structure,
+                    query,
+                    Some(&literal),
+                    direction,
+                    &budget,
+                    &cancel,
+                ) else {
+                    panic!("wrap missing")
+                };
+                assert_eq!(next, literal);
+            }
+        }
+        for query in [
+            "estilo:",
+            "target node",
+            "documento:",
+            "inspector de serialización",
+            "Enter sigue",
+        ] {
+            assert!(
+                matches!(find(query), SearchOutcome::NotFound),
+                "unexpected metadata {query}"
+            );
+        }
+        assert!(matches!(
+            find("tag:example:needle"),
+            SearchOutcome::YamlFound(_)
+        ));
+        assert!(matches!(
+            find("alias *cycle -> anchor#"),
+            SearchOutcome::YamlFound(_)
+        ));
+    }
+    #[test]
+    fn yaml_backward_search_chooses_rightmost_match_then_nonoverlap_previous() {
+        let structure = model("\"aaaaa\"");
+        let budget = crate::yaml_view::Budget::new(&structure).unwrap();
+        let cancel = AtomicBool::new(false);
+        let SearchOutcome::YamlFound(last) = find_yaml(
+            &structure,
+            "aa",
+            None,
+            Direction::Backward,
+            &budget,
+            &cancel,
+        ) else {
+            panic!()
+        };
+        assert_eq!((last.range.start, last.range.end), (3, 5));
+        let SearchOutcome::YamlFound(previous) = find_yaml(
+            &structure,
+            "aa",
+            Some(&last),
+            Direction::Backward,
+            &budget,
+            &cancel,
+        ) else {
+            panic!()
+        };
+        assert_eq!((previous.range.start, previous.range.end), (1, 3));
     }
 }

@@ -15,6 +15,8 @@ pub(crate) struct Counts {
     pub root: NodeId,
     pub syntax_depth: u32,
     pub key_components: u32,
+    pub metadata: u32,
+    pub alias_edges: u32,
 }
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct WireNode {
@@ -52,6 +54,10 @@ pub(crate) enum Message {
     Declaration {
         spec: DeclarationSpec,
         parts: Vec<DeclarationPart>,
+    },
+    Metadata {
+        offset: u32,
+        records: Vec<YamlMetadata>,
     },
     End,
     Failure(u8),
@@ -128,10 +134,35 @@ impl Encode {
     }
 }
 pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()> {
+    let text_len = |t: Option<TextRef>| if t.is_some() { 9 } else { 1 };
+    let loc_len = |t: Option<SourceSpan>| if t.is_some() { 9 } else { 1 };
+    let bound = match &frame.message {
+        Message::Boot | Message::SourceEnd | Message::End => 0,
+        Message::Init { .. } => 5,
+        Message::Ack { .. } => 4,
+        Message::Failure(_) => 1,
+        Message::Begin(_) => 41,
+        Message::Source { bytes, .. } | Message::Cooked { bytes, .. } => 8 + bytes.len(),
+        Message::Nodes { nodes, .. } => {
+            8 + nodes
+                .iter()
+                .map(|n| 5 + text_len(n.spec.text) + loc_len(n.spec.location))
+                .sum::<usize>()
+        }
+        Message::Entries { entries, .. } => 8 + entries.len() * 8,
+        Message::Declaration { spec, parts } => 25 + loc_len(spec.value_span) + parts.len() * 12,
+        Message::Metadata { records, .. } => {
+            8 + records
+                .iter()
+                .map(|m| 15 + text_len(m.tag) + if m.alias.is_some() { 8 } else { 0 })
+                .sum::<usize>()
+        }
+    };
+    if bound > MAX_FRAME - 28 {
+        return Err(invalid());
+    }
     let mut body = Encode(Vec::new());
-    body.0
-        .try_reserve_exact(CHUNK + 512)
-        .map_err(|_| invalid())?;
+    body.0.try_reserve_exact(bound).map_err(|_| invalid())?;
     let tag = match &frame.message {
         Message::Boot => 0,
         Message::Init { format, bytes } => {
@@ -159,6 +190,8 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
                 c.root.0,
                 c.syntax_depth,
                 c.key_components,
+                c.metadata,
+                c.alias_edges,
             ] {
                 body.word(n);
             }
@@ -203,6 +236,27 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
             }
             9
         }
+        Message::Metadata { offset, records } => {
+            if records.len() > BATCH {
+                return Err(invalid());
+            }
+            body.word(*offset);
+            body.word(records.len() as u32);
+            for m in records {
+                body.word(m.node.0);
+                body.word(m.document);
+                body.byte(m.style.map_or(255, |s| s as u8));
+                body.word(m.anchor.unwrap_or(u32::MAX));
+                body.text(m.tag);
+                body.byte(u8::from(m.alias.is_some()));
+                if let Some(a) = m.alias {
+                    body.word(a.anchor);
+                    body.word(a.target.0);
+                }
+                body.byte(u8::from(m.explicit_start) | (u8::from(m.synthetic_root) << 1));
+            }
+            12
+        }
         Message::End => 10,
         Message::Failure(reason) => {
             body.byte(*reason);
@@ -214,7 +268,7 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
     }
     let mut header = [0u8; 28];
     header[..4].copy_from_slice(b"R3ST");
-    header[4] = 2;
+    header[4] = 3;
     header[6] = tag;
     header[8..16].copy_from_slice(&frame.generation.to_le_bytes());
     header[16..24].copy_from_slice(&frame.request.to_le_bytes());
@@ -292,7 +346,7 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
         }
     }
     input.read_exact(&mut header[1..])?;
-    if &header[..4] != b"R3ST" || header[4] != 2 || header[5] != 0 || header[7] != 0 {
+    if &header[..4] != b"R3ST" || header[4] != 3 || header[5] != 0 || header[7] != 0 {
         return Err(invalid());
     }
     let len = u32::from_le_bytes(header[24..28].try_into().unwrap()) as usize;
@@ -329,6 +383,8 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
             root: NodeId(d.word()?),
             syntax_depth: d.word()?,
             key_components: d.word()?,
+            metadata: d.word()?,
+            alias_edges: d.word()?,
         }),
         6 => {
             let offset = d.word()?;
@@ -350,6 +406,10 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
                     10 => StructureKind::LocalTime,
                     11 => StructureKind::Null,
                     12 => StructureKind::JsonNumber,
+                    13 => StructureKind::YamlStream,
+                    14 => StructureKind::YamlDocument,
+                    15 => StructureKind::Alias,
+                    16 => StructureKind::YamlTaggedScalar,
                     _ => return Err(invalid()),
                 };
                 nodes.push(WireNode {
@@ -407,6 +467,50 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Option<Frame>> {
             }
             Message::Declaration { spec, parts }
         }
+        12 => {
+            let offset = d.word()?;
+            let count = d.count(BATCH)?;
+            let mut records = Vec::new();
+            records.try_reserve_exact(count).map_err(|_| invalid())?;
+            for _ in 0..count {
+                let node = NodeId(d.word()?);
+                let document = d.word()?;
+                let style = match d.byte()? {
+                    255 => None,
+                    0 => Some(YamlStyle::Plain),
+                    1 => Some(YamlStyle::SingleQuoted),
+                    2 => Some(YamlStyle::DoubleQuoted),
+                    3 => Some(YamlStyle::Literal),
+                    4 => Some(YamlStyle::Folded),
+                    _ => return Err(invalid()),
+                };
+                let anchor = d.word()?;
+                let tag = d.text()?;
+                let alias = match d.byte()? {
+                    0 => None,
+                    1 => Some(AliasTarget {
+                        anchor: d.word()?,
+                        target: NodeId(d.word()?),
+                    }),
+                    _ => return Err(invalid()),
+                };
+                let flags = d.byte()?;
+                if flags > 3 {
+                    return Err(invalid());
+                }
+                records.push(YamlMetadata {
+                    node,
+                    document,
+                    style,
+                    anchor: (anchor != u32::MAX).then_some(anchor),
+                    tag,
+                    alias,
+                    explicit_start: flags & 1 != 0,
+                    synthetic_root: flags & 2 != 0,
+                });
+            }
+            Message::Metadata { offset, records }
+        }
         10 => Message::End,
         11 => Message::Failure(d.byte()?),
         _ => return Err(invalid()),
@@ -425,7 +529,11 @@ mod tests {
     use super::*;
     #[test]
     fn format_is_versioned_and_echoed_without_unknown_discriminants() {
-        for format in [StructureFormat::Toml, StructureFormat::Json] {
+        for format in [
+            StructureFormat::Toml,
+            StructureFormat::Json,
+            StructureFormat::Yaml,
+        ] {
             let mut bytes = Vec::new();
             write_frame(
                 &mut bytes,
@@ -437,7 +545,7 @@ mod tests {
             );
             bytes[4] = 1;
             assert!(read_frame(&mut bytes.as_slice()).is_err());
-            bytes[4] = 2;
+            bytes[4] = 3;
             bytes[28] = 255;
             assert!(read_frame(&mut bytes.as_slice()).is_err());
         }
@@ -464,8 +572,46 @@ mod tests {
     fn oversized_header_rejected_before_payload_allocation() {
         let mut bytes = [0u8; 28];
         bytes[..4].copy_from_slice(b"R3ST");
-        bytes[4] = 2;
+        bytes[4] = 3;
         bytes[24..].copy_from_slice(&((MAX_FRAME + 1) as u32).to_le_bytes());
+        assert!(read_frame(&mut bytes.as_slice()).is_err());
+    }
+    #[test]
+    fn yaml_metadata_roundtrip_and_version2_rejection() {
+        let metadata = YamlMetadata {
+            node: NodeId(8),
+            document: 2,
+            style: Some(YamlStyle::DoubleQuoted),
+            anchor: Some(11),
+            tag: Some(TextRef::Cooked { start: 19, end: 40 }),
+            alias: Some(AliasTarget {
+                anchor: 12,
+                target: NodeId(5),
+            }),
+            explicit_start: true,
+            synthetic_root: true,
+        };
+        let mut bytes = Vec::new();
+        write_frame(
+            &mut bytes,
+            &Frame::new(
+                8,
+                9,
+                Message::Metadata {
+                    offset: 0,
+                    records: vec![metadata],
+                },
+            ),
+        )
+        .unwrap();
+        match read_frame(&mut bytes.as_slice()).unwrap().unwrap().message {
+            Message::Metadata { offset: 0, records } => assert_eq!(records, [metadata]),
+            _ => panic!("wrong message"),
+        }
+        bytes[4] = 2;
+        assert!(read_frame(&mut bytes.as_slice()).is_err());
+        bytes[4] = 3;
+        *bytes.last_mut().unwrap() = 4;
         assert!(read_frame(&mut bytes.as_slice()).is_err());
     }
 }

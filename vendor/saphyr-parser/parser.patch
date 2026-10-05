@@ -1,0 +1,47 @@
+--- upstream/src/parser.rs
++++ src/parser.rs
+@@ -673,6 +673,8 @@
+     where
+         'input: 'a,
+     {
++        // R3Viewer pull API: anchors are scoped to this document.
++        self.anchors.clear();
+         while let TokenType::DocumentEnd = self.peek_token()?.1 {
+             self.skip();
+         }
+@@ -708,15 +710,14 @@
+ 
+     fn parser_process_directives(&mut self) -> Result<(), ScanError> {
+         let mut version_directive_received = false;
++        let mut tags = BTreeMap::new();
+         loop {
+-            let mut tags = BTreeMap::new();
+             match self.peek_token()? {
+-                Token(span, TokenType::VersionDirective(_, _)) => {
+-                    // XXX parsing with warning according to spec
+-                    //if major != 1 || minor > 2 {
+-                    //    return Err(ScanError::new_str(tok.0,
+-                    //        "found incompatible YAML document"));
+-                    //}
++                Token(span, TokenType::VersionDirective(major, minor)) => {
++                    // R3Viewer profile: explicit YAML 1.2 only; upstream accepts others.
++                    if *major != 1 || *minor != 2 {
++                        return Err(ScanError::new_str(span.start, "R3Viewer YAML profile requires version 1.2"));
++                    }
+                     if version_directive_received {
+                         return Err(ScanError::new_str(
+                             span.start,
+@@ -739,8 +740,12 @@
+                 }
+                 _ => break,
+             }
++            self.skip();
++        }
++        // R3Viewer: retain all directives in this document and reject repeated handles.
++        // No TAG directive preserves the optional upstream keep_tags configuration.
++        if !tags.is_empty() {
+             self.tags = tags;
+-            self.skip();
+         }
+         Ok(())
+     }

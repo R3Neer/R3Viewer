@@ -1,0 +1,156 @@
+--- upstream/src/scanner.rs
++++ src/scanner.rs
+@@ -1277,7 +1277,7 @@
+             ));
+         } else if self.input.peek() == '%' {
+             // If it is valid and an escape sequence, escape it.
+-            string.push(self.scan_uri_escapes(start_mark)?);
++            string.extend(self.scan_uri_escapes(start_mark)?);
+         } else {
+             // Otherwise, push the first character.
+             string.push(self.input.peek());
+@@ -1286,7 +1286,7 @@
+ 
+         while is_uri_char(self.input.look_ch()) {
+             if self.input.peek() == '%' {
+-                string.push(self.scan_uri_escapes(start_mark)?);
++                string.extend(self.scan_uri_escapes(start_mark)?);
+             } else {
+                 string.push(self.input.peek());
+                 self.skip_non_blank();
+@@ -1307,7 +1307,7 @@
+         let mut string = String::new();
+         while is_uri_char(self.input.look_ch()) {
+             if self.input.peek() == '%' {
+-                string.push(self.scan_uri_escapes(start_mark)?);
++                string.extend(self.scan_uri_escapes(start_mark)?);
+             } else {
+                 string.push(self.input.peek());
+                 self.skip_non_blank();
+@@ -1344,7 +1344,7 @@
+         while is_tag_char(self.input.look_ch()) {
+             // Check if it is a URI-escape sequence.
+             if self.input.peek() == '%' {
+-                string.push(self.scan_uri_escapes(mark)?);
++                string.extend(self.scan_uri_escapes(mark)?);
+             } else {
+                 string.push(self.input.peek());
+                 self.skip_non_blank();
+@@ -1363,62 +1363,19 @@
+         Ok(string)
+     }
+ 
+-    fn scan_uri_escapes(&mut self, mark: &Marker) -> Result<char, ScanError> {
+-        let mut width = 0usize;
+-        let mut code = 0u32;
+-        loop {
+-            self.input.lookahead(3);
+-
+-            let c = self.input.peek_nth(1);
+-            let nc = self.input.peek_nth(2);
+-
+-            if !(self.input.peek() == '%' && is_hex(c) && is_hex(nc)) {
+-                return Err(ScanError::new_str(
+-                    *mark,
+-                    "while parsing a tag, found an invalid escape sequence",
+-                ));
+-            }
+-
+-            let byte = (as_hex(c) << 4) + as_hex(nc);
+-            if width == 0 {
+-                width = match byte {
+-                    _ if byte & 0x80 == 0x00 => 1,
+-                    _ if byte & 0xE0 == 0xC0 => 2,
+-                    _ if byte & 0xF0 == 0xE0 => 3,
+-                    _ if byte & 0xF8 == 0xF0 => 4,
+-                    _ => {
+-                        return Err(ScanError::new_str(
+-                            *mark,
+-                            "while parsing a tag, found an incorrect leading UTF-8 byte",
+-                        ));
+-                    }
+-                };
+-                code = byte;
+-            } else {
+-                if byte & 0xc0 != 0x80 {
+-                    return Err(ScanError::new_str(
+-                        *mark,
+-                        "while parsing a tag, found an incorrect trailing UTF-8 byte",
+-                    ));
+-                }
+-                code = (code << 8) + byte;
+-            }
+-
+-            self.skip_n_non_blank(3);
+-
+-            width -= 1;
+-            if width == 0 {
+-                break;
+-            }
+-        }
+-
+-        match char::from_u32(code) {
+-            Some(ch) => Ok(ch),
+-            None => Err(ScanError::new_str(
++    fn scan_uri_escapes(&mut self, mark: &Marker) -> Result<[char; 3], ScanError> {
++        // R3Viewer: YAML 1.2.2 section 5.6 requires exact percent-escape identity.
++        self.input.lookahead(3);
++        let first = self.input.peek_nth(1);
++        let second = self.input.peek_nth(2);
++        if !(self.input.peek() == '%' && is_hex(first) && is_hex(second)) {
++            return Err(ScanError::new_str(
+                 *mark,
+-                "while parsing a tag, found an invalid UTF-8 codepoint",
+-            )),
+-        }
++                "while parsing a tag, found an invalid escape sequence",
++            ));
++        }
++        self.skip_n_non_blank(3);
++        Ok(['%', first, second])
+     }
+ 
+     fn fetch_anchor(&mut self, alias: bool) -> ScanResult {
+@@ -1769,7 +1726,7 @@
+         }
+ 
+         let mut line_buffer = String::with_capacity(100);
+-        let start_mark = self.mark;
++        // R3Viewer: retain the lexical block header as the token start.
+         while self.mark.col == indent && !self.input.next_is_z() {
+             if indent == 0 {
+                 self.input.lookahead(4);
+@@ -1824,8 +1781,14 @@
+             string.push_str(&trailing_breaks);
+         }
+ 
++        // R3Viewer: dedented sibling indentation belongs to the next node, not this token.
++        let token_end = if self.mark.col < indent && !self.input.next_is_z() {
++            Marker::new(self.mark.index - self.mark.col, self.mark.line, 0)
++        } else {
++            self.mark
++        };
+         Ok(Token(
+-            Span::new(start_mark, self.mark),
++            Span::new(start_mark, token_end),
+             TokenType::Scalar(style, string.into()),
+         ))
+     }
+@@ -2077,6 +2040,8 @@
+ 
+         // Eat the right quote.
+         self.skip_non_blank();
++        // R3Viewer: exclude subsequent trivia from the lexical quoted token.
++        let token_end = self.mark;
+         // Ensure there is no invalid trailing content.
+         self.skip_ws_to_eol(SkipTabs::Yes)?;
+         match self.input.peek() {
+@@ -2103,7 +2068,7 @@
+             ScalarStyle::DoubleQuoted
+         };
+         Ok(Token(
+-            Span::new(start_mark, self.mark),
++            Span::new(start_mark, token_end),
+             TokenType::Scalar(style, string.into()),
+         ))
+     }

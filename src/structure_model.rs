@@ -17,12 +17,14 @@ pub const MAX_STRUCTURE_SOURCE: usize = 128 * 1024 * 1024;
 pub enum StructureFormat {
     Toml,
     Json,
+    Yaml,
 }
 impl StructureFormat {
     pub(crate) fn decode(value: u8) -> Option<Self> {
         match value {
             0 => Some(Self::Toml),
             1 => Some(Self::Json),
+            2 => Some(Self::Yaml),
             _ => None,
         }
     }
@@ -63,10 +65,21 @@ pub enum StructureKind {
     LocalTime,
     Null,
     JsonNumber,
+    YamlStream,
+    YamlDocument,
+    Alias,
+    YamlTaggedScalar,
 }
 impl StructureKind {
     pub fn is_container(self) -> bool {
-        matches!(self, Self::Mapping | Self::Sequence | Self::ArrayOfTables)
+        matches!(
+            self,
+            Self::Mapping
+                | Self::Sequence
+                | Self::ArrayOfTables
+                | Self::YamlStream
+                | Self::YamlDocument
+        )
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +155,11 @@ pub struct DuplicateSummary {
 }
 #[derive(Debug)]
 pub struct Structure {
+    format: StructureFormat,
+    metadata: Vec<YamlMetadata>,
+    parents: Vec<Option<ParentLink>>,
+    session_bytes: usize,
+    yaml_edges: usize,
     source: Arc<String>,
     generation: u64,
     root: NodeId,
@@ -153,8 +171,44 @@ pub struct Structure {
     duplicates: DuplicateSummary,
 }
 impl Structure {
+    pub fn format(&self) -> StructureFormat {
+        self.format
+    }
+    pub fn metadata(&self, node: NodeId) -> Option<&YamlMetadata> {
+        self.metadata
+            .binary_search_by_key(&node.0, |m| m.node.0)
+            .ok()
+            .map(|i| &self.metadata[i])
+    }
+    pub fn parent(&self, node: NodeId) -> Option<ParentLink> {
+        self.parents.get(node.0 as usize).copied().flatten()
+    }
+    pub fn text_ref(&self, text: TextRef) -> &str {
+        self.text(text)
+    }
+    pub fn session_budget_bytes(&self) -> usize {
+        self.session_bytes
+    }
+    pub fn alias_name(&self, node: NodeId) -> Option<&str> {
+        let n = self.node(node)?;
+        if n.kind() != StructureKind::Alias {
+            return None;
+        }
+        self.source
+            .get(n.source_location()?.range())?
+            .strip_prefix('*')
+    }
+    pub(crate) fn raw_metadata(&self) -> &[YamlMetadata] {
+        &self.metadata
+    }
+    pub(crate) fn alias_edges(&self) -> usize {
+        self.metadata.iter().filter(|m| m.alias.is_some()).count()
+    }
     pub fn duplicate_diagnostic(&self) -> Option<String> {
         (self.duplicates.extra_occurrences > 0).then(|| {
+            if self.format == StructureFormat::Yaml {
+                return format!("{} repeticiones de claves scalar-string decodificadas; se conservan todos los pares; comprobación parcial, sin validar unicidad semántica de claves complejas",self.duplicates.extra_occurrences);
+            }
             format!(
                 "{} repeticiones de claves; se conservan todas las entradas",
                 self.duplicates.extra_occurrences
@@ -190,6 +244,9 @@ impl Structure {
     }
     pub fn persistent_bytes(&self) -> usize {
         size_of::<DuplicateSummary>()
+            + self.session_bytes
+            + self.metadata.capacity() * size_of::<YamlMetadata>()
+            + self.parents.capacity() * size_of::<Option<ParentLink>>()
             + self.nodes.capacity() * size_of::<Node>()
             + self.entries.capacity() * size_of::<Entry>()
             + self.declarations.capacity() * size_of::<Declaration>()
@@ -236,6 +293,18 @@ pub struct NodeRef<'a> {
     id: NodeId,
 }
 impl<'a> NodeRef<'a> {
+    pub fn metadata(self) -> Option<&'a YamlMetadata> {
+        self.structure.metadata(self.id)
+    }
+    pub fn parent(self) -> Option<ParentLink> {
+        self.structure.parent(self.id)
+    }
+    pub fn decoded(self) -> Option<&'a str> {
+        self.structure.nodes[self.id.0 as usize]
+            .spec
+            .text
+            .map(|t| self.structure.text(t))
+    }
     pub fn id(self) -> NodeId {
         self.id
     }
@@ -411,12 +480,28 @@ pub(crate) fn reserve<T>(
 }
 impl StructureBuilder {
     pub fn new(source: Arc<String>, generation: u64) -> Result<Self, ModelError> {
+        Self::new_for_format(source, generation, StructureFormat::Toml)
+    }
+    pub fn new_for_format(
+        source: Arc<String>,
+        generation: u64,
+        format: StructureFormat,
+    ) -> Result<Self, ModelError> {
         if source.len() > MAX_STRUCTURE_SOURCE {
             return Err(ModelError::SourceLimit);
         }
         Ok(Self {
             scratch_bytes: 0,
             model: Structure {
+                format,
+                metadata: Vec::new(),
+                parents: Vec::new(),
+                session_bytes: if format == StructureFormat::Yaml {
+                    1024 * 1024
+                } else {
+                    0
+                },
+                yaml_edges: 0,
                 source,
                 generation,
                 root: NodeId(0),
@@ -452,7 +537,14 @@ impl StructureBuilder {
         Ok(())
     }
     pub fn push_node(&mut self, spec: NodeSpec) -> Result<NodeId, ModelError> {
-        if self.model.nodes.len() + self.model.entries.len() >= MAX_STRUCTURE_ITEMS {
+        if self.model.nodes.len()
+            + if self.model.format == StructureFormat::Yaml {
+                self.model.yaml_edges
+            } else {
+                self.model.entries.len()
+            }
+            >= MAX_STRUCTURE_ITEMS
+        {
             return Err(ModelError::Budget);
         }
         let other = self.model.persistent_bytes() - self.model.nodes.capacity() * size_of::<Node>();
@@ -481,12 +573,26 @@ impl StructureBuilder {
         }
         let start = self.model.entries.len();
         for spec in entries {
-            if self.model.nodes.len() + self.model.entries.len() >= MAX_STRUCTURE_ITEMS {
+            if self.model.nodes.len()
+                + if self.model.format == StructureFormat::Yaml {
+                    self.model.yaml_edges
+                } else {
+                    self.model.entries.len()
+                }
+                >= MAX_STRUCTURE_ITEMS
+            {
                 return Err(ModelError::Budget);
             }
             let other =
                 self.model.persistent_bytes() - self.model.entries.capacity() * size_of::<Entry>();
             reserve(&mut self.model.entries, 1, other + self.scratch_bytes)?;
+            if self.model.format == StructureFormat::Yaml {
+                let edges = 1 + usize::from(spec.key.is_some());
+                if self.model.nodes.len() + self.model.yaml_edges + edges > MAX_STRUCTURE_ITEMS {
+                    return Err(ModelError::Budget);
+                }
+                self.model.yaml_edges += edges;
+            }
             self.model.entries.push(Entry { spec });
         }
         self.model.nodes[parent.0 as usize].entries = start..self.model.entries.len();
@@ -562,12 +668,26 @@ impl StructureBuilder {
             return Err(ModelError::Invalid);
         }
         for spec in entries {
-            if self.model.nodes.len() + self.model.entries.len() >= MAX_STRUCTURE_ITEMS {
+            if self.model.nodes.len()
+                + if self.model.format == StructureFormat::Yaml {
+                    self.model.yaml_edges
+                } else {
+                    self.model.entries.len()
+                }
+                >= MAX_STRUCTURE_ITEMS
+            {
                 return Err(ModelError::Budget);
             }
             let other =
                 self.model.persistent_bytes() - self.model.entries.capacity() * size_of::<Entry>();
             reserve(&mut self.model.entries, 1, other + self.scratch_bytes)?;
+            if self.model.format == StructureFormat::Yaml {
+                let edges = 1 + usize::from(spec.key.is_some());
+                if self.model.nodes.len() + self.model.yaml_edges + edges > MAX_STRUCTURE_ITEMS {
+                    return Err(ModelError::Budget);
+                }
+                self.model.yaml_edges += edges;
+            }
             self.model.entries.push(Entry { spec });
         }
         self.model.nodes[parent.0 as usize].entries.end = self.model.entries.len();
@@ -618,6 +738,9 @@ impl StructureBuilder {
         key_components: usize,
         mut cancelled: impl FnMut() -> bool,
     ) -> Result<Structure, ModelError> {
+        if self.model.format == StructureFormat::Yaml {
+            return self.finish_yaml(root, syntax_depth, key_components, cancelled);
+        }
         if cancelled() {
             return Err(ModelError::Cancelled);
         }
@@ -1253,3 +1376,41 @@ mod tests {
         );
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParentPart {
+    Key,
+    Value,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ParentLink {
+    pub owner: NodeId,
+    pub ordinal: u32,
+    pub part: ParentPart,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum YamlStyle {
+    Plain,
+    SingleQuoted,
+    DoubleQuoted,
+    Literal,
+    Folded,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AliasTarget {
+    pub anchor: u32,
+    pub target: NodeId,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct YamlMetadata {
+    pub node: NodeId,
+    pub document: u32,
+    pub style: Option<YamlStyle>,
+    pub anchor: Option<u32>,
+    pub tag: Option<TextRef>,
+    pub alias: Option<AliasTarget>,
+    pub explicit_start: bool,
+    pub synthetic_root: bool,
+}
+#[path = "yaml_model.rs"]
+mod yaml_model;

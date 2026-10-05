@@ -12,6 +12,7 @@ struct Builder<'a> {
     text: String,
     cancel: &'a AtomicBool,
     limit: usize,
+    strict_growth: bool,
 }
 impl<'a> Builder<'a> {
     fn new(cancel: &'a AtomicBool, limit: usize) -> Self {
@@ -19,6 +20,7 @@ impl<'a> Builder<'a> {
             text: String::new(),
             cancel,
             limit,
+            strict_growth: false,
         }
     }
     fn append(&mut self, text: &str) -> Result<(), OutputError> {
@@ -41,6 +43,16 @@ impl<'a> Builder<'a> {
                 .max(len)
                 .max(4096)
                 .min(self.limit);
+            // YAML admits old and replacement capacities together before realloc.
+            if self.strict_growth
+                && self
+                    .text
+                    .capacity()
+                    .checked_add(target)
+                    .is_none_or(|peak| peak > self.limit)
+            {
+                return Err(OutputError::Limit);
+            }
             self.text
                 .try_reserve_exact(target - self.text.len())
                 .map_err(|_| OutputError::Limit)?;
@@ -176,7 +188,14 @@ pub fn render(
     structure: &crate::structure_model::Structure,
     cancel: &AtomicBool,
 ) -> Result<String, OutputError> {
-    render_with_limit(structure, cancel, OUTPUT_LIMIT)
+    if structure.format() == crate::structure_model::StructureFormat::Yaml {
+        let available = crate::structure_model::MAX_STRUCTURE_BYTES
+            .checked_sub(structure.persistent_bytes())
+            .ok_or(OutputError::Limit)?;
+        render_yaml(structure, cancel, OUTPUT_LIMIT.min(available))
+    } else {
+        render_with_limit(structure, cancel, OUTPUT_LIMIT)
+    }
 }
 fn render_with_limit(
     structure: &crate::structure_model::Structure,
@@ -335,5 +354,184 @@ mod representation_tests {
         );
         cancel.store(true, Ordering::Relaxed);
         assert_eq!(render(&structure, &cancel), Err(OutputError::Cancelled));
+    }
+}
+
+/// Fixed work stack, ordered pair keys are nodes, aliases stay descriptors.
+fn render_yaml(
+    structure: &crate::structure_model::Structure,
+    cancel: &AtomicBool,
+    limit: usize,
+) -> Result<String, OutputError> {
+    use crate::structure_model::{NodeRef, StructureKind};
+    #[derive(Clone, Copy)]
+    enum Work<'a> {
+        Node(NodeRef<'a>, usize, bool),
+        Children(NodeRef<'a>, usize, usize, bool),
+        Value(NodeRef<'a>, usize),
+        PairEnd(usize),
+    }
+    let mut stack = [None; 256];
+    let mut count = 1;
+    stack[0] = Some(Work::Node(structure.root(), 0, true));
+    let mut output = Builder::new(cancel, limit);
+    output.strict_growth = true;
+    while count > 0 {
+        count -= 1;
+        let work = stack[count].take().ok_or(OutputError::InvalidModel)?;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(OutputError::Cancelled);
+        }
+        let mut push = |work| -> Result<(), OutputError> {
+            if count == stack.len() {
+                return Err(OutputError::InvalidModel);
+            }
+            stack[count] = Some(work);
+            count += 1;
+            Ok(())
+        };
+        match work {
+            Work::Node(node, depth, root) => {
+                output.append(crate::data::file_kind_name(node.kind()))?;
+                if let Some(meta) = node.metadata() {
+                    output.append(" metadata{")?;
+                    output.append(&format!("document={}", meta.document))?;
+                    if let Some(anchor) = meta.anchor {
+                        output.append(&format!(", anchorID={anchor}"))?
+                    }
+                    if let Some(tag) = meta.tag {
+                        output.append(", tagURI=")?;
+                        output.quoted(structure.text_ref(tag))?
+                    }
+                    if let Some(style) = meta.style {
+                        output.append(&format!(", style={style:?}"))?
+                    }
+                    if node.kind() == StructureKind::YamlDocument {
+                        output.append(if meta.explicit_start {
+                            ", start=explicit"
+                        } else {
+                            ", start=implicit"
+                        })?;
+                        if meta.synthetic_root {
+                            output.append(", token=absent")?
+                        }
+                    }
+                    output.append("}")?;
+                }
+                if let Some(alias) = node.metadata().and_then(|m| m.alias) {
+                    output.append(&format!(
+                        "(anchorID={}, targetNode={}, name=",
+                        alias.anchor, alias.target.0
+                    ))?;
+                    if let Some(name) = structure.alias_name(node.id()) {
+                        output.quoted(name)?
+                    } else {
+                        output.append("unavailable")?
+                    }
+                    output.append(")")?;
+                    if !root {
+                        output.append(",\n")?
+                    }
+                } else if let Some(decoded) = node.decoded() {
+                    output.append("(decoded=")?;
+                    output.quoted(decoded)?;
+                    output.append(", raw=")?;
+                    if let Some(span) = node.source_location() {
+                        output.quoted(&structure.source()[span.range()])?
+                    } else {
+                        output.append("absent")?
+                    }
+                    output.append(")")?;
+                    if !root {
+                        output.append(",\n")?
+                    }
+                } else {
+                    output.append("[")?;
+                    if node.entries().len() == 0 {
+                        output.append("]")?;
+                        if !root {
+                            output.append(",\n")?
+                        }
+                    } else {
+                        output.append("\n")?;
+                        push(Work::Children(node, 0, depth, root))?
+                    }
+                }
+            }
+            Work::Children(node, next, depth, root) => {
+                if let Some(entry) = node.entry(next) {
+                    output.indent(depth + 1)?;
+                    push(Work::Children(node, next + 1, depth, root))?;
+                    if let Some(key) = entry.key() {
+                        output.append(&format!("pair[{}] {{\n", entry.ordinal()))?;
+                        output.indent(depth + 2)?;
+                        output.append("key = ")?;
+                        push(Work::PairEnd(depth + 1))?;
+                        push(Work::Value(entry.value(), depth + 2))?;
+                        push(Work::Node(key, depth + 2, false))?;
+                    } else {
+                        output.append(&format!("[{}] = ", entry.ordinal()))?;
+                        push(Work::Node(entry.value(), depth + 1, false))?
+                    }
+                } else {
+                    output.indent(depth)?;
+                    output.append("]")?;
+                    if !root {
+                        output.append(",\n")?
+                    }
+                }
+            }
+            Work::Value(node, depth) => {
+                output.indent(depth)?;
+                output.append("value = ")?;
+                push(Work::Node(node, depth, false))?
+            }
+            Work::PairEnd(depth) => {
+                output.indent(depth)?;
+                output.append("},\n")?
+            }
+        }
+    }
+    output.append("\n")?;
+    Ok(output.text)
+}
+#[cfg(test)]
+mod yaml_output_tests {
+    use super::*;
+    #[test]
+    fn stream_documents_complex_key_and_alias_descriptor_are_complete_without_expansion() {
+        let raw = "---\n? [a, b]\n: &x [*x]\n---\n\"\"\n---\n";
+        let cancel = AtomicBool::new(false);
+        let structure =
+            crate::yaml_worker::project(std::sync::Arc::new(raw.to_owned()), 1, &cancel)
+                .unwrap()
+                .0;
+        let text = render(&structure, &cancel).unwrap();
+        assert!(text.starts_with("yaml_stream["));
+        assert_eq!(text.matches("yaml_document metadata").count(), 3);
+        assert!(text.contains("key = array"));
+        assert!(text.contains("targetNode="));
+        assert!(text.contains("decoded=\"\", raw=\"\\\"\\\"\""));
+        assert!(text.contains("token=absent"));
+        assert!(text.len() < 2000);
+        assert_eq!(
+            render_yaml(&structure, &cancel, 30),
+            Err(OutputError::Limit)
+        );
+        assert_eq!(
+            render(&structure, &AtomicBool::new(true)),
+            Err(OutputError::Cancelled)
+        );
+    }
+    #[test]
+    fn yaml_output_preadmits_old_and_new_capacities_before_realloc() {
+        let cancel = AtomicBool::new(false);
+        let mut output = Builder::new(&cancel, 10_000);
+        output.strict_growth = true;
+        output.append(&"x".repeat(3000)).unwrap();
+        let capacity = output.text.capacity();
+        assert_eq!(output.append(&"y".repeat(2000)), Err(OutputError::Limit));
+        assert_eq!(output.text.len(), 3000);
+        assert_eq!(output.text.capacity(), capacity);
     }
 }

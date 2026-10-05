@@ -285,7 +285,9 @@ pub(crate) fn project(
     generation: u64,
     cancel: &AtomicBool,
 ) -> Result<(Structure, usize, usize), Failure> {
-    let builder = StructureBuilder::new(source.clone(), generation).map_err(error)?;
+    let builder =
+        StructureBuilder::new_for_format(source.clone(), generation, StructureFormat::Json)
+            .map_err(error)?;
     let mut p = Projector {
         raw: &source,
         parser: Jiter::new(source.as_bytes()),

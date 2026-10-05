@@ -6,7 +6,7 @@ use crate::{
     presentation::{SafeTextModel, cell_width, slice_cells},
     search::{
         Direction, FileSearchHit, QUERY_LIMIT, SearchHit, SearchOutcome, SearchWorker, find_data,
-        find_structure, find_visible,
+        find_structure, find_visible, find_yaml,
     },
     session::{TerminalGuard, control_terminal},
     structure::{
@@ -18,6 +18,10 @@ use crate::{
     },
     syntax_selection::{StructureSelection, SyntaxSelection, fallback_diagnostic},
     worker_process::{ReapState, ReapTicket},
+    yaml_view::{
+        self, Domain as YamlDomain, Navigator as YamlNavigator, Pane as YamlPane,
+        State as YamlState,
+    },
 };
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use r3viewer_wire::{ByteStreamKind, TypedInput, Value};
@@ -43,7 +47,7 @@ use std::{
 use unicode_segmentation::UnicodeSegmentation;
 const TICK: Duration = Duration::from_millis(25);
 const EVENT_CAPACITY: usize = 256;
-const HELP: &str = "Flechas / h j k l: mover\nPageUp / PageDown: página; Home / End: extremos\nEnter: abrir celda; columna key: clave completa; r: abrir fila completa\nBackspace: cerrar clave / volver al padre\n/: búsqueda literal; Enter: confirmar; Esc: cancelar editor\nn / N: siguiente / anterior (vuelta al principio/final)\nK: clave completa de columna/campo; L: números de línea; ?: ayuda\nTab / Shift-Tab: Fuente/Estructura TOML; o: span original completo\nq / Esc: salir; Ctrl-C: cancelar (130)";
+const HELP: &str = "Flechas / h j k l: mover\nPageUp / PageDown: página; Home / End: extremos\nEnter: abrir celda; columna key: clave completa; r: abrir fila completa\nBackspace: cerrar clave / volver al padre\n/: búsqueda literal; Enter: confirmar; Esc: cancelar editor\nn / N: siguiente / anterior (vuelta al principio/final)\nK: clave completa de columna/campo; L: números de línea; ?: ayuda\nTab / Shift-Tab: Fuente/Estructura; o: span original completo\nYAML: inspector de serialización; m: metadatos; Enter alias: seguir target\nYAML: máximo 128 retornos previos (current aparte); Backspace conserva retorno\nq / Esc: salir; Ctrl-C: cancelar (130)";
 
 fn is_cancel(key: &KeyEvent) -> bool {
     key.kind != KeyEventKind::Release
@@ -424,6 +428,8 @@ struct FileWorkspace {
     source: Arc<String>,
     build: BuildSelection,
     navigator: Option<FileNavigator>,
+    yaml: Option<YamlNavigator>,
+    borrowed: Option<YamlPane>,
     active: bool,
     inactive: DomainState,
 }
@@ -433,6 +439,8 @@ impl FileWorkspace {
             source,
             build: BuildSelection::new(generation),
             navigator: None,
+            yaml: None,
+            borrowed: None,
             active: false,
             inactive: DomainState::default(),
         }
@@ -512,6 +520,9 @@ impl<'a> App<'a> {
         app.refresh_pane(cancel)?;
         Ok(app)
     }
+    fn yaml_active(&self) -> bool {
+        self.file_active() && self.file.as_ref().is_some_and(|f| f.yaml.is_some())
+    }
     fn file_active(&self) -> bool {
         self.file.as_ref().is_some_and(|file| file.active)
     }
@@ -553,7 +564,18 @@ impl<'a> App<'a> {
             return Ok(false);
         }
         let duplicate_diagnostic = structure.duplicate_diagnostic();
-        file.navigator = Some(FileNavigator::new(structure));
+        if structure.format() == crate::structure_model::StructureFormat::Yaml {
+            match YamlNavigator::new(structure) {
+                Ok(nav) => file.yaml = Some(nav),
+                Err(error) => {
+                    file.build.state = BuildState::Unavailable(error.to_string());
+                    self.structure_message = error.to_string();
+                    return Ok(true);
+                }
+            }
+        } else {
+            file.navigator = Some(FileNavigator::new(structure));
+        }
         self.structure_message.clear();
         if self.editor.is_none() && !self.help {
             self.swap_file_domain(cancel)?;
@@ -565,6 +587,235 @@ impl<'a> App<'a> {
         }
         Ok(true)
     }
+    fn refresh_yaml(&mut self, cancel: &AtomicBool) -> io::Result<()> {
+        let file = self.file.as_mut().unwrap();
+        let nav = file.yaml.as_ref().unwrap();
+        let state = nav.current();
+        if nav.node().kind().is_container() && state.domain == YamlDomain::Decoded {
+            file.borrowed = None;
+            return Ok(());
+        }
+        if file
+            .borrowed
+            .as_ref()
+            .is_some_and(|p| p.node == state.node && p.domain == state.domain)
+        {
+            return Ok(());
+        }
+        match YamlPane::prepare(nav.structure(), state, nav.budget(), cancel) {
+            Ok(pane) => file.borrowed = Some(pane),
+            Err(yaml_view::Error::Cancelled) => {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+            }
+            Err(error) => {
+                self.message = error.to_string();
+            }
+        }
+        Ok(())
+    }
+    /// Prepare first, then publish return/current/pane/hit in one UI operation.
+    fn navigate_yaml(
+        &mut self,
+        mut next: YamlState,
+        back: bool,
+        cancel: &AtomicBool,
+    ) -> io::Result<bool> {
+        let file = self.file.as_mut().unwrap();
+        let nav = file.yaml.as_mut().unwrap();
+        if !back && let Err(error) = nav.can_navigate() {
+            self.message = error.to_string();
+            return Ok(false);
+        }
+        let prepared = if nav
+            .structure()
+            .node(next.node)
+            .is_some_and(|n| n.kind().is_container())
+            && next.domain == YamlDomain::Decoded
+        {
+            Ok(None)
+        } else {
+            YamlPane::prepare(nav.structure(), next, nav.budget(), cancel).map(Some)
+        };
+        let pane = match prepared {
+            Ok(p) => p,
+            Err(yaml_view::Error::Cancelled) => {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+            }
+            Err(error) => {
+                self.message = error.to_string();
+                return Ok(false);
+            }
+        };
+        if !back && let (Some(hit), Some(pane)) = (next.hit, &pane) {
+            match pane.position(nav.structure(), hit.start, cancel) {
+                Ok((top, left)) => {
+                    next.cursor.top = top;
+                    next.cursor.left = left
+                }
+                Err(error) => {
+                    self.message = error.to_string();
+                    return Ok(false);
+                }
+            }
+        }
+        if back {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+            }
+            if !nav.back() {
+                return Ok(false);
+            }
+        } else if let Err(error) = nav.commit(next, cancel) {
+            self.message = error.to_string();
+            return Ok(false);
+        }
+        file.borrowed = pane;
+        self.pane = None;
+        self.cancel_pending();
+        Ok(true)
+    }
+    fn yaml_key(
+        &mut self,
+        code: KeyCode,
+        rows: usize,
+        columns: usize,
+        cancel: &AtomicBool,
+    ) -> io::Result<bool> {
+        if !self.yaml_active() {
+            return Ok(false);
+        }
+        if code == KeyCode::Char('o') {
+            let nav = self.file.as_ref().unwrap().yaml.as_ref().unwrap();
+            let Some(span) = nav.selected_location() else {
+                self.message = "el nodo YAML no tiene un span original contiguo".into();
+                return Ok(true);
+            };
+            let range = self.source.visible_range(span.range());
+            self.swap_file_domain(cancel)?;
+            if let Some(pane) = &mut self.pane {
+                pane.position.top = pane.model.line_for_offset(range.start);
+                pane.position.left = offset_cell(&pane.model, range.start, cancel)?;
+                pane.hit = Some(range)
+            }
+            self.message = "token/nodo YAML original completo; consulta Fuente conservada".into();
+            return Ok(true);
+        }
+        if code == KeyCode::Backspace {
+            let previous = self
+                .file
+                .as_ref()
+                .unwrap()
+                .yaml
+                .as_ref()
+                .unwrap()
+                .return_state();
+            if let Some(previous) = previous {
+                self.navigate_yaml(previous, true, cancel)?;
+            }
+            return Ok(true);
+        }
+        if matches!(code, KeyCode::Enter | KeyCode::Char('K' | 'r' | 'm')) {
+            let nav = self.file.as_ref().unwrap().yaml.as_ref().unwrap();
+            let current = nav.current();
+            let (node, domain) = if code == KeyCode::Char('m') {
+                (
+                    current.node,
+                    if current.domain == YamlDomain::Metadata {
+                        YamlDomain::Decoded
+                    } else {
+                        YamlDomain::Metadata
+                    },
+                )
+            } else if let Some(target) = nav.following_alias().filter(|_| code == KeyCode::Enter) {
+                (target, YamlDomain::Decoded)
+            } else if nav.node().kind().is_container() && current.domain == YamlDomain::Decoded {
+                let column = match code {
+                    KeyCode::Char('K') => 0,
+                    KeyCode::Char('r') => 1,
+                    _ => current.cursor.column,
+                };
+                let Some(child) = nav.child(current.cursor.row, column) else {
+                    return Ok(true);
+                };
+                (child, YamlDomain::Decoded)
+            } else {
+                return Ok(true);
+            };
+            let next = YamlState {
+                node,
+                cursor: Default::default(),
+                domain,
+                hit: None,
+                last_hit: current.last_hit,
+            };
+            self.navigate_yaml(next, false, cancel)?;
+            return Ok(true);
+        }
+        if !matches!(
+            code,
+            KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Left
+                | KeyCode::Right
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+                | KeyCode::Home
+                | KeyCode::End
+                | KeyCode::Char('h' | 'j' | 'k' | 'l')
+        ) {
+            return Ok(false);
+        }
+        let file = self.file.as_mut().unwrap();
+        let nav = file.yaml.as_mut().unwrap();
+        let before = nav.current();
+        if let Some(pane) = &file.borrowed {
+            let mut position = Position {
+                top: before.cursor.top,
+                left: before.cursor.left,
+            };
+            move_text(
+                &mut position,
+                code,
+                pane.line_count(),
+                pane.max_width(),
+                rows,
+                columns,
+            );
+            nav.current_mut().cursor.top = position.top;
+            nav.current_mut().cursor.left = position.left;
+        } else {
+            let count = nav.node().entries().len();
+            let cursor = &mut nav.current_mut().cursor;
+            match code {
+                KeyCode::Up | KeyCode::Char('k') => cursor.row = cursor.row.saturating_sub(1),
+                KeyCode::Down | KeyCode::Char('j') => {
+                    cursor.row = cursor.row.saturating_add(1).min(count.saturating_sub(1))
+                }
+                KeyCode::Left | KeyCode::Char('h') => {
+                    cursor.column = cursor.column.saturating_sub(1)
+                }
+                KeyCode::Right | KeyCode::Char('l') => cursor.column = (cursor.column + 1).min(1),
+                KeyCode::PageUp => cursor.row = cursor.row.saturating_sub(rows.max(1)),
+                KeyCode::PageDown => {
+                    cursor.row = cursor
+                        .row
+                        .saturating_add(rows.max(1))
+                        .min(count.saturating_sub(1))
+                }
+                KeyCode::Home => {
+                    cursor.row = 0;
+                    cursor.column = 0
+                }
+                KeyCode::End => cursor.row = count.saturating_sub(1),
+                _ => (),
+            };
+            nav.frame(rows, columns)
+        }
+        if nav.current() != before {
+            self.cancel_pending()
+        }
+        Ok(true)
+    }
     fn file_key(
         &mut self,
         code: KeyCode,
@@ -572,6 +823,9 @@ impl<'a> App<'a> {
         columns: usize,
         cancel: &AtomicBool,
     ) -> io::Result<bool> {
+        if self.yaml_key(code, rows, columns, cancel)? {
+            return Ok(true);
+        }
         if !self.file_active() {
             return Ok(false);
         }
@@ -755,6 +1009,11 @@ impl<'a> App<'a> {
         changed
     }
     fn refresh_pane(&mut self, cancel: &AtomicBool) -> io::Result<()> {
+        if self.yaml_active() {
+            self.refresh_yaml(cancel)?;
+            self.pane = None;
+            return Ok(());
+        }
         if self.file_active() {
             let nav = self.file.as_ref().unwrap().navigator.as_ref().unwrap();
             let node = nav.view().node();
@@ -862,7 +1121,22 @@ impl<'a> App<'a> {
         }
         let query = self.query.clone();
         let previous = self.last_hit.clone();
-        if self.file_active() {
+        if self.yaml_active() {
+            let nav = self.file.as_ref().unwrap().yaml.as_ref().unwrap();
+            let structure = nav.structure().clone();
+            let budget = nav.budget().clone();
+            let previous = nav.current().last_hit;
+            self.worker.submit(move |cancel| {
+                find_yaml(
+                    &structure,
+                    &query,
+                    previous.as_ref(),
+                    direction,
+                    &budget,
+                    cancel,
+                )
+            });
+        } else if self.file_active() {
             let structure = self
                 .file
                 .as_ref()
@@ -958,6 +1232,25 @@ impl<'a> App<'a> {
                 self.message = "coincidencia".into();
                 self.help = false;
             }
+            SearchOutcome::YamlFound(hit) => {
+                if !self.yaml_active() {
+                    return Ok(());
+                }
+                let nav = self.file.as_ref().unwrap().yaml.as_ref().unwrap();
+                if hit.generation != nav.structure().generation() {
+                    return Ok(());
+                }
+                let next = YamlState {
+                    node: hit.node,
+                    cursor: Default::default(),
+                    domain: hit.domain,
+                    hit: Some(hit.range),
+                    last_hit: Some(hit),
+                };
+                if self.navigate_yaml(next, false, cancel)? {
+                    self.message = "coincidencia YAML; Backspace restaura selección previa".into();
+                }
+            }
             SearchOutcome::FileFound(hit) => {
                 if !self.file_active() {
                     return Ok(());
@@ -994,12 +1287,27 @@ impl<'a> App<'a> {
         }
     }
     fn set_viewport(&mut self, rows: usize, columns: usize) {
+        let (rows, columns) = if self.yaml_active() {
+            (rows.min(128), columns.min(256))
+        } else {
+            (rows, columns)
+        };
         if self.viewport != (rows, columns) {
             self.viewport = (rows, columns);
             self.reveal_selection();
         }
     }
     fn reveal_selection(&mut self) {
+        if self.yaml_active() {
+            let file = self.file.as_mut().unwrap();
+            if file.borrowed.is_none() {
+                file.yaml
+                    .as_mut()
+                    .unwrap()
+                    .frame(self.viewport.0, self.viewport.1)
+            }
+            return;
+        }
         if self.pane.is_none() && self.file_active() {
             self.file
                 .as_mut()
@@ -1038,6 +1346,16 @@ impl<'a> App<'a> {
                     self.editor = None;
                     self.last_hit = None;
                     self.file_hit = None;
+                    if self.yaml_active() {
+                        self.file
+                            .as_mut()
+                            .unwrap()
+                            .yaml
+                            .as_mut()
+                            .unwrap()
+                            .current_mut()
+                            .last_hit = None;
+                    }
                     self.search(Direction::Forward);
                 }
                 KeyCode::Backspace => {
@@ -1392,6 +1710,167 @@ fn text_line(
     }
     Line::from(spans)
 }
+fn render_yaml(
+    frame: &mut Frame<'_>,
+    body: Rect,
+    app: &App<'_>,
+    config: &PresentationConfig,
+    cancel: &AtomicBool,
+    stats: &mut RenderStats,
+) {
+    let file = app.file.as_ref().unwrap();
+    let nav = file.yaml.as_ref().unwrap();
+    let state = nav.current();
+    if let Some(pane) = &file.borrowed {
+        let numbers = if app.line_numbers {
+            (pane.line_count().to_string().len() + 2).min(usize::from(body.width))
+        } else {
+            0
+        };
+        for row in 0..usize::from(body.height) {
+            let line = state.cursor.top + row;
+            if line >= pane.line_count() {
+                break;
+            }
+            let window = match pane.window(
+                nav.structure(),
+                line,
+                state.cursor.left,
+                usize::from(body.width).saturating_sub(numbers),
+                state.hit,
+                nav.budget(),
+                cancel,
+            ) {
+                Ok(w) => w,
+                Err(error) => {
+                    frame.render_widget(
+                        Paragraph::new(error.to_string()).style(config.style(Role::Secondary)),
+                        Rect::new(
+                            body.x + numbers as u16,
+                            body.y + row as u16,
+                            body.width.saturating_sub(numbers as u16),
+                            1,
+                        ),
+                    );
+                    break;
+                }
+            };
+            let mut spans = Vec::new();
+            if spans.try_reserve_exact(window.cells.len()).is_err() {
+                break;
+            }
+            if spans.capacity() > window.cells.len() {
+                break;
+            }
+            let mut window = window;
+            for cell in window.cells.drain(..) {
+                stats.graphemes += 1;
+                let mut style = config.style(Role::Value);
+                if cell.matched {
+                    style = style.add_modifier(Modifier::REVERSED | Modifier::BOLD)
+                }
+                spans.push(Span::styled(cell.text, style));
+            }
+            if numbers > 0 {
+                frame.render_widget(
+                    Paragraph::new(format!(
+                        "{:>width$} ",
+                        line + 1,
+                        width = numbers.saturating_sub(1)
+                    ))
+                    .style(config.style(Role::Secondary)),
+                    Rect::new(body.x, body.y + row as u16, numbers as u16, 1),
+                );
+            }
+            stats.rows += 1;
+            frame.render_widget(
+                Paragraph::new(Line::from(spans)),
+                Rect::new(
+                    body.x + numbers as u16,
+                    body.y + row as u16,
+                    body.width.saturating_sub(numbers as u16),
+                    1,
+                ),
+            );
+        }
+    } else {
+        let node = nav.node();
+        let width = usize::from(body.width);
+        let first = if width == 1 { state.cursor.column } else { 0 };
+        let cw = if width == 1 { 1 } else { (width / 3).max(1) };
+        for column in first..if width == 1 { first + 1 } else { 2 } {
+            let x = if width == 1 { 0 } else { column * cw };
+            let cwidth = if column == 0 || width == 1 {
+                cw
+            } else {
+                width - x
+            };
+            let heading = if column == 0 {
+                if node.kind() == crate::structure_model::StructureKind::Mapping {
+                    "key"
+                } else {
+                    "ordinal"
+                }
+            } else {
+                "value"
+            };
+            frame.render_widget(
+                Paragraph::new(heading).style(config.style(Role::Secondary)),
+                Rect::new(body.x + x as u16, body.y, cwidth as u16, 1),
+            );
+        }
+        let end = node.entries().len().min(
+            state
+                .cursor
+                .top
+                .saturating_add(usize::from(body.height.saturating_sub(1))),
+        );
+        for row in state.cursor.top.min(end)..end {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            stats.rows += 1;
+            let entry = node.entry(row).unwrap();
+            for column in first..if width == 1 { first + 1 } else { 2 } {
+                let x = if width == 1 { 0 } else { column * cw };
+                let cwidth = if column == 0 || width == 1 {
+                    cw
+                } else {
+                    width - x
+                };
+                let text = if column == 0 {
+                    entry.key().map_or_else(
+                        || row.to_string(),
+                        |key| InspectionRef::File(key).summary(cwidth * 2),
+                    )
+                } else {
+                    InspectionRef::File(entry.value()).summary(cwidth * 2)
+                };
+                let mut style = config.style(Role::Value);
+                if row == state.cursor.row && column == state.cursor.column {
+                    style = style.add_modifier(Modifier::REVERSED)
+                }
+                stats.cells += 1;
+                frame.render_widget(
+                    Paragraph::new(label(&text, cwidth)).style(style),
+                    Rect::new(
+                        body.x + x as u16,
+                        body.y + 1 + (row - state.cursor.top) as u16,
+                        cwidth as u16,
+                        1,
+                    ),
+                );
+            }
+        }
+        if node.entries().len() == 0 && body.height > 1 {
+            frame.render_widget(
+                Paragraph::new(InspectionRef::File(node).summary(width))
+                    .style(config.style(Role::Secondary)),
+                Rect::new(body.x, body.y + 1, body.width, 1),
+            );
+        }
+    }
+}
 fn render(
     frame: &mut Frame<'_>,
     app: &App<'_>,
@@ -1407,7 +1886,17 @@ fn render(
     if width == 0 || area.height == 0 {
         return stats;
     }
-    let header = if app.file_active() {
+    let header = if app.yaml_active() {
+        let nav = app.file.as_ref().unwrap().yaml.as_ref().unwrap();
+        format!(
+            "{} | YAML {} | {} / {:?} | retornos {}/128",
+            label(title, usize::from(width) / 3),
+            nav.label().as_str(),
+            crate::data::file_kind_name(nav.node().kind()),
+            nav.current().domain,
+            nav.history_len()
+        )
+    } else if app.file_active() {
         let nav = app.file.as_ref().unwrap().navigator.as_ref().unwrap();
         format!(
             "{} | Estructura {}",
@@ -1445,6 +1934,8 @@ fn render(
             Paragraph::new(HELP).style(config.style(Role::Secondary)),
             body,
         );
+    } else if app.yaml_active() {
+        render_yaml(frame, body, app, config, cancel, &mut stats);
     } else if let Some(pane) = &app.pane {
         let numbers = if app.line_numbers {
             pane.model.line_count().to_string().len() + 2
@@ -3228,5 +3719,315 @@ mod tests {
             })
             .unwrap();
         assert!(contains(&terminal, "cola: 257 descartados"));
+    }
+    fn yaml_app(
+        raw: &str,
+    ) -> (
+        App<'static>,
+        Arc<crate::structure_model::Structure>,
+        PresentationConfig,
+    ) {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let structure = Arc::new(
+            crate::yaml_worker::project(Arc::new(raw.to_owned()), 1, &cancel)
+                .unwrap()
+                .0,
+        );
+        let mut app = App::new(model(raw), None, None, &config, &cancel).unwrap();
+        app.file = Some(FileWorkspace::new(1, structure.source_handle()));
+        let request = app.file.as_mut().unwrap().build.begin().unwrap();
+        assert!(
+            app.install_structure(1, request, structure.clone(), &cancel)
+                .unwrap()
+        );
+        (app, structure, config)
+    }
+    #[test]
+    fn yaml_complex_keys_documents_metadata_and_empty_flow_o_use_real_nodes_and_spans() {
+        let raw = "? [a, {b: c}]\n: value\nempty: []\n";
+        let (mut app, structure, config) = yaml_app(raw);
+        let cancel = AtomicBool::new(false);
+        for _ in 0..2 {
+            app.key(key(KeyCode::Enter), 8, 40, &cancel).unwrap();
+        }
+        app.key(key(KeyCode::Char('K')), 8, 40, &cancel).unwrap();
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .yaml
+                .as_ref()
+                .unwrap()
+                .node()
+                .kind(),
+            crate::structure_model::StructureKind::Sequence
+        );
+        app.key(key(KeyCode::Char('m')), 8, 40, &cancel).unwrap();
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .yaml
+                .as_ref()
+                .unwrap()
+                .current()
+                .domain,
+            YamlDomain::Metadata
+        );
+        assert!(app.pane.is_none());
+        let (_, stats) = plain(&app, 80, 12, &config);
+        assert!(stats.rows > 0);
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .yaml
+                .as_ref()
+                .unwrap()
+                .current()
+                .domain,
+            YamlDomain::Decoded
+        );
+        app.key(key(KeyCode::Char('o')), 8, 40, &cancel).unwrap();
+        assert!(!app.file_active());
+        assert_eq!(
+            &raw[app
+                .source
+                .source_range(app.pane.as_ref().unwrap().hit.clone().unwrap())],
+            "a"
+        );
+        app.swap_file_domain(&cancel).unwrap();
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        let nav = app.file.as_mut().unwrap().yaml.as_mut().unwrap();
+        nav.current_mut().cursor.row = 1;
+        nav.current_mut().cursor.column = 1;
+        app.key(key(KeyCode::Enter), 8, 40, &cancel).unwrap();
+        let nav = app.file.as_ref().unwrap().yaml.as_ref().unwrap();
+        assert_eq!(nav.node().entries().len(), 0);
+        assert_eq!(
+            &structure.source()[nav.selected_location().unwrap().range()],
+            "[]"
+        );
+        app.key(key(KeyCode::Char('o')), 8, 40, &cancel).unwrap();
+        assert_eq!(
+            &raw[app
+                .source
+                .source_range(app.pane.as_ref().unwrap().hit.clone().unwrap())],
+            "[]"
+        );
+    }
+    #[test]
+    fn yaml_search_return_and_history_limit_are_transactional_and_do_not_exit_the_session() {
+        let (mut app, structure, config) = yaml_app("&a [*a]");
+        let cancel = AtomicBool::new(false);
+        let alias = yaml_view::Visits::new(&structure, &cancel)
+            .filter_map(Result::ok)
+            .find(|id| {
+                structure.node(*id).unwrap().kind() == crate::structure_model::StructureKind::Alias
+            })
+            .unwrap();
+        app.file
+            .as_mut()
+            .unwrap()
+            .yaml
+            .as_mut()
+            .unwrap()
+            .current_mut()
+            .node = alias;
+        app.refresh_yaml(&cancel).unwrap();
+        for _ in 0..128 {
+            assert!(!app.key(key(KeyCode::Enter), 8, 40, &cancel).unwrap());
+        }
+        let before = app.file.as_ref().unwrap().yaml.as_ref().unwrap().current();
+        let nav = app.file.as_ref().unwrap().yaml.as_ref().unwrap();
+        let SearchOutcome::YamlFound(hit) = find_yaml(
+            &structure,
+            "alias *",
+            None,
+            Direction::Forward,
+            nav.budget(),
+            &cancel,
+        ) else {
+            panic!()
+        };
+        app.apply_search(SearchOutcome::YamlFound(hit), &cancel)
+            .unwrap();
+        assert!(app.message.contains("128"));
+        assert_eq!(
+            app.file.as_ref().unwrap().yaml.as_ref().unwrap().current(),
+            before
+        );
+        app.key(key(KeyCode::Enter), 8, 40, &cancel).unwrap();
+        assert_eq!(
+            app.file.as_ref().unwrap().yaml.as_ref().unwrap().current(),
+            before
+        );
+        assert!(app.message.contains("128"));
+        let (_, stats) = plain(&app, 80, 12, &config);
+        assert!(stats.rows > 0);
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        let returned = app.file.as_ref().unwrap().yaml.as_ref().unwrap().current();
+        app.apply_search(SearchOutcome::YamlFound(hit), &cancel)
+            .unwrap();
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .yaml
+                .as_ref()
+                .unwrap()
+                .current()
+                .node,
+            hit.node
+        );
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        assert_eq!(
+            app.file.as_ref().unwrap().yaml.as_ref().unwrap().current(),
+            returned
+        );
+        let previous = app.file.as_ref().unwrap().yaml.as_ref().unwrap().current();
+        app.apply_search(
+            SearchOutcome::YamlFound(crate::search::YamlSearchHit {
+                generation: 9,
+                ..hit
+            }),
+            &cancel,
+        )
+        .unwrap();
+        assert_eq!(
+            app.file.as_ref().unwrap().yaml.as_ref().unwrap().current(),
+            previous
+        );
+    }
+    #[test]
+    fn yaml_leaf_search_highlight_borrows_decoded_text_and_source_query_remains_separate() {
+        let raw = "quoted: !!int \"\\u0031\\u0032\"\ncontrol: \"\\efoo ␛foo\"\n";
+        let (mut app, structure, config) = yaml_app(raw);
+        let cancel = AtomicBool::new(false);
+        let nav = app.file.as_ref().unwrap().yaml.as_ref().unwrap();
+        let SearchOutcome::YamlFound(hit) = find_yaml(
+            &structure,
+            "12",
+            None,
+            Direction::Forward,
+            nav.budget(),
+            &cancel,
+        ) else {
+            panic!()
+        };
+        let before = nav.current();
+        app.query = "12".into();
+        app.apply_search(SearchOutcome::YamlFound(hit), &cancel)
+            .unwrap();
+        assert!(app.pane.is_none());
+        let (terminal, stats) = plain(&app, 80, 12, &config);
+        assert!(stats.graphemes <= 2);
+        assert!(
+            terminal.backend().buffer()[(0, 1)]
+                .modifier
+                .contains(Modifier::REVERSED | Modifier::BOLD)
+        );
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        assert_eq!(
+            app.file.as_ref().unwrap().yaml.as_ref().unwrap().current(),
+            before
+        );
+        app.swap_file_domain(&cancel).unwrap();
+        app.query = "\\u0031".into();
+        app.swap_file_domain(&cancel).unwrap();
+        assert_eq!(app.query, "12");
+        app.apply_search(SearchOutcome::YamlFound(hit), &cancel)
+            .unwrap();
+        app.key(key(KeyCode::Char('o')), 8, 40, &cancel).unwrap();
+        assert_eq!(app.query, "\\u0031");
+        assert_eq!(
+            &raw[app
+                .source
+                .source_range(app.pane.as_ref().unwrap().hit.clone().unwrap())],
+            "\"\\u0031\\u0032\""
+        );
+    }
+    #[test]
+    fn legacy_toml_json_search_back_keeps_canonical_ancestors_instead_of_yaml_returns() {
+        for (raw, format) in [
+            (
+                "outer = { inner = { leaf = \"needle\" } }",
+                crate::structure_model::StructureFormat::Toml,
+            ),
+            (
+                "{\"outer\":{\"inner\":{\"leaf\":\"needle\"}}}",
+                crate::structure_model::StructureFormat::Json,
+            ),
+        ] {
+            let config = config();
+            let cancel = AtomicBool::new(false);
+            let structure = Arc::new(match format {
+                crate::structure_model::StructureFormat::Toml => {
+                    crate::toml_worker::project(Arc::new(raw.to_owned()), 1, &cancel)
+                        .unwrap()
+                        .0
+                }
+                _ => {
+                    crate::json_worker::project(Arc::new(raw.to_owned()), 1, &cancel)
+                        .unwrap()
+                        .0
+                }
+            });
+            let mut app = App::new(model(raw), None, None, &config, &cancel).unwrap();
+            app.file = Some(FileWorkspace::new(1, structure.source_handle()));
+            let request = app.file.as_mut().unwrap().build.begin().unwrap();
+            app.install_structure(1, request, structure.clone(), &cancel)
+                .unwrap();
+            let SearchOutcome::FileFound(hit) =
+                find_structure(&structure, "needle", None, Direction::Forward, &cancel)
+            else {
+                panic!()
+            };
+            assert_eq!(hit.path.0.len(), 3);
+            app.apply_search(SearchOutcome::FileFound(hit), &cancel)
+                .unwrap();
+            for length in [2, 1, 0] {
+                app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+                assert_eq!(
+                    app.file
+                        .as_ref()
+                        .unwrap()
+                        .navigator
+                        .as_ref()
+                        .unwrap()
+                        .current()
+                        .path
+                        .0
+                        .len(),
+                    length
+                );
+            }
+            assert!(app.file.as_ref().unwrap().yaml.is_none());
+        }
+    }
+    #[test]
+    fn yaml_borrowed_pane_keeps_line_number_toggle_and_cell_positions() {
+        let (mut app, structure, config) = yaml_app("\"line1\\nline2\"");
+        let cancel = AtomicBool::new(false);
+        let nav = app.file.as_ref().unwrap().yaml.as_ref().unwrap();
+        let SearchOutcome::YamlFound(hit) = find_yaml(
+            &structure,
+            "line2",
+            None,
+            Direction::Forward,
+            nav.budget(),
+            &cancel,
+        ) else {
+            panic!()
+        };
+        app.apply_search(SearchOutcome::YamlFound(hit), &cancel)
+            .unwrap();
+        app.key(key(KeyCode::Char('L')), 8, 40, &cancel).unwrap();
+        let (screen, _) = plain(&app, 40, 12, &config);
+        assert_eq!(screen.backend().buffer()[(1, 1)].symbol(), "2");
+        assert_eq!(screen.backend().buffer()[(3, 1)].symbol(), "l");
+        assert!(app.pane.is_none());
     }
 }

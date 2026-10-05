@@ -32,3 +32,7 @@ pub mod toml_worker;
 pub mod json_worker;
 
 pub mod structure_worker;
+
+pub mod yaml_worker;
+
+pub mod yaml_view;
