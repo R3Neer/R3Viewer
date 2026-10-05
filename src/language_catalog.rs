@@ -1,6 +1,19 @@
 // Generated from Syntect 5.3.0 default-syntaxes; no user grammar loading.
 pub const LANGUAGES: &[(&str, &[&str])] = &[
     ("Plain Text", &["txt"]),
+    (
+        "TOML",
+        &[
+            "toml",
+            "tml",
+            "Cargo.lock",
+            "Gopkg.lock",
+            "Pipfile",
+            "pdm.lock",
+            "poetry.lock",
+            "uv.lock",
+        ],
+    ),
     ("ASP", &["asa"]),
     ("HTML (ASP)", &["asp"]),
     ("ActionScript", &["as"]),

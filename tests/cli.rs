@@ -233,3 +233,232 @@ fn redirected_code_retains_complete_safe_source_despite_colour_and_numbers() {
             .contains("desconocido")
     );
 }
+
+#[test]
+fn structure_text_conflict_fails_before_configuration_and_document_io() {
+    let result = invoke(
+        &[
+            "--format",
+            "text",
+            "--structure",
+            "--config",
+            "missing-d1-config.toml",
+            "missing-d1-document.toml",
+        ],
+        None,
+    );
+    assert_eq!(result.status.code(), Some(2));
+    assert!(result.stdout.is_empty());
+    let message = String::from_utf8(result.stderr).unwrap();
+    assert!(message.contains("--structure"));
+    assert!(!message.contains("configuración"));
+    assert!(!message.contains("no se puede abrir"));
+}
+
+fn nu_value_wire(value: r3viewer_wire::Value) -> Vec<u8> {
+    use r3viewer_wire::{Frame, Origin, VERSION, write_frame, write_magic};
+    let mut bytes = Vec::new();
+    write_magic(&mut bytes).unwrap();
+    write_frame(
+        &mut bytes,
+        &Frame::Start {
+            version: VERSION,
+            cwd: "metadata.toml".into(),
+            origin: Origin::SingleValue,
+        },
+    )
+    .unwrap();
+    write_frame(&mut bytes, &Frame::Value(value)).unwrap();
+    write_frame(&mut bytes, &Frame::End).unwrap();
+    bytes
+}
+#[test]
+fn structure_flag_keeps_typed_nu_without_reinterpretation() {
+    use r3viewer_wire::Value;
+    let wire = nu_value_wire(Value::Record(vec![
+        ("first".into(), Value::Nothing),
+        ("second".into(), Value::String("".into())),
+        (
+            "range".into(),
+            Value::IntRange {
+                start: 1,
+                step: 2,
+                end: r3viewer_wire::Bound::Unbounded,
+            },
+        ),
+    ]));
+    let existing = invoke(&["--nu-wire"], Some(&wire));
+    let structured = invoke(&["--nu-wire", "--structure"], Some(&wire));
+    assert!(existing.status.success());
+    assert!(structured.status.success());
+    assert_eq!(existing.stdout, structured.stdout);
+    assert!(structured.stderr.is_empty());
+}
+#[test]
+fn explicit_toml_rejects_nontextual_nu_after_classification() {
+    use r3viewer_wire::Value;
+    for value in [
+        Value::Int(7),
+        Value::Record(vec![]),
+        Value::Binary(b"x=1".to_vec()),
+    ] {
+        let wire = nu_value_wire(value);
+        let result = invoke(&["--nu-wire", "--format", "toml"], Some(&wire));
+        assert_eq!(result.status.code(), Some(2));
+        assert!(result.stdout.is_empty());
+        assert!(
+            String::from_utf8(result.stderr)
+                .unwrap()
+                .contains("requiere texto")
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn explicit_toml_structure_outputs_complete_typed_data_and_preserves_default_source() {
+    let source = "# source comment\r\n\"a.b\"=\"\\u754c\\e\"\r\nempty={}\r\narray=[]\r\nhex=0xF_F\r\nfloat=-nan\r\noffset=1979-05-27T07:32:00-07:00\r\nlocal=1979-05-27T07:32:00\r\ndate=1979-05-27\r\ntime=07:32:00\r\n";
+    let default = invoke(&["--format", "toml", "--value", source], None);
+    assert!(default.status.success(), "{:?}", default.stderr);
+    assert_eq!(default.stdout, source.as_bytes());
+    assert!(default.stderr.is_empty());
+    for args in [
+        vec!["--structure", "--format", "toml", "--value", source],
+        vec![
+            "-i",
+            "--structure",
+            "--format",
+            "toml",
+            "--colour",
+            "always",
+            "-n",
+            "--value",
+            source,
+        ],
+    ] {
+        let output = invoke(&args, None);
+        assert!(output.status.success(), "{:?}", output.stderr);
+        assert!(output.stderr.is_empty(), "{:?}", output.stderr);
+        let human = String::from_utf8(output.stdout).unwrap();
+        for item in [
+            "key(\"a.b\") = string(\"界\\u{001b}\")",
+            "key(\"empty\") = table{}",
+            "key(\"array\") = array[]",
+            "integer(raw=\"0xF_F\")",
+            "float(raw=\"-nan\")",
+            "offset_datetime(raw=\"1979-05-27T07:32:00-07:00\")",
+            "local_datetime(raw=\"1979-05-27T07:32:00\")",
+            "local_date(raw=\"1979-05-27\")",
+            "local_time(raw=\"07:32:00\")",
+        ] {
+            assert!(human.contains(item), "missing {item:?} in {human:?}");
+        }
+        assert!(!human.contains('\x1b'));
+        assert!(!human.contains("# source comment"));
+        assert!(human.find("key(\"a.b\")").unwrap() < human.find("key(\"hex\")").unwrap());
+    }
+}
+#[cfg(windows)]
+#[test]
+fn structural_failure_returns_complete_source_and_language_alone_never_interprets() {
+    let malformed = "# keep\r\na=[1,\r\n";
+    let failed = invoke(
+        &["--format", "toml", "--structure", "--value", malformed],
+        None,
+    );
+    assert!(failed.status.success());
+    assert_eq!(failed.stdout, malformed.as_bytes());
+    assert!(
+        String::from_utf8(failed.stderr)
+            .unwrap()
+            .contains("TOML no válido")
+    );
+    let valid = "x=1\r\n";
+    let language = invoke(
+        &["--structure", "--language", "toml", "--value", valid],
+        None,
+    );
+    assert!(language.status.success());
+    assert_eq!(language.stdout, valid.as_bytes());
+    assert!(
+        String::from_utf8(language.stderr)
+            .unwrap()
+            .contains("no hay intérprete")
+    );
+    let file = Fixture::new(valid.as_bytes());
+    let toml_path = file.0.with_extension("toml");
+    fs::rename(&file.0, &toml_path).unwrap();
+    let file = Fixture(toml_path);
+    let inferred = invoke(&["--structure", "--language", "py", file.path()], None);
+    assert!(inferred.status.success(), "{:?}", inferred.stderr);
+    assert!(
+        String::from_utf8(inferred.stdout)
+            .unwrap()
+            .contains("integer(raw=\"1\")")
+    );
+    let text = invoke(&["--format", "text", file.path()], None);
+    assert!(text.status.success());
+    assert_eq!(text.stdout, valid.as_bytes());
+}
+#[cfg(windows)]
+#[test]
+fn explicit_toml_interprets_string_wire_without_using_nu_metadata() {
+    let wire = nu_value_wire(r3viewer_wire::Value::String("x=1".into()));
+    let automatic = invoke(&["--nu-wire", "--structure"], Some(&wire));
+    assert!(automatic.status.success());
+    assert_eq!(automatic.stdout, b"x=1");
+    assert!(automatic.stderr.is_empty());
+    let explicit = invoke(
+        &["--nu-wire", "--structure", "--format", "toml"],
+        Some(&wire),
+    );
+    assert!(explicit.status.success(), "{:?}", explicit.stderr);
+    assert!(
+        String::from_utf8(explicit.stdout)
+            .unwrap()
+            .contains("integer(raw=\"1\")")
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn explicit_toml_string_byte_stream_accepts_text_but_unknown_never_becomes_text() {
+    use r3viewer_wire::{ByteStreamKind, Frame, Origin, VERSION, write_frame, write_magic};
+    for kind in [ByteStreamKind::String, ByteStreamKind::Unknown] {
+        let mut wire = Vec::new();
+        write_magic(&mut wire).unwrap();
+        write_frame(
+            &mut wire,
+            &Frame::Start {
+                version: VERSION,
+                cwd: "metadata.toml".into(),
+                origin: Origin::ByteStream(kind),
+            },
+        )
+        .unwrap();
+        write_frame(&mut wire, &Frame::Bytes(b"x=".to_vec())).unwrap();
+        write_frame(&mut wire, &Frame::Bytes(b"1".to_vec())).unwrap();
+        write_frame(&mut wire, &Frame::End).unwrap();
+        let result = invoke(
+            &["--nu-wire", "--format", "toml", "--structure"],
+            Some(&wire),
+        );
+        if kind == ByteStreamKind::String {
+            assert!(result.status.success(), "{:?}", result.stderr);
+            assert!(
+                String::from_utf8(result.stdout)
+                    .unwrap()
+                    .contains("integer(raw=\"1\")")
+            );
+            assert!(result.stderr.is_empty());
+        } else {
+            assert_eq!(result.status.code(), Some(2));
+            assert!(result.stdout.is_empty());
+            assert!(
+                String::from_utf8(result.stderr)
+                    .unwrap()
+                    .contains("requiere texto")
+            );
+        }
+    }
+}

@@ -1061,3 +1061,736 @@ mod tests {
         assert!(visits.next().is_none());
     }
 }
+
+/// File addresses are ordinal edges, independent of cooked key labels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FilePart {
+    Key,
+    Value,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FileStep {
+    pub ordinal: u32,
+    pub part: FilePart,
+}
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct FilePath(pub Vec<FileStep>);
+impl FilePath {
+    pub fn label(&self, max_chars: usize) -> String {
+        let mut text = String::from("$");
+        for step in &self.0 {
+            if text.len() >= max_chars {
+                break;
+            }
+            use std::fmt::Write;
+            let _ = write!(
+                text,
+                "[{}]{}",
+                step.ordinal,
+                if step.part == FilePart::Key {
+                    ".key"
+                } else {
+                    ""
+                }
+            );
+        }
+        cap_safe(&text, max_chars)
+    }
+}
+
+/// Neutral borrowed facade. Nu retains its original Values; files retain their arena.
+#[derive(Clone, Copy)]
+pub enum InspectionRef<'a> {
+    Nu(DataRef<'a>),
+    File(crate::structure_model::NodeRef<'a>),
+}
+#[derive(Clone, Copy)]
+pub enum InspectionLeaf<'a> {
+    Nu(DataRef<'a>),
+    File(crate::structure_model::LeafRef<'a>),
+}
+#[derive(Clone, Copy)]
+pub struct InspectionEntry<'a> {
+    pub ordinal: usize,
+    pub key: Option<&'a str>,
+    pub value: InspectionRef<'a>,
+}
+impl<'a> InspectionRef<'a> {
+    pub fn kind(self) -> &'static str {
+        match self {
+            Self::Nu(node) => node.type_name(),
+            Self::File(node) => file_kind_name(node.kind()),
+        }
+    }
+    pub fn is_container(self) -> bool {
+        match self {
+            Self::Nu(node) => node.is_container(),
+            Self::File(node) => node.kind().is_container(),
+        }
+    }
+    pub fn item(self, ordinal: usize) -> Option<InspectionEntry<'a>> {
+        match self {
+            Self::Nu(node) => {
+                if let Some(record) = node.record() {
+                    let (key, value) = record.get(ordinal)?;
+                    Some(InspectionEntry {
+                        ordinal,
+                        key: Some(key),
+                        value: Self::Nu(DataRef::Value(value)),
+                    })
+                } else {
+                    let value = node.sequence()?.get(ordinal)?;
+                    Some(InspectionEntry {
+                        ordinal,
+                        key: None,
+                        value: Self::Nu(DataRef::Value(value)),
+                    })
+                }
+            }
+            Self::File(node) => {
+                let entry = node.entry(ordinal)?;
+                Some(InspectionEntry {
+                    ordinal: entry.ordinal(),
+                    key: entry
+                        .key()
+                        .and_then(|key| key.leaf())
+                        .map(|leaf| leaf.text()),
+                    value: Self::File(entry.value()),
+                })
+            }
+        }
+    }
+    pub fn entries(self) -> impl Iterator<Item = InspectionEntry<'a>> {
+        let count = match self {
+            Self::Nu(node) => node
+                .record()
+                .map_or_else(|| node.sequence().map_or(0, |x| x.len()), |x| x.len()),
+            Self::File(node) => node.entries().len(),
+        };
+        (0..count).filter_map(move |ordinal| self.item(ordinal))
+    }
+    pub fn leaf(self) -> Option<InspectionLeaf<'a>> {
+        match self {
+            Self::Nu(node) if !node.is_container() => Some(InspectionLeaf::Nu(node)),
+            Self::File(node) => node.leaf().map(InspectionLeaf::File),
+            _ => None,
+        }
+    }
+    pub fn source_location(self) -> Option<crate::structure_model::SourceSpan> {
+        match self {
+            Self::File(node) => node.source_location(),
+            Self::Nu(_) => None,
+        }
+    }
+    pub fn summary(self, max_chars: usize) -> String {
+        match self {
+            Self::Nu(node) => node.summary(max_chars),
+            Self::File(node) => {
+                let name = file_kind_name(node.kind());
+                if let Some(leaf) = node.leaf() {
+                    cap_safe(
+                        &format!("{name}({:?})", prefix(leaf.text(), max_chars)),
+                        max_chars,
+                    )
+                } else {
+                    cap_safe(&format!("{name}[{}]", node.entries().len()), max_chars)
+                }
+            }
+        }
+    }
+}
+pub fn file_kind_name(kind: crate::structure_model::StructureKind) -> &'static str {
+    use crate::structure_model::StructureKind::*;
+    match kind {
+        Mapping => "table",
+        Sequence => "array",
+        ArrayOfTables => "array_of_tables",
+        String => "string",
+        Boolean => "bool",
+        Integer => "integer",
+        Float => "float",
+        OffsetDateTime => "offset_datetime",
+        LocalDateTime => "local_datetime",
+        LocalDate => "local_date",
+        LocalTime => "local_time",
+    }
+}
+#[derive(Clone, Copy)]
+pub enum FileCell<'a> {
+    Key(crate::structure_model::NodeRef<'a>),
+    Index(usize),
+    Node(crate::structure_model::NodeRef<'a>),
+}
+impl FileCell<'_> {
+    pub fn summary(self, max_chars: usize) -> String {
+        match self {
+            Self::Key(node) => cap_safe(
+                prefix(node.leaf().map_or("", |leaf| leaf.text()), max_chars),
+                max_chars,
+            ),
+            Self::Index(index) => cap_safe(&index.to_string(), max_chars),
+            Self::Node(node) => InspectionRef::File(node).summary(max_chars),
+        }
+    }
+    pub fn node(self) -> Option<crate::structure_model::NodeId> {
+        match self {
+            Self::Key(node) | Self::Node(node) => Some(node.id()),
+            Self::Index(_) => None,
+        }
+    }
+}
+#[derive(Debug)]
+pub struct FileViewState {
+    pub path: FilePath,
+    pub cursor: Cursor,
+    pub node: crate::structure_model::NodeId,
+}
+pub struct FileView<'a> {
+    pub state: &'a FileViewState,
+    node: crate::structure_model::NodeRef<'a>,
+}
+impl<'a> FileView<'a> {
+    pub fn node(&self) -> crate::structure_model::NodeRef<'a> {
+        self.node
+    }
+    pub fn row_count(&self) -> usize {
+        self.node.entries().len()
+    }
+    pub fn column_count(&self) -> usize {
+        if self.node.kind().is_container() {
+            2
+        } else {
+            1
+        }
+    }
+    pub fn column_name(&self, column: usize) -> Option<&'static str> {
+        if !self.node.kind().is_container() {
+            return (column == 0).then_some("value");
+        }
+        [
+            if self.node.kind() == crate::structure_model::StructureKind::Mapping {
+                "key"
+            } else {
+                "index"
+            },
+            "value",
+        ]
+        .get(column)
+        .copied()
+    }
+    pub fn cell(&self, row: usize, column: usize) -> Option<FileCell<'a>> {
+        if !self.node.kind().is_container() {
+            return (row == 0 && column == 0).then_some(FileCell::Node(self.node));
+        }
+        let entry = self.node.entry(row)?;
+        match column {
+            0 => Some(entry.key().map_or(FileCell::Index(row), FileCell::Key)),
+            1 => Some(FileCell::Node(entry.value())),
+            _ => None,
+        }
+    }
+    pub fn cell_path(&self, row: usize, column: usize) -> Option<FilePath> {
+        if !self.node.kind().is_container() {
+            return None;
+        }
+        let cell = self.cell(row, column)?;
+        let mut path = self.state.path.clone();
+        path.0.push(FileStep {
+            ordinal: row as u32,
+            part: if matches!(cell, FileCell::Key(_)) {
+                FilePart::Key
+            } else {
+                FilePart::Value
+            },
+        });
+        Some(path)
+    }
+}
+/// Owns the arena and ordinal-only states. No stored borrow points back into self.
+pub struct FileNavigator {
+    structure: std::sync::Arc<crate::structure_model::Structure>,
+    stack: Vec<FileViewState>,
+}
+impl FileNavigator {
+    pub fn new(structure: std::sync::Arc<crate::structure_model::Structure>) -> Self {
+        let root = structure.root().id();
+        Self {
+            structure,
+            stack: vec![FileViewState {
+                path: FilePath::default(),
+                cursor: Cursor::default(),
+                node: root,
+            }],
+        }
+    }
+    pub fn structure(&self) -> &std::sync::Arc<crate::structure_model::Structure> {
+        &self.structure
+    }
+    pub fn current(&self) -> &FileViewState {
+        self.stack.last().expect("file root retained")
+    }
+    pub fn current_mut(&mut self) -> &mut FileViewState {
+        self.stack.last_mut().expect("file root retained")
+    }
+    pub fn view(&self) -> FileView<'_> {
+        FileView {
+            state: self.current(),
+            node: self
+                .structure
+                .node(self.current().node)
+                .expect("validated node"),
+        }
+    }
+    pub fn back(&mut self) -> bool {
+        if self.stack.len() > 1 {
+            self.stack.pop();
+            true
+        } else {
+            false
+        }
+    }
+    pub fn enter(&mut self, row: usize, column: usize, cancel: &AtomicBool) -> Result<bool> {
+        check(cancel)?;
+        let Some(path) = self.view().cell_path(row, column) else {
+            return Ok(false);
+        };
+        if path.0.len() > 64 {
+            return Err(DataError::TooDeep);
+        }
+        let node = self.resolve(&path).ok_or(DataError::InvalidPath)?.id();
+        self.current_mut().cursor.row = row;
+        self.current_mut().cursor.column = column;
+        self.stack.push(FileViewState {
+            path,
+            cursor: Cursor::default(),
+            node,
+        });
+        Ok(true)
+    }
+    pub fn resolve(&self, path: &FilePath) -> Option<crate::structure_model::NodeRef<'_>> {
+        let mut node = self.structure.root();
+        for step in &path.0 {
+            let entry = node.entry(step.ordinal as usize)?;
+            node = if step.part == FilePart::Key {
+                entry.key()?
+            } else {
+                entry.value()
+            };
+        }
+        Some(node)
+    }
+    pub fn jump(&mut self, path: &FilePath, cancel: &AtomicBool) -> Result<()> {
+        if path.0.len() > 64 {
+            return Err(DataError::TooDeep);
+        }
+        check(cancel)?;
+        let mut node = self.structure.root();
+        let mut prefix = FilePath::default();
+        let mut stack = vec![FileViewState {
+            path: prefix.clone(),
+            cursor: Cursor::default(),
+            node: node.id(),
+        }];
+        for step in &path.0 {
+            check(cancel)?;
+            let entry = node
+                .entry(step.ordinal as usize)
+                .ok_or(DataError::InvalidPath)?;
+            let parent = stack.last_mut().unwrap();
+            parent.cursor.row = step.ordinal as usize;
+            parent.cursor.column = usize::from(step.part == FilePart::Value);
+            node = if step.part == FilePart::Key {
+                entry.key().ok_or(DataError::InvalidPath)?
+            } else {
+                entry.value()
+            };
+            prefix.0.push(*step);
+            stack.push(FileViewState {
+                path: prefix.clone(),
+                cursor: Cursor::default(),
+                node: node.id(),
+            });
+        }
+        check(cancel)?;
+        self.stack = stack;
+        Ok(())
+    }
+    pub fn selected_location(&self) -> Option<crate::structure_model::SourceSpan> {
+        let view = self.view();
+        if !view.node().kind().is_container() {
+            return view.node().source_location();
+        }
+        match view.cell(view.state.cursor.row, view.state.cursor.column)? {
+            FileCell::Key(node) | FileCell::Node(node) => node.source_location(),
+            FileCell::Index(_) => view
+                .node()
+                .entry(view.state.cursor.row)?
+                .value()
+                .source_location(),
+        }
+    }
+    pub fn frame(&mut self, rows: usize, columns: usize) {
+        let view = self.view();
+        let count = view.row_count();
+        let cols = view.column_count();
+        let cursor = &mut self.current_mut().cursor;
+        cursor.row = cursor.row.min(count.saturating_sub(1));
+        cursor.column = cursor.column.min(cols.saturating_sub(1));
+        let rows = rows.max(1);
+        if cursor.row < cursor.top {
+            cursor.top = cursor.row;
+        }
+        if cursor.row >= cursor.top.saturating_add(rows) {
+            cursor.top = cursor.row.saturating_sub(rows - 1);
+        }
+        let visible_cols = if columns <= 1 { 1 } else { 2 };
+        if cursor.column < cursor.left {
+            cursor.left = cursor.column;
+        }
+        if cursor.column >= cursor.left + visible_cols {
+            cursor.left = cursor.column + 1 - visible_cols;
+        }
+    }
+}
+
+pub struct FileVisit<'a> {
+    pub path: FilePath,
+    pub leaf: crate::structure_model::LeafRef<'a>,
+}
+struct FileWalk<'a> {
+    node: crate::structure_model::NodeRef<'a>,
+    path: FilePath,
+    next: usize,
+    key_done: bool,
+}
+pub struct FileVisits<'a> {
+    stack: Vec<FileWalk<'a>>,
+    cancel: &'a AtomicBool,
+}
+impl<'a> FileVisits<'a> {
+    pub fn new(structure: &'a crate::structure_model::Structure, cancel: &'a AtomicBool) -> Self {
+        Self {
+            stack: vec![FileWalk {
+                node: structure.root(),
+                path: FilePath::default(),
+                next: 0,
+                key_done: false,
+            }],
+            cancel,
+        }
+    }
+}
+impl<'a> Iterator for FileVisits<'a> {
+    type Item = Result<FileVisit<'a>>;
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if self.stack.is_empty() {
+                return None;
+            }
+            if let Err(error) = check(self.cancel) {
+                self.stack.clear();
+                return Some(Err(error));
+            }
+            let frame = self.stack.last_mut()?;
+            if let Some(leaf) = frame.node.leaf() {
+                let path = frame.path.clone();
+                self.stack.pop();
+                return Some(Ok(FileVisit { path, leaf }));
+            }
+            let Some(entry) = frame.node.entry(frame.next) else {
+                self.stack.pop();
+                continue;
+            };
+            if !frame.key_done {
+                frame.key_done = true;
+                if let Some(key) = entry.key() {
+                    let mut path = frame.path.clone();
+                    path.0.push(FileStep {
+                        ordinal: frame.next as u32,
+                        part: FilePart::Key,
+                    });
+                    return Some(Ok(FileVisit {
+                        path,
+                        leaf: key.leaf().expect("validated key leaf"),
+                    }));
+                }
+            }
+            let mut path = frame.path.clone();
+            path.0.push(FileStep {
+                ordinal: frame.next as u32,
+                part: FilePart::Value,
+            });
+            frame.next += 1;
+            frame.key_done = false;
+            if path.0.len() > 64 {
+                self.stack.clear();
+                return Some(Err(DataError::TooDeep));
+            }
+            self.stack.push(FileWalk {
+                node: entry.value(),
+                path,
+                next: 0,
+                key_done: false,
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod file_fixture {
+    use crate::structure_model::*;
+    use std::{sync::Arc, sync::atomic::AtomicBool};
+    fn source_leaf(
+        builder: &mut StructureBuilder,
+        kind: StructureKind,
+        start: usize,
+        end: usize,
+    ) -> NodeId {
+        let span = SourceSpan {
+            start: start as u32,
+            end: end as u32,
+        };
+        builder
+            .push_node(NodeSpec {
+                kind,
+                text: Some(TextRef::Source(span)),
+                location: Some(span),
+            })
+            .unwrap()
+    }
+    pub fn sample() -> Arc<Structure> {
+        let source =
+            Arc::new("\"a.b\"=\"\\u754c\\e\"\nitems=[{z=0xF},\"\"]\nempty={}\n".to_owned());
+        let mut b = StructureBuilder::new(source.clone(), 1).unwrap();
+        let root = b
+            .push_node(NodeSpec {
+                kind: StructureKind::Mapping,
+                text: None,
+                location: None,
+            })
+            .unwrap();
+        let key = source_leaf(&mut b, StructureKind::String, 1, 4);
+        let string_start = source.find('=').unwrap() + 1;
+        let string_end = source.find('\n').unwrap();
+        let cooked = b.append_cooked("界\x1b".as_bytes()).unwrap();
+        let string = b
+            .push_node(NodeSpec {
+                kind: StructureKind::String,
+                text: Some(TextRef::Cooked {
+                    start: cooked.start,
+                    end: cooked.end,
+                }),
+                location: Some(SourceSpan {
+                    start: string_start as u32,
+                    end: string_end as u32,
+                }),
+            })
+            .unwrap();
+        let items_start = source.find("items").unwrap();
+        let items_key = source_leaf(&mut b, StructureKind::String, items_start, items_start + 5);
+        let array_start = source.find('[').unwrap();
+        let array_end = source.find(']').unwrap() + 1;
+        let array = b
+            .push_node(NodeSpec {
+                kind: StructureKind::Sequence,
+                text: None,
+                location: Some(SourceSpan {
+                    start: array_start as u32,
+                    end: array_end as u32,
+                }),
+            })
+            .unwrap();
+        let table_start = source.find('{').unwrap();
+        let table_end = source.find('}').unwrap() + 1;
+        let table = b
+            .push_node(NodeSpec {
+                kind: StructureKind::Mapping,
+                text: None,
+                location: Some(SourceSpan {
+                    start: table_start as u32,
+                    end: table_end as u32,
+                }),
+            })
+            .unwrap();
+        let z_start = source.find("z=").unwrap();
+        let z = source_leaf(&mut b, StructureKind::String, z_start, z_start + 1);
+        let int_start = source.find("0xF").unwrap();
+        let integer = source_leaf(&mut b, StructureKind::Integer, int_start, int_start + 3);
+        b.set_entries(
+            table,
+            [EntrySpec {
+                key: Some(z),
+                value: integer,
+            }],
+        )
+        .unwrap();
+        let blank_start = source.find(",\"\"").unwrap() + 1;
+        let blank = b
+            .push_node(NodeSpec {
+                kind: StructureKind::String,
+                text: Some(TextRef::Source(SourceSpan {
+                    start: (blank_start + 1) as u32,
+                    end: (blank_start + 1) as u32,
+                })),
+                location: Some(SourceSpan {
+                    start: blank_start as u32,
+                    end: (blank_start + 2) as u32,
+                }),
+            })
+            .unwrap();
+        b.set_entries(
+            array,
+            [
+                EntrySpec {
+                    key: None,
+                    value: table,
+                },
+                EntrySpec {
+                    key: None,
+                    value: blank,
+                },
+            ],
+        )
+        .unwrap();
+        let empty_start = source.find("empty").unwrap();
+        let empty_key = source_leaf(&mut b, StructureKind::String, empty_start, empty_start + 5);
+        let empty = b
+            .push_node(NodeSpec {
+                kind: StructureKind::Mapping,
+                text: None,
+                location: Some(SourceSpan {
+                    start: (source.rfind('{').unwrap()) as u32,
+                    end: (source.rfind('}').unwrap() + 1) as u32,
+                }),
+            })
+            .unwrap();
+        b.set_entries(empty, []).unwrap();
+        b.set_entries(
+            root,
+            [
+                EntrySpec {
+                    key: Some(key),
+                    value: string,
+                },
+                EntrySpec {
+                    key: Some(items_key),
+                    value: array,
+                },
+                EntrySpec {
+                    key: Some(empty_key),
+                    value: empty,
+                },
+            ],
+        )
+        .unwrap();
+        Arc::new(b.finish(root, 2, 1, &AtomicBool::new(false)).unwrap())
+    }
+    pub fn sequence(count: usize) -> Arc<Structure> {
+        let mut b = StructureBuilder::new(Arc::new("1".to_owned()), 1).unwrap();
+        let root = b
+            .push_node(NodeSpec {
+                kind: StructureKind::Sequence,
+                text: None,
+                location: None,
+            })
+            .unwrap();
+        let mut entries = Vec::new();
+        for _ in 0..count {
+            let value = source_leaf(&mut b, StructureKind::Integer, 0, 1);
+            entries.push(EntrySpec { key: None, value });
+        }
+        b.set_entries(root, entries).unwrap();
+        Arc::new(b.finish(root, 1, 0, &AtomicBool::new(false)).unwrap())
+    }
+}
+#[cfg(test)]
+mod file_navigation_tests {
+    use super::*;
+    #[test]
+    fn ordinal_addresses_preserve_quoted_keys_nested_identity_and_back_cursor() {
+        let structure = file_fixture::sample();
+        let cancel = AtomicBool::new(false);
+        let mut nav = FileNavigator::new(structure.clone());
+        let facade = InspectionRef::File(nav.view().node());
+        assert_eq!(
+            facade
+                .entries()
+                .map(|entry| entry.key.unwrap())
+                .collect::<Vec<_>>(),
+            ["a.b", "items", "empty"]
+        );
+        assert!(nav.enter(0, 0, &cancel).unwrap());
+        assert_eq!(
+            nav.current().path,
+            FilePath(vec![FileStep {
+                ordinal: 0,
+                part: FilePart::Key
+            }])
+        );
+        assert_eq!(nav.view().node().leaf().unwrap().text(), "a.b");
+        assert!(nav.back());
+        assert!(nav.enter(1, 1, &cancel).unwrap());
+        assert!(nav.enter(0, 1, &cancel).unwrap());
+        assert!(nav.enter(0, 1, &cancel).unwrap());
+        assert_eq!(nav.view().node().leaf().unwrap().text(), "0xF");
+        let path = nav.current().path.clone();
+        assert_eq!(path.0.len(), 3);
+        assert!(nav.back());
+        assert_eq!(nav.current().cursor.column, 1);
+        nav.jump(&path, &cancel).unwrap();
+        assert_eq!(nav.current().path, path);
+        let previous = nav.current().node;
+        assert!(
+            nav.jump(
+                &FilePath(vec![FileStep {
+                    ordinal: 999,
+                    part: FilePart::Value
+                }]),
+                &cancel
+            )
+            .is_err()
+        );
+        assert_eq!(nav.current().node, previous);
+        assert!(std::sync::Arc::ptr_eq(
+            &structure.source_handle(),
+            &nav.structure().source_handle()
+        ));
+    }
+    #[test]
+    fn cooked_leaf_span_is_complete_raw_and_disjoint_from_cooked_match_coordinates() {
+        let mut nav = FileNavigator::new(file_fixture::sample());
+        let cancel = AtomicBool::new(false);
+        assert!(nav.enter(0, 1, &cancel).unwrap());
+        let leaf = nav.view().node().leaf().unwrap();
+        assert_eq!(leaf.text(), "界\x1b");
+        let raw = nav.selected_location().unwrap().range();
+        assert_eq!(&nav.structure().source()[raw.clone()], "\"\\u754c\\e\"");
+        assert!(raw.len() > leaf.text().len());
+        assert!(nav.back());
+        nav.current_mut().cursor.row = 2;
+        nav.current_mut().cursor.column = 1;
+        assert_eq!(
+            InspectionRef::File(
+                nav.resolve(&FilePath(vec![FileStep {
+                    ordinal: 2,
+                    part: FilePart::Value
+                }]))
+                .unwrap()
+            )
+            .summary(50),
+            "table[0]"
+        );
+    }
+    #[test]
+    fn cancelled_file_visits_end_and_navigation_retains_the_previous_state() {
+        let structure = file_fixture::sample();
+        let cancel = AtomicBool::new(true);
+        let mut visits = FileVisits::new(&structure, &cancel);
+        assert!(matches!(visits.next(), Some(Err(DataError::Cancelled))));
+        assert!(visits.next().is_none());
+        let mut nav = FileNavigator::new(structure);
+        assert!(nav.enter(0, 1, &cancel).is_err());
+        assert!(nav.current().path.0.is_empty());
+        assert_eq!(nav.current().cursor, Cursor::default());
+    }
+}

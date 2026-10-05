@@ -111,6 +111,33 @@ pub fn primitive_text(node: DataRef<'_>, cancel: &AtomicBool) -> Result<String, 
     check(cancel)?;
     Ok(out)
 }
+/// Complete interpreted leaf text; File ranges refer to this domain, not raw source.
+pub fn inspection_text(
+    node: crate::data::InspectionRef<'_>,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
+    match node.leaf().ok_or("contenedor requiere navegación")? {
+        crate::data::InspectionLeaf::Nu(node) => primitive_text(node, cancel),
+        crate::data::InspectionLeaf::File(leaf) => file_leaf_text(leaf, cancel),
+    }
+}
+pub fn file_leaf_text(
+    leaf: crate::structure_model::LeafRef<'_>,
+    cancel: &AtomicBool,
+) -> Result<String, String> {
+    use crate::structure_model::StructureKind;
+    if leaf.kind() == StructureKind::String {
+        return copy_text(leaf.text(), cancel);
+    }
+    let mut out = String::new();
+    out.push_str(crate::data::file_kind_name(leaf.kind()));
+    out.push_str("(raw=");
+    append(&mut out, leaf.text(), cancel)?;
+    out.push(')');
+    check(cancel)?;
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

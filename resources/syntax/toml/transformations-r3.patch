@@ -1,0 +1,116 @@
+diff --git a/.tmp/rv106-spike/TOML.sublime-syntax b/.tmp/rv106-spike/TOML-R3.sublime-syntax
+index 1afacc3..cebf9fa 100644
+--- a/.tmp/rv106-spike/TOML.sublime-syntax
++++ b/.tmp/rv106-spike/TOML-R3.sublime-syntax
+@@ -1,5 +1,7 @@
+ %YAML 1.2
+ ---
++# TEMP RV106 TOML1.1 derivative: optional seconds, e/x escapes, inline whitespace/comments/trailing comma.
++# Upstream f5a57e8bff694a4e6c52a491dae579aabc7427cf; retain LICENSE MIT Jason Williams2021.
+ # http://www.sublimetext.com/docs/3/syntax.html
+ name: TOML
+ 
+@@ -16,8 +18,8 @@ file_extensions:
+ scope: source.toml
+ 
+ variables:
+-  ws: '[ \t]*'
+-  wsnl: '([ \t\n])*'
++  ws: '[ \t\r]*'
++  wsnl: '([ \t\r\n])*'
+ 
+   # Used to detect the possible start of a key.
+   peek_key_start: '(?=[A-Za-z0-9_''"-])'
+@@ -61,7 +63,7 @@ variables:
+   # time-offset    = "Z" / time-numoffset
+   time_offset: '(?: [zZ] | {{time_numoffset}} )'
+   # partial-time   = time-hour ":" time-minute ":" time-second [time-secfrac]
+-  partial_time: '{{time_hour}} : {{time_minute}} : {{time_second}} (?: {{time_secfrac}} )?'
++  partial_time: '{{time_hour}} : {{time_minute}} (?: : {{time_second}} (?: {{time_secfrac}} )? )?'
+   # full-date      = date-fullyear "-" date-month "-" date-mday
+   full_date: '{{date_fullyear}} - {{date_month}} - {{date_mday}}'
+   # full-time      = partial-time time-offset
+@@ -193,7 +195,7 @@ contexts:
+           pop: true
+ 
+   string-escape:
+-    - match: '\\(?:[btnfr"\\]|u\h{4}|U\h{8})'
++    - match: '\\(?:[btnfre"\\]|x\h{2}|u\h{4}|U\h{8})'
+       scope: constant.character.escape.toml
+     - match: '\\.'
+       scope: invalid.illegal.string.escape.toml
+@@ -248,41 +250,39 @@ contexts:
+   inline-table:
+     - match: '\{'
+       scope: punctuation.definition.inline-table.begin.toml
+-      set:
+-        - match: '{{ws}}'
+-        - match: '\}'
+-          # Empty table.
+-          scope: punctuation.definition.inline-table.end.toml
+-          pop: true
+-        - match: ''
+-          set: [inline-keyval-sep, key]
++      set: inline-before-key
++
++  inline-before-key:
++    - match: '[ \t\r\n]+'
++    - include: comments
++    - match: '\}'
++      scope: punctuation.definition.inline-table.end.toml
++      pop: true
++    - match: '{{peek_key_start}}'
++      set: [inline-keyval-sep, key]
++    - match: '.'
++      scope: invalid.illegal.inline-key.toml
+ 
+   inline-keyval-sep:
+     - match: '{{ws}}(=){{ws}}'
+       captures:
+         1: punctuation.definition.key-value.toml
+-      set: [inline-table-keyvals, data-types]
++      set: [inline-after-value, data-types]
+     - match: '(?=\w+|.)'
+       scope: invalid.illegal.inline-sep.toml
+       pop: true
+ 
+-  inline-table-keyvals:
+-    - match: '{{ws}}'
++  inline-after-value:
++    - match: '[ \t\r\n]+'
++    - include: comments
+     - match: '\}'
+       scope: punctuation.definition.inline-table.end.toml
+       pop: true
+     - match: ','
+       scope: punctuation.separator.inline-table.toml
+-      set:
+-        - match: '{{ws}}'
+-        - match: '\}'
+-          scope: invalid.illegal.table-end.toml
+-          pop: true
+-        - match: ''
+-          set: [inline-keyval-sep, key]
+-    - match: '(?=\w+|.)'
++      set: inline-before-key
++    - match: '.'
+       scope: invalid.illegal.inline-key.toml
+-      pop: true
+ 
+   keyval:
+     - match: '{{peek_key_start}}'
+@@ -342,7 +342,7 @@ contexts:
+ 
+   maybe-comment-eol:
+     - include: comments
+-    - match: '$'
++    - match: '{{ws}}$'
+       pop: true
+     - match: '.+'
+       # This also highlights trailing whitespece.  Although that is valid
+@@ -409,3 +409,5 @@ contexts:
+     - match: '.'
+       scope: invalid.illegal.table.toml
+       pop: true
++
++

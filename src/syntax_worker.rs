@@ -303,6 +303,15 @@ pub fn run_private_stdio() -> io::Result<()> {
     }
 }
 #[cfg(windows)]
+pub fn bundled_syntaxes() -> io::Result<syntect::parsing::SyntaxSet> {
+    syntect::dumps::from_reader(std::io::Cursor::new(include_bytes!(concat!(
+        env!("OUT_DIR"),
+        "/toml.syntax.pack"
+    ))))
+    .map_err(|_| invalid())
+}
+
+#[cfg(windows)]
 fn run_worker() -> io::Result<()> {
     use std::sync::mpsc;
     let (send, receive) = mpsc::sync_channel(1);
@@ -341,8 +350,7 @@ fn run_worker() -> io::Result<()> {
         ),
         _ => return Err(invalid()),
     };
-    use syntect::parsing::SyntaxSet;
-    let syntaxes = SyntaxSet::load_defaults_newlines();
+    let syntaxes = bundled_syntaxes()?;
     let extension = language.trim_start_matches('.').to_ascii_lowercase();
     let syntax = syntaxes
         .find_syntax_by_extension(&language)

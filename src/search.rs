@@ -24,9 +24,17 @@ pub struct SearchHit {
     pub key: bool,
     pub range: Range<usize>,
 }
+#[derive(Clone, Debug)]
+pub struct FileSearchHit {
+    pub visit_index: usize,
+    pub path: crate::data::FilePath,
+    /// Safe cooked/descriptor byte range. Never a raw file coordinate.
+    pub range: Range<usize>,
+}
 #[derive(Debug)]
 pub enum SearchOutcome {
     Found(SearchHit),
+    FileFound(FileSearchHit),
     NotFound,
     Cancelled,
     Error(String),
@@ -491,5 +499,189 @@ mod typed_search_tests {
         };
         assert_ne!(first.range, next.range);
         assert_eq!(first.path, next.path);
+    }
+}
+
+pub fn find_structure(
+    structure: &crate::structure_model::Structure,
+    query: &str,
+    previous: Option<&FileSearchHit>,
+    direction: Direction,
+    cancel: &AtomicBool,
+) -> SearchOutcome {
+    use crate::{data::FileVisits, inspect_text::file_leaf_text, presentation::SafeTextModel};
+    if query.is_empty() {
+        return SearchOutcome::NotFound;
+    }
+    if query.len() > QUERY_LIMIT {
+        return SearchOutcome::Error(format!("consulta excede {QUERY_LIMIT} bytes"));
+    }
+    for pass in 0..if previous.is_some() { 2 } else { 1 } {
+        let mut tentative = None;
+        for (index, visit) in FileVisits::new(structure, cancel).enumerate() {
+            if let Some(last) = previous {
+                let relevant = match (direction, pass) {
+                    (Direction::Forward, 0) | (Direction::Backward, 1) => index >= last.visit_index,
+                    _ => index <= last.visit_index,
+                };
+                if !relevant {
+                    continue;
+                }
+            }
+            let visit = match visit {
+                Ok(visit) => visit,
+                Err(error) => {
+                    return if cancel.load(Ordering::Relaxed) {
+                        SearchOutcome::Cancelled
+                    } else {
+                        SearchOutcome::Error(error.to_string())
+                    };
+                }
+            };
+            let raw = match file_leaf_text(visit.leaf, cancel) {
+                Ok(raw) => raw,
+                Err(error) => {
+                    return if cancel.load(Ordering::Relaxed) {
+                        SearchOutcome::Cancelled
+                    } else {
+                        SearchOutcome::Error(error)
+                    };
+                }
+            };
+            let safe = match SafeTextModel::new(raw, cancel) {
+                Ok(safe) => safe,
+                Err(error) => {
+                    return if cancel.load(Ordering::Relaxed) {
+                        SearchOutcome::Cancelled
+                    } else {
+                        SearchOutcome::Error(format!("no se puede preparar búsqueda: {error:?}"))
+                    };
+                }
+            };
+            let mut range = 0..safe.visible().len();
+            if let Some(last) = previous.filter(|last| index == last.visit_index) {
+                match (direction, pass) {
+                    (Direction::Forward, 0) => range.start = last.range.end.min(range.end),
+                    (Direction::Backward, 0) => range.end = last.range.start.min(range.end),
+                    (Direction::Forward, _) => range.end = last.range.end.min(range.end),
+                    (Direction::Backward, _) => range.start = last.range.start.min(range.end),
+                }
+            }
+            match segment(safe.visible(), query, range, direction, cancel) {
+                Err(()) => return SearchOutcome::Cancelled,
+                Ok(None) => (),
+                Ok(Some(range)) => {
+                    let hit = FileSearchHit {
+                        visit_index: index,
+                        path: visit.path,
+                        range,
+                    };
+                    if direction == Direction::Forward {
+                        return SearchOutcome::FileFound(hit);
+                    }
+                    tentative = Some(hit);
+                }
+            }
+        }
+        if let Some(hit) = tentative {
+            return SearchOutcome::FileFound(hit);
+        }
+    }
+    SearchOutcome::NotFound
+}
+
+#[cfg(test)]
+mod file_search_tests {
+    use super::*;
+    #[test]
+    fn file_keys_and_cooked_leaves_keep_separate_domains_and_wrap_in_both_directions() {
+        let structure = crate::data::file_fixture::sample();
+        let cancel = AtomicBool::new(false);
+        let SearchOutcome::FileFound(key) =
+            find_structure(&structure, "a.b", None, Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        assert_eq!(key.path.0[0].part, crate::data::FilePart::Key);
+        let SearchOutcome::FileFound(cooked) =
+            find_structure(&structure, "界␛", None, Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        assert_eq!(cooked.path.0[0].part, crate::data::FilePart::Value);
+        assert_eq!(cooked.range, 0..6);
+        let raw = structure
+            .root()
+            .entry(0)
+            .unwrap()
+            .value()
+            .source_location()
+            .unwrap()
+            .range();
+        assert_ne!(raw, cooked.range);
+        for direction in [Direction::Forward, Direction::Backward] {
+            let SearchOutcome::FileFound(wrapped) =
+                find_structure(&structure, "界␛", Some(&cooked), direction, &cancel)
+            else {
+                panic!()
+            };
+            assert_eq!(wrapped.path, cooked.path);
+            assert_eq!(wrapped.range, cooked.range);
+        }
+        assert!(matches!(
+            find_structure(&structure, "\\u754c", None, Direction::Forward, &cancel),
+            SearchOutcome::NotFound
+        ));
+        assert!(matches!(
+            find_structure(&structure, "0xF", None, Direction::Forward, &cancel),
+            SearchOutcome::FileFound(_)
+        ));
+        assert!(matches!(
+            find_structure(
+                &structure,
+                "x",
+                None,
+                Direction::Forward,
+                &AtomicBool::new(true)
+            ),
+            SearchOutcome::Cancelled
+        ));
+    }
+    #[test]
+    fn interpreted_search_reads_complete_long_cooked_leaf_without_summary_truncation() {
+        use crate::structure_model::*;
+        use std::sync::Arc;
+        let source = Arc::new("\"large\"".to_owned());
+        let mut builder = StructureBuilder::new(source, 7).unwrap();
+        let cooked = builder
+            .append_cooked(format!("{}needle\x1b", "界".repeat(100_000)).as_bytes())
+            .unwrap();
+        let root = builder
+            .push_node(NodeSpec {
+                kind: StructureKind::String,
+                text: Some(TextRef::Cooked {
+                    start: cooked.start,
+                    end: cooked.end,
+                }),
+                location: Some(SourceSpan { start: 0, end: 7 }),
+            })
+            .unwrap();
+        let cancel = AtomicBool::new(false);
+        let structure = builder.finish(root, 0, 0, &cancel).unwrap();
+        let SearchOutcome::FileFound(hit) =
+            find_structure(&structure, "needle␛", None, Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        assert_eq!(hit.range, 300_000..300_009);
+        assert!(hit.path.0.is_empty());
+        for direction in [Direction::Forward, Direction::Backward] {
+            let SearchOutcome::FileFound(next) =
+                find_structure(&structure, "needle␛", Some(&hit), direction, &cancel)
+            else {
+                panic!()
+            };
+            assert_eq!(next.range, hit.range);
+        }
     }
 }

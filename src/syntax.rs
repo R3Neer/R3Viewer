@@ -2,6 +2,7 @@
 use crate::{
     syntax_process::ChildJob,
     syntax_worker::{self, Frame, Message},
+    worker_process::ReapTicket,
 };
 use std::{
     collections::VecDeque,
@@ -187,7 +188,7 @@ struct Document {
 }
 enum Update {
     Set(Document),
-    Clear,
+    Clear(u64),
 }
 #[derive(Clone, Copy)]
 struct Request {
@@ -211,6 +212,7 @@ struct State {
     event: Option<SyntaxEvent>,
     plain: Option<Latched>,
     stopping: bool,
+    pause: Option<(u64, ReapTicket)>,
     memory: SyntaxMemory,
 }
 struct Shared {
@@ -327,6 +329,7 @@ impl SyntaxClient {
                 event: None,
                 plain: None,
                 stopping: false,
+                pause: None,
                 memory: Default::default(),
             }),
             wake: Condvar::new(),
@@ -368,6 +371,35 @@ impl SyntaxClient {
         drop(state);
         self.shared.wake.notify_one();
     }
+    /// Suspend this generation and receive confirmation after child and IPC are reaped.
+    /// The caller resumes only after the structural worker's own receipt is Reaped.
+    pub fn pause_document(&self, generation: u64) -> ReapTicket {
+        let mut state = self.shared.lock();
+        if state.stopping {
+            let ticket = ReapTicket::pending();
+            ticket.complete(false);
+            return ticket;
+        }
+        if state.generation != generation {
+            return ReapTicket::reaped();
+        }
+        let ticket = state
+            .pause
+            .as_ref()
+            .map(|(_, ticket)| ticket.clone())
+            .unwrap_or_else(ReapTicket::pending);
+        state.has_document = false;
+        state.revision = state.revision.wrapping_add(1);
+        state.update = Some(Update::Clear(state.revision));
+        state.request = None;
+        state.event = None;
+        state.memory.pending_source_bytes = 0;
+        state.memory.pending_style_bytes = 0;
+        state.pause = Some((state.revision, ticket.clone()));
+        drop(state);
+        self.shared.wake.notify_one();
+        ticket
+    }
     pub fn clear_document(&self, generation: u64) {
         let mut state = self.shared.lock();
         if state.stopping {
@@ -379,7 +411,7 @@ impl SyntaxClient {
         state.generation = generation;
         state.has_document = false;
         state.revision = state.revision.wrapping_add(1);
-        state.update = Some(Update::Clear);
+        state.update = Some(Update::Clear(state.revision));
         state.request = None;
         state.event = None;
         state.memory.pending_source_bytes = 0;
@@ -1004,6 +1036,7 @@ fn close_connection(connection: &mut Option<Connection>) -> bool {
 }
 fn controller(shared: Arc<Shared>, limits: SyntaxLimits) {
     let mut connection = None;
+    let mut cleanup_failed = false;
     let mut document: Option<Document> = None;
     let mut cache = StyleCache::new(limits.style_cache_bytes);
     loop {
@@ -1024,10 +1057,26 @@ fn controller(shared: Arc<Shared>, limits: SyntaxLimits) {
             update
         };
         if let Some(update) = update {
+            let processed_revision = match &update {
+                Update::Set(doc) => doc.revision,
+                Update::Clear(revision) => *revision,
+            };
             if !close_connection(&mut connection) {
+                cleanup_failed = true;
                 let generation = shared.lock().generation;
                 shared.latch(generation, FallbackReason::WorkerExited);
                 break;
+            }
+            {
+                let mut state = shared.lock();
+                if state
+                    .pause
+                    .as_ref()
+                    .is_some_and(|(revision, _)| *revision <= processed_revision)
+                    && let Some((_, ticket)) = state.pause.take()
+                {
+                    ticket.complete(true);
+                }
             }
             document = None;
             cache.clear();
@@ -1072,6 +1121,7 @@ fn controller(shared: Arc<Shared>, limits: SyntaxLimits) {
                     Err(WaitError::Failure(reason)) => {
                         shared.latch(doc.generation, reason);
                         if !close_connection(&mut connection) {
+                            cleanup_failed = true;
                             break;
                         }
                         {
@@ -1082,6 +1132,7 @@ fn controller(shared: Arc<Shared>, limits: SyntaxLimits) {
                     }
                     Err(WaitError::Changed) => {
                         if !close_connection(&mut connection) {
+                            cleanup_failed = true;
                             break;
                         }
                         {
@@ -1108,6 +1159,7 @@ fn controller(shared: Arc<Shared>, limits: SyntaxLimits) {
             }
             cache.clear();
             if !close_connection(&mut connection) {
+                cleanup_failed = true;
                 break;
             }
             document = None;
@@ -1172,6 +1224,7 @@ fn controller(shared: Arc<Shared>, limits: SyntaxLimits) {
                     shared.latch(doc.generation, reason);
                     cache.clear();
                     if !close_connection(&mut connection) {
+                        cleanup_failed = true;
                         break;
                     }
                     document = None;
@@ -1197,8 +1250,13 @@ fn controller(shared: Arc<Shared>, limits: SyntaxLimits) {
                 .unwrap_or_else(|e| e.into_inner());
         }
     }
-    let _ = close_connection(&mut connection);
+    let closed = close_connection(&mut connection);
+    let reaped = closed && !cleanup_failed;
     let mut state = shared.lock();
+    if let Some((_, ticket)) = state.pause.take() {
+        ticket.complete(reaped);
+    }
+    state.stopping = true;
     state.memory = Default::default();
     state.update = None;
     state.request = None;
@@ -1222,6 +1280,7 @@ mod tests {
                     event: None,
                     plain: None,
                     stopping: false,
+                    pause: None,
                     memory: Default::default(),
                 }),
                 wake: Condvar::new(),

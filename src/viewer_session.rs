@@ -1,18 +1,23 @@
 //! Manual Ratatui session over the existing exact-state terminal guard.
 use crate::{
     config::{PresentationConfig, Role},
-    data::{Cell, DataRef, Navigator, PathMember},
-    inspect_text::primitive_text,
+    data::{Cell, DataRef, FileNavigator, FilePart, InspectionRef, Navigator, PathMember},
+    inspect_text::{file_leaf_text, primitive_text},
     presentation::{SafeTextModel, cell_width, slice_cells},
     search::{
-        Direction, QUERY_LIMIT, SearchHit, SearchOutcome, SearchWorker, find_data, find_visible,
+        Direction, FileSearchHit, QUERY_LIMIT, SearchHit, SearchOutcome, SearchWorker, find_data,
+        find_structure, find_visible,
     },
     session::{TerminalGuard, control_terminal},
+    structure::{
+        Mode as StructureMode, StructureClient, StructureEvent, StructureFailure, StructureShutdown,
+    },
     syntax::{
         FallbackReason, RoleSpan, SyntaxClient, SyntaxEvent, SyntaxLimits, SyntaxRole,
         SyntaxShutdown, Viewport,
     },
-    syntax_selection::{SyntaxSelection, fallback_diagnostic},
+    syntax_selection::{StructureSelection, SyntaxSelection, fallback_diagnostic},
+    worker_process::{ReapState, ReapTicket},
 };
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use r3viewer_wire::{ByteStreamKind, TypedInput, Value};
@@ -38,7 +43,7 @@ use std::{
 use unicode_segmentation::UnicodeSegmentation;
 const TICK: Duration = Duration::from_millis(25);
 const EVENT_CAPACITY: usize = 256;
-const HELP: &str = "Flechas / h j k l: mover\nPageUp / PageDown: página; Home / End: extremos\nEnter: abrir celda; columna key: clave completa; r: abrir fila completa\nBackspace: cerrar clave / volver al padre\n/: búsqueda literal; Enter: confirmar; Esc: cancelar editor\nn / N: siguiente / anterior (vuelta al principio/final)\nK: clave completa de columna/campo; L: números de línea; ?: ayuda\nq / Esc: salir; Ctrl-C: cancelar (130)";
+const HELP: &str = "Flechas / h j k l: mover\nPageUp / PageDown: página; Home / End: extremos\nEnter: abrir celda; columna key: clave completa; r: abrir fila completa\nBackspace: cerrar clave / volver al padre\n/: búsqueda literal; Enter: confirmar; Esc: cancelar editor\nn / N: siguiente / anterior (vuelta al principio/final)\nK: clave completa de columna/campo; L: números de línea; ?: ayuda\nTab / Shift-Tab: Fuente/Estructura TOML; o: span original completo\nq / Esc: salir; Ctrl-C: cancelar (130)";
 
 fn is_cancel(key: &KeyEvent) -> bool {
     key.kind != KeyEventKind::Release
@@ -136,6 +141,69 @@ impl Drop for KeyboardReader {
         }
     }
 }
+#[derive(Debug, PartialEq, Eq)]
+enum BuildState {
+    NotRequested,
+    Building { request: u64 },
+    Ready,
+    Unavailable(String),
+}
+struct BuildSelection {
+    generation: u64,
+    sequence: u64,
+    state: BuildState,
+}
+impl BuildSelection {
+    fn new(generation: u64) -> Self {
+        Self {
+            generation,
+            sequence: 0,
+            state: BuildState::NotRequested,
+        }
+    }
+    fn begin(&mut self) -> Option<u64> {
+        if self.state != BuildState::NotRequested {
+            return None;
+        }
+        let request = self.sequence.checked_add(1)?;
+        self.sequence = request;
+        self.state = BuildState::Building { request };
+        Some(request)
+    }
+    fn cancel_build(&mut self) -> Option<u64> {
+        let BuildState::Building { request } = self.state else {
+            return None;
+        };
+        self.state = BuildState::NotRequested;
+        Some(request)
+    }
+    fn current(&self, generation: u64, request: u64) -> bool {
+        generation == self.generation && self.state == BuildState::Building { request }
+    }
+    fn ready(&mut self, generation: u64, request: u64) -> bool {
+        if !self.current(generation, request) {
+            return false;
+        }
+        self.state = BuildState::Ready;
+        true
+    }
+    fn unavailable(&mut self, generation: u64, request: u64, diagnostic: String) -> bool {
+        if !self.current(generation, request) {
+            return false;
+        }
+        self.state = BuildState::Unavailable(diagnostic);
+        true
+    }
+}
+fn structure_toggle(key: &KeyEvent, help: bool, editing: bool) -> bool {
+    key.kind == KeyEventKind::Press
+        && !help
+        && !editing
+        && !key
+            .modifiers
+            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+        && matches!(key.code, KeyCode::Tab | KeyCode::BackTab)
+}
 #[derive(Default, Clone, Copy, Debug, PartialEq, Eq)]
 struct Position {
     top: usize,
@@ -144,6 +212,7 @@ struct Position {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum NodeIdentity {
     Value(usize),
+    File(crate::structure_model::NodeId),
     StringStream { pointer: usize, length: usize },
 }
 struct TextPane {
@@ -251,6 +320,124 @@ impl Drop for SyntaxOwner {
         let _ = self.join();
     }
 }
+struct StructureOwner {
+    client: Option<StructureClient>,
+    shutdown: Option<StructureShutdown>,
+    resume: Option<ReapTicket>,
+    syntax_paused: bool,
+}
+impl StructureOwner {
+    fn stop(&mut self) {
+        if let Some(client) = self.client.take() {
+            self.shutdown = Some(client.shutdown());
+        }
+    }
+    fn join(&mut self) -> io::Result<()> {
+        self.stop();
+        self.shutdown.take().map_or(Ok(()), StructureShutdown::join)
+    }
+}
+impl Drop for StructureOwner {
+    fn drop(&mut self) {
+        let _ = self.join();
+    }
+}
+fn begin_structure(app: &mut App<'_>, owner: &mut StructureOwner, syntax: Option<&SyntaxClient>) {
+    let Some(file) = &mut app.file else {
+        return;
+    };
+    let Some(request) = file.build.begin() else {
+        return;
+    };
+    let generation = file.build.generation;
+    owner.resume = None;
+    let ticket = syntax.map_or_else(ReapTicket::reaped, |client| {
+        client.pause_document(app.syntax.generation)
+    });
+    owner.syntax_paused = true;
+    app.syntax.spans.clear();
+    app.syntax.viewport = None;
+    app.syntax.request = 0;
+    app.structure_message =
+        "construyendo estructura; Tab vuelve a Fuente y cancela la petición".into();
+    if !owner.client.as_ref().is_some_and(|client| {
+        client.request(generation, request, StructureMode::Tui, ticket.clone())
+    }) {
+        let diagnostic = StructureFailure::InvalidIpc.description().to_owned();
+        file.build
+            .unavailable(generation, request, diagnostic.clone());
+        app.structure_message = diagnostic;
+        owner.resume = Some(ticket);
+    }
+}
+fn toggle_structure(
+    app: &mut App<'_>,
+    owner: &mut StructureOwner,
+    syntax: Option<&SyntaxClient>,
+    cancel: &AtomicBool,
+) -> io::Result<()> {
+    let Some(file) = &mut app.file else {
+        return Ok(());
+    };
+    match &file.build.state {
+        BuildState::NotRequested => begin_structure(app, owner, syntax),
+        BuildState::Building { request } => {
+            let request = *request;
+            // Cancel the exact controller request before retiring its local identity.
+            owner.resume = Some(
+                owner
+                    .client
+                    .as_ref()
+                    .map_or_else(ReapTicket::reaped, |client| {
+                        client.cancel_request(file.build.generation, request)
+                    }),
+            );
+            file.build.cancel_build();
+            app.structure_message =
+                "construcción cancelada; Tab solicita un nuevo intento explícito".into();
+        }
+        BuildState::Ready => {
+            app.swap_file_domain(cancel)?;
+            if app.file_active() && !owner.syntax_paused {
+                owner.resume = Some(syntax.map_or_else(ReapTicket::reaped, |client| {
+                    client.pause_document(app.syntax.generation)
+                }));
+                owner.syntax_paused = true;
+                app.syntax.spans.clear();
+                app.syntax.viewport = None;
+                app.syntax.request = 0;
+            }
+        }
+        BuildState::Unavailable(diagnostic) => app.structure_message = diagnostic.clone(),
+    }
+    Ok(())
+}
+#[derive(Default)]
+struct DomainState {
+    pane: Option<TextPane>,
+    query: String,
+    last_hit: Option<SearchHit>,
+    file_hit: Option<FileSearchHit>,
+    message: String,
+}
+struct FileWorkspace {
+    source: Arc<String>,
+    build: BuildSelection,
+    navigator: Option<FileNavigator>,
+    active: bool,
+    inactive: DomainState,
+}
+impl FileWorkspace {
+    fn new(generation: u64, source: Arc<String>) -> Self {
+        Self {
+            source,
+            build: BuildSelection::new(generation),
+            navigator: None,
+            active: false,
+            inactive: DomainState::default(),
+        }
+    }
+}
 struct App<'a> {
     source: Arc<SafeTextModel>,
     typed: Option<Arc<TypedInput>>,
@@ -267,6 +454,9 @@ struct App<'a> {
     viewport: (usize, usize),
     syntax: SyntaxView,
     syntax_diagnostic: String,
+    file: Option<FileWorkspace>,
+    file_hit: Option<FileSearchHit>,
+    structure_message: String,
 }
 fn prepare_error(error: impl std::fmt::Debug) -> io::Error {
     io::Error::other(format!("no se puede preparar vista: {error:?}"))
@@ -315,11 +505,200 @@ impl<'a> App<'a> {
             viewport: (1, 1),
             syntax: SyntaxView::default(),
             syntax_diagnostic: String::new(),
+            file: None,
+            file_hit: None,
+            structure_message: String::new(),
         };
         app.refresh_pane(cancel)?;
         Ok(app)
     }
+    fn file_active(&self) -> bool {
+        self.file.as_ref().is_some_and(|file| file.active)
+    }
+    fn swap_file_domain(&mut self, cancel: &AtomicBool) -> io::Result<()> {
+        self.cancel_pending();
+        let file = self
+            .file
+            .as_mut()
+            .ok_or_else(|| io::Error::other("sin estructura"))?;
+        if file.build.state != BuildState::Ready {
+            return Ok(());
+        }
+        std::mem::swap(&mut self.pane, &mut file.inactive.pane);
+        std::mem::swap(&mut self.query, &mut file.inactive.query);
+        std::mem::swap(&mut self.last_hit, &mut file.inactive.last_hit);
+        std::mem::swap(&mut self.file_hit, &mut file.inactive.file_hit);
+        std::mem::swap(&mut self.message, &mut file.inactive.message);
+        file.active = !file.active;
+        if file.active {
+            self.refresh_pane(cancel)?;
+        }
+        self.reveal_selection();
+        Ok(())
+    }
+    fn install_structure(
+        &mut self,
+        generation: u64,
+        request: u64,
+        structure: Arc<crate::structure_model::Structure>,
+        cancel: &AtomicBool,
+    ) -> io::Result<bool> {
+        let Some(file) = &mut self.file else {
+            return Ok(false);
+        };
+        if structure.generation() != generation
+            || !Arc::ptr_eq(&file.source, &structure.source_handle())
+            || !file.build.ready(generation, request)
+        {
+            return Ok(false);
+        }
+        file.navigator = Some(FileNavigator::new(structure));
+        self.structure_message.clear();
+        if self.editor.is_none() && !self.help {
+            self.swap_file_domain(cancel)?;
+        } else {
+            self.structure_message = "estructura disponible; Tab alterna la vista".into();
+        }
+        Ok(true)
+    }
+    fn file_key(
+        &mut self,
+        code: KeyCode,
+        rows: usize,
+        columns: usize,
+        cancel: &AtomicBool,
+    ) -> io::Result<bool> {
+        if !self.file_active() {
+            return Ok(false);
+        }
+        if code == KeyCode::Char('o') {
+            let nav = self.file.as_ref().unwrap().navigator.as_ref().unwrap();
+            let span = nav.selected_location();
+            if nav.structure().generation() != self.file.as_ref().unwrap().build.generation
+                || span.is_none()
+            {
+                self.message = "el nodo no tiene un span original contiguo".into();
+                return Ok(true);
+            }
+            let range = self.source.visible_range(span.unwrap().range());
+            self.swap_file_domain(cancel)?;
+            if let Some(pane) = &mut self.pane {
+                pane.position.top = pane.model.line_for_offset(range.start);
+                pane.position.left = offset_cell(&pane.model, range.start, cancel)?;
+                pane.hit = Some(range);
+            }
+            self.message = "span original completo; consulta de Fuente conservada".into();
+            return Ok(true);
+        }
+        let recognized = matches!(
+            code,
+            KeyCode::Enter
+                | KeyCode::Backspace
+                | KeyCode::Up
+                | KeyCode::Down
+                | KeyCode::Left
+                | KeyCode::Right
+                | KeyCode::PageUp
+                | KeyCode::PageDown
+                | KeyCode::Home
+                | KeyCode::End
+                | KeyCode::Char('K' | 'r' | 'h' | 'j' | 'k' | 'l')
+        );
+        if !recognized {
+            return Ok(false);
+        }
+        let mut changed = false;
+        if code == KeyCode::Backspace {
+            changed = self
+                .file
+                .as_mut()
+                .unwrap()
+                .navigator
+                .as_mut()
+                .unwrap()
+                .back();
+            if changed {
+                self.refresh_pane(cancel)?;
+            }
+        } else if matches!(code, KeyCode::Enter | KeyCode::Char('K' | 'r')) {
+            if self.pane.is_none() {
+                let nav = self.file.as_mut().unwrap().navigator.as_mut().unwrap();
+                let cursor = nav.current().cursor;
+                let column = match code {
+                    KeyCode::Char('K') => 0,
+                    KeyCode::Char('r') => 1,
+                    _ => cursor.column,
+                };
+                changed = nav
+                    .enter(cursor.row, column, cancel)
+                    .map_err(prepare_error)?;
+                if changed {
+                    self.refresh_pane(cancel)?;
+                }
+            }
+        } else if let Some(pane) = &mut self.pane {
+            let before = pane.position;
+            move_text(
+                &mut pane.position,
+                code,
+                pane.model.line_count(),
+                pane.model.max_width(),
+                rows,
+                columns,
+            );
+            let cursor = &mut self
+                .file
+                .as_mut()
+                .unwrap()
+                .navigator
+                .as_mut()
+                .unwrap()
+                .current_mut()
+                .cursor;
+            cursor.top = pane.position.top;
+            cursor.left = pane.position.left;
+            changed = before != pane.position;
+        } else {
+            let nav = self.file.as_mut().unwrap().navigator.as_mut().unwrap();
+            let count = nav.view().row_count();
+            let cursor = &mut nav.current_mut().cursor;
+            let before = *cursor;
+            match code {
+                KeyCode::Up | KeyCode::Char('k') => cursor.row = cursor.row.saturating_sub(1),
+                KeyCode::Down | KeyCode::Char('j') => {
+                    cursor.row = cursor.row.saturating_add(1).min(count.saturating_sub(1))
+                }
+                KeyCode::Left | KeyCode::Char('h') => {
+                    cursor.column = cursor.column.saturating_sub(1)
+                }
+                KeyCode::Right | KeyCode::Char('l') => cursor.column = (cursor.column + 1).min(1),
+                KeyCode::PageUp => cursor.row = cursor.row.saturating_sub(rows.max(1)),
+                KeyCode::PageDown => {
+                    cursor.row = cursor
+                        .row
+                        .saturating_add(rows.max(1))
+                        .min(count.saturating_sub(1))
+                }
+                KeyCode::Home => {
+                    cursor.row = 0;
+                    cursor.column = 0;
+                }
+                KeyCode::End => cursor.row = count.saturating_sub(1),
+                _ => (),
+            }
+            nav.frame(rows, columns);
+            changed = before != nav.current().cursor;
+        }
+        if changed {
+            self.cancel_pending();
+        }
+        self.reveal_selection();
+        Ok(true)
+    }
     fn syntax_document(&self) -> Option<Arc<SafeTextModel>> {
+        if self.file_active() {
+            return None;
+        }
         let pane = self.pane.as_ref()?;
         if pane.key {
             return None;
@@ -372,6 +751,42 @@ impl<'a> App<'a> {
         changed
     }
     fn refresh_pane(&mut self, cancel: &AtomicBool) -> io::Result<()> {
+        if self.file_active() {
+            let nav = self.file.as_ref().unwrap().navigator.as_ref().unwrap();
+            let node = nav.view().node();
+            if node.kind().is_container() {
+                self.pane = None;
+                return Ok(());
+            }
+            let identity = Some(NodeIdentity::File(node.id()));
+            if self
+                .pane
+                .as_ref()
+                .is_some_and(|pane| pane.node_identity == identity)
+            {
+                return Ok(());
+            }
+            let raw = file_leaf_text(node.leaf().expect("validated leaf"), cancel)
+                .map_err(prepare_error)?;
+            let model = SafeTextModel::new(raw, cancel).map_err(prepare_error)?;
+            let cursor = nav.current().cursor;
+            self.pane = Some(TextPane {
+                model: Arc::new(model),
+                position: Position {
+                    top: cursor.top,
+                    left: cursor.left,
+                },
+                hit: None,
+                key: nav
+                    .current()
+                    .path
+                    .0
+                    .last()
+                    .is_some_and(|step| step.part == FilePart::Key),
+                node_identity: identity,
+            });
+            return Ok(());
+        }
         if let Some(nav) = &self.navigator {
             let node = nav.current().node();
             let identity = match node {
@@ -443,7 +858,21 @@ impl<'a> App<'a> {
         }
         let query = self.query.clone();
         let previous = self.last_hit.clone();
-        if let Some(input) = &self.typed {
+        if self.file_active() {
+            let structure = self
+                .file
+                .as_ref()
+                .unwrap()
+                .navigator
+                .as_ref()
+                .unwrap()
+                .structure()
+                .clone();
+            let previous = self.file_hit.clone();
+            self.worker.submit(move |cancel| {
+                find_structure(&structure, &query, previous.as_ref(), direction, cancel)
+            });
+        } else if let Some(input) = &self.typed {
             let input = input.clone();
             self.worker.submit(move |cancel| {
                 find_data(&input, &query, previous.as_ref(), direction, cancel)
@@ -525,6 +954,28 @@ impl<'a> App<'a> {
                 self.message = "coincidencia".into();
                 self.help = false;
             }
+            SearchOutcome::FileFound(hit) => {
+                if !self.file_active() {
+                    return Ok(());
+                }
+                self.file
+                    .as_mut()
+                    .unwrap()
+                    .navigator
+                    .as_mut()
+                    .unwrap()
+                    .jump(&hit.path, cancel)
+                    .map_err(prepare_error)?;
+                self.refresh_pane(cancel)?;
+                if let Some(pane) = &mut self.pane {
+                    pane.position.top = pane.model.line_for_offset(hit.range.start);
+                    pane.position.left = offset_cell(&pane.model, hit.range.start, cancel)?;
+                    pane.hit = Some(hit.range.clone());
+                }
+                self.file_hit = Some(hit);
+                self.message = "coincidencia en Estructura".into();
+                self.help = false;
+            }
             SearchOutcome::NotFound => self.message = "sin coincidencias".into(),
             SearchOutcome::Cancelled => self.message = "búsqueda cancelada".into(),
             SearchOutcome::Error(e) => self.message = e,
@@ -545,6 +996,16 @@ impl<'a> App<'a> {
         }
     }
     fn reveal_selection(&mut self) {
+        if self.pane.is_none() && self.file_active() {
+            self.file
+                .as_mut()
+                .unwrap()
+                .navigator
+                .as_mut()
+                .unwrap()
+                .frame(self.viewport.0, self.viewport.1);
+            return;
+        }
         if self.pane.is_none()
             && let Some(nav) = &mut self.navigator
         {
@@ -572,6 +1033,7 @@ impl<'a> App<'a> {
                     self.query = editor.clone();
                     self.editor = None;
                     self.last_hit = None;
+                    self.file_hit = None;
                     self.search(Direction::Forward);
                 }
                 KeyCode::Backspace => {
@@ -603,6 +1065,9 @@ impl<'a> App<'a> {
                 .modifiers
                 .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
         {
+            return Ok(false);
+        }
+        if !self.help && self.file_key(key.code, rows, columns, cancel)? {
             return Ok(false);
         }
         match key.code {
@@ -938,7 +1403,14 @@ fn render(
     if width == 0 || area.height == 0 {
         return stats;
     }
-    let header = if let Some(nav) = &app.navigator {
+    let header = if app.file_active() {
+        let nav = app.file.as_ref().unwrap().navigator.as_ref().unwrap();
+        format!(
+            "{} | Estructura {}",
+            label(title, usize::from(width) / 2),
+            nav.current().path.label(usize::from(width) / 2)
+        )
+    } else if let Some(nav) = &app.navigator {
         format!(
             "{} | {}{}",
             label(title, usize::from(width) / 2),
@@ -950,7 +1422,14 @@ fn render(
             }
         )
     } else {
-        label(title, usize::from(width))
+        label(
+            &format!(
+                "{}{}",
+                title,
+                if app.file.is_some() { " | Fuente" } else { "" }
+            ),
+            usize::from(width),
+        )
     };
     frame.render_widget(
         Paragraph::new(header).style(config.style(Role::Heading)),
@@ -1023,6 +1502,71 @@ fn render(
                     width - number_width as u16,
                     1,
                 ),
+            );
+        }
+    } else if app.file_active() {
+        let nav = app.file.as_ref().unwrap().navigator.as_ref().unwrap();
+        let view = nav.view();
+        let first = if width == 1 {
+            view.state.cursor.column
+        } else {
+            0
+        };
+        let column_width = if width == 1 {
+            1
+        } else {
+            (usize::from(width) / 3).max(1)
+        };
+        for column in first..if width == 1 { first + 1 } else { 2 } {
+            let x = if width == 1 { 0 } else { column * column_width };
+            let cw = if column == 0 || width == 1 {
+                column_width
+            } else {
+                usize::from(width) - x
+            };
+            frame.render_widget(
+                Paragraph::new(view.column_name(column).unwrap_or(""))
+                    .style(config.style(Role::Secondary)),
+                Rect::new(body.x + x as u16, body.y, cw as u16, 1),
+            );
+        }
+        let end = view.row_count().min(
+            view.state
+                .cursor
+                .top
+                .saturating_add(usize::from(content_height.saturating_sub(1))),
+        );
+        for row in view.state.cursor.top.min(end)..end {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            stats.rows += 1;
+            let y = body.y + 1 + (row - view.state.cursor.top) as u16;
+            for column in first..if width == 1 { first + 1 } else { 2 } {
+                let x = if width == 1 { 0 } else { column * column_width };
+                let cw = if column == 0 || width == 1 {
+                    column_width
+                } else {
+                    usize::from(width) - x
+                };
+                if let Some(cell) = view.cell(row, column) {
+                    stats.cells += 1;
+                    let mut style = config.style(Role::Value);
+                    if row == view.state.cursor.row && column == view.state.cursor.column {
+                        style = style.add_modifier(Modifier::REVERSED);
+                    }
+                    frame.render_widget(
+                        Paragraph::new(label(&cell.summary(cw.saturating_mul(2)), cw)).style(style),
+                        Rect::new(body.x + x as u16, y, cw as u16, 1),
+                    );
+                }
+            }
+        }
+        if view.row_count() == 0 && content_height > 1 {
+            frame.render_widget(
+                Paragraph::new(InspectionRef::File(view.node()).summary(usize::from(width)))
+                    .style(config.style(Role::Secondary)),
+                Rect::new(body.x, body.y + 1, width, 1),
             );
         }
     } else if let Some(nav) = &app.navigator {
@@ -1137,14 +1681,15 @@ fn render(
             if app.searching { "buscando… " } else { "" },
             label(
                 &format!(
-                    "{}{}{}",
+                    "{}{}{} | {}",
                     app.message,
                     if app.message.is_empty() || app.syntax_diagnostic.is_empty() {
                         ""
                     } else {
                         " | "
                     },
-                    app.syntax_diagnostic
+                    app.syntax_diagnostic,
+                    app.structure_message
                 ),
                 usize::from(width) / 2
             )
@@ -1161,12 +1706,16 @@ fn render(
 
 /// true means cancelled (exit130); normal q/Escape returns false. The keyboard
 /// reader and search worker are always joined before exact terminal restoration.
+// The session contract keeps source, presentation, and cancellation explicit.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     source_text: Arc<SafeTextModel>,
     typed: Option<Arc<TypedInput>>,
     title: &str,
     config: &PresentationConfig,
     selection: &SyntaxSelection,
+    structure_selection: &StructureSelection,
+    initial_structure: bool,
     cancelled: Arc<AtomicBool>,
 ) -> io::Result<bool> {
     if cancelled.load(Ordering::Relaxed) {
@@ -1200,19 +1749,58 @@ pub fn run(
         },
         shutdown: None,
     };
+    let mut structure_diagnostic = structure_selection.diagnostic().unwrap_or("").to_owned();
+    let mut structure_owner = StructureOwner {
+        client: if structure_selection.is_toml() {
+            match StructureClient::new(cancelled.clone()) {
+                Ok(client) => {
+                    client.set_document(source_text.original_handle(), 1);
+                    Some(client)
+                }
+                Err(_) => {
+                    structure_diagnostic = StructureFailure::WorkerExited.description().into();
+                    None
+                }
+            }
+        } else {
+            None
+        },
+        shutdown: None,
+        resume: None,
+        syntax_paused: false,
+    };
     let mut guard = TerminalGuard::enter(&stdout, control_terminal()?)?;
     // Declaration order and the inner scope keep reader/worker alive during
     // cancellable preparation, and drop both before the owning guard.
     let result = (|| {
         let keyboard = KeyboardReader::new(cancelled.clone())?;
+        let inspect_typed = if structure_selection.is_toml() {
+            None
+        } else {
+            typed.clone()
+        };
         let mut app = App::new(
             source_text,
-            typed.clone(),
-            typed.as_deref(),
+            inspect_typed.clone(),
+            inspect_typed.as_deref(),
             config,
             &cancelled,
         )?;
         app.syntax_diagnostic = syntax_diagnostic;
+        app.structure_message = structure_diagnostic;
+        if structure_selection.is_toml() {
+            app.file = Some(FileWorkspace::new(1, app.source.original_handle()));
+            if structure_owner.client.is_none() {
+                app.file.as_mut().unwrap().build.state =
+                    BuildState::Unavailable(app.structure_message.clone());
+            }
+        }
+        if let Some(client) = &syntax_owner.client {
+            app.sync_syntax(client, language.unwrap());
+        }
+        if initial_structure {
+            begin_structure(&mut app, &mut structure_owner, syntax_owner.client.as_ref());
+        }
         let mut terminal = Terminal::new(CrosstermBackend::new(&mut guard.output))?;
         let mut redraw = true;
         let mut last_dropped = 0;
@@ -1227,7 +1815,79 @@ pub fn run(
                 app.apply_search(outcome, &cancelled)?;
                 redraw = true;
             }
-            if let Some(client) = &mut syntax_owner.client {
+            if let Some(client) = &mut structure_owner.client
+                && let Some(event) = client.poll()
+            {
+                match event {
+                    StructureEvent::Ready {
+                        generation,
+                        request_id,
+                        structure,
+                    } => {
+                        if app.install_structure(generation, request_id, structure, &cancelled)? {
+                            structure_owner.resume = Some(ReapTicket::reaped());
+                            redraw = true;
+                        }
+                    }
+                    StructureEvent::Unavailable {
+                        generation,
+                        request_id,
+                        reason,
+                    } => {
+                        if let Some(file) = &mut app.file
+                            && file.build.unavailable(
+                                generation,
+                                request_id,
+                                reason.description().into(),
+                            )
+                        {
+                            app.structure_message = reason.description().into();
+                            structure_owner.resume =
+                                Some(client.cancel_request(generation, request_id));
+                            redraw = true;
+                        }
+                    }
+                }
+            }
+            if structure_owner.syntax_paused
+                && !app.file_active()
+                && !app
+                    .file
+                    .as_ref()
+                    .is_some_and(|file| matches!(file.build.state, BuildState::Building { .. }))
+                && let Some(ticket) = &structure_owner.resume
+            {
+                match ticket.state() {
+                    ReapState::Pending => (),
+                    ReapState::Reaped => {
+                        if let (Some(client), Some(document)) =
+                            (&syntax_owner.client, &app.syntax.document)
+                        {
+                            client.set_document(
+                                document.original_handle(),
+                                language.unwrap().to_owned(),
+                                app.syntax.generation,
+                            );
+                        }
+                        structure_owner.resume = None;
+                        structure_owner.syntax_paused = false;
+                    }
+                    ReapState::Failed => {
+                        structure_owner.resume = None;
+                        app.structure_message =
+                            "no se pudo recoger el motor; la fuente permanece plana".into();
+                        if let Some(file) = &mut app.file {
+                            file.build.state =
+                                BuildState::Unavailable(app.structure_message.clone());
+                        }
+                        redraw = true;
+                    }
+                }
+            }
+            if !structure_owner.syntax_paused
+                && !app.file_active()
+                && let Some(client) = &mut syntax_owner.client
+            {
                 app.sync_syntax(client, language.unwrap());
                 if let Some(event) = client.poll() {
                     redraw |= app.apply_syntax(event);
@@ -1245,7 +1905,10 @@ pub fn run(
                         usize::from(size.height.saturating_sub(3)),
                         usize::from(size.width.saturating_sub(1)),
                     );
-                    if let Some(client) = &syntax_owner.client {
+                    if !structure_owner.syntax_paused
+                        && !app.file_active()
+                        && let Some(client) = &syntax_owner.client
+                    {
                         app.request_syntax(client, usize::from(size.height.saturating_sub(2)));
                     }
                     render(frame, &app, title, config, lost, &cancelled);
@@ -1277,6 +1940,17 @@ pub fn run(
                         cancelled.store(true, Ordering::Relaxed);
                         return Ok(true);
                     }
+                    if structure_toggle(&key, app.help, app.editor.is_some()) && app.file.is_some()
+                    {
+                        toggle_structure(
+                            &mut app,
+                            &mut structure_owner,
+                            syntax_owner.client.as_ref(),
+                            &cancelled,
+                        )?;
+                        redraw = true;
+                        continue;
+                    }
                     let area = terminal.get_frame().area();
                     if app.key(
                         key,
@@ -1299,8 +1973,10 @@ pub fn run(
     } else {
         result
     };
+    structure_owner.stop();
     syntax_owner.stop();
     let restored = guard.restore();
+    let _ = structure_owner.join();
     // Syntax failure is a presentation fallback, never a document exit error.
     let _ = syntax_owner.join();
     match result {
@@ -1664,6 +2340,221 @@ mod tests {
         );
         assert_eq!(line.spans[0].style.fg, config.style(Role::Value).fg);
         assert_eq!(line.spans[1].style.fg, config.style(Role::Value).fg);
+    }
+    #[test]
+    fn file_source_domains_keep_queries_hits_cursor_and_complete_raw_jump_independent() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let structure = crate::data::file_fixture::sample();
+        let source = model(structure.source());
+        let mut app = App::new(source.clone(), None, None, &config, &cancel).unwrap();
+        app.file = Some(FileWorkspace::new(1, structure.source_handle()));
+        app.query = "\\u754c".into();
+        app.last_hit = Some(SearchHit {
+            path: None,
+            key: false,
+            visit_index: 0,
+            range: 7..13,
+        });
+        app.pane.as_mut().unwrap().position.top = 1;
+        let request = app.file.as_mut().unwrap().build.begin().unwrap();
+        // Same bytes and generation are insufficient: another snapshot's arena
+        // cannot retire the current request or create raw navigation offsets.
+        assert!(
+            !app.install_structure(1, request, crate::data::file_fixture::sample(), &cancel)
+                .unwrap()
+        );
+        assert!(app.file.as_ref().unwrap().build.current(1, request));
+        assert!(
+            !app.install_structure(0, request, structure.clone(), &cancel)
+                .unwrap()
+        );
+        assert!(
+            app.install_structure(1, request, structure.clone(), &cancel)
+                .unwrap()
+        );
+        assert!(app.file_active());
+        assert!(app.query.is_empty());
+        app.query = "界␛".into();
+        let SearchOutcome::FileFound(hit) =
+            find_structure(&structure, &app.query, None, Direction::Forward, &cancel)
+        else {
+            panic!()
+        };
+        app.apply_search(SearchOutcome::FileFound(hit.clone()), &cancel)
+            .unwrap();
+        assert_eq!(app.pane.as_ref().unwrap().model.original(), "界\x1b");
+        assert!(app.syntax_document().is_none());
+        app.file_key(KeyCode::Char('o'), 8, 40, &cancel).unwrap();
+        assert!(!app.file_active());
+        assert_eq!(app.query, "\\u754c");
+        assert_eq!(app.last_hit.as_ref().unwrap().range, 7..13);
+        let raw = structure
+            .root()
+            .entry(0)
+            .unwrap()
+            .value()
+            .source_location()
+            .unwrap()
+            .range();
+        assert_eq!(
+            app.pane.as_ref().unwrap().hit,
+            Some(source.visible_range(raw))
+        );
+        app.swap_file_domain(&cancel).unwrap();
+        assert!(app.file_active());
+        assert_eq!(app.query, "界␛");
+        assert_eq!(app.file_hit.as_ref().unwrap().range, hit.range);
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .navigator
+                .as_ref()
+                .unwrap()
+                .current()
+                .path,
+            hit.path
+        );
+        app.key(key(KeyCode::Backspace), 8, 40, &cancel).unwrap();
+        assert!(app.pane.is_none());
+        let nav = app.file.as_mut().unwrap().navigator.as_mut().unwrap();
+        nav.current_mut().cursor.row = 1;
+        nav.current_mut().cursor.column = 1;
+        nav.enter(1, 1, &cancel).unwrap();
+        // Inline array has a complete location; its parent is an implicit table.
+        nav.back();
+        nav.current_mut().cursor.row = 1;
+        app.refresh_pane(&cancel).unwrap();
+        assert!(app.file_key(KeyCode::Char('o'), 8, 40, &cancel).unwrap());
+    }
+    #[test]
+    fn ready_during_query_edit_stays_in_source_and_missing_raw_span_is_diagnostic() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let structure = crate::data::file_fixture::sample();
+        let mut app = App::new(model(structure.source()), None, None, &config, &cancel).unwrap();
+        app.file = Some(FileWorkspace::new(1, structure.source_handle()));
+        app.query = "source-query".into();
+        app.key(key(KeyCode::Char('/')), 8, 40, &cancel).unwrap();
+        let request = app.file.as_mut().unwrap().build.begin().unwrap();
+        assert!(
+            app.install_structure(1, request, structure.clone(), &cancel)
+                .unwrap()
+        );
+        assert!(!app.file_active());
+        assert!(app.editor.is_some());
+        app.key(key(KeyCode::Esc), 8, 40, &cancel).unwrap();
+        app.swap_file_domain(&cancel).unwrap();
+        assert!(app.file_active());
+        // An implicit empty table has no fabricated source location.
+        let mut builder =
+            crate::structure_model::StructureBuilder::new(structure.source_handle(), 1).unwrap();
+        let root = builder
+            .push_node(crate::structure_model::NodeSpec {
+                kind: crate::structure_model::StructureKind::Mapping,
+                text: None,
+                location: None,
+            })
+            .unwrap();
+        builder.set_entries(root, []).unwrap();
+        let empty = Arc::new(builder.finish(root, 0, 0, &cancel).unwrap());
+        app.file.as_mut().unwrap().navigator = Some(FileNavigator::new(empty));
+        app.refresh_pane(&cancel).unwrap();
+        assert!(app.file_key(KeyCode::Char('o'), 8, 40, &cancel).unwrap());
+        assert!(app.file_active());
+        assert!(app.message.contains("span original"));
+        assert_eq!(app.file.as_ref().unwrap().inactive.query, "source-query");
+        assert!(
+            !app.install_structure(1, request, structure, &cancel)
+                .unwrap()
+        );
+    }
+    #[test]
+    fn file_hundred_thousand_rows_render_only_viewport_and_keep_tiny_cell_selection() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let structure = crate::data::file_fixture::sequence(100_000);
+        let mut app = App::new(model("1"), None, None, &config, &cancel).unwrap();
+        app.file = Some(FileWorkspace::new(1, structure.source_handle()));
+        let request = app.file.as_mut().unwrap().build.begin().unwrap();
+        assert!(
+            app.install_structure(1, request, structure, &cancel)
+                .unwrap()
+        );
+        let cursor = &mut app
+            .file
+            .as_mut()
+            .unwrap()
+            .navigator
+            .as_mut()
+            .unwrap()
+            .current_mut()
+            .cursor;
+        cursor.row = 99_980;
+        cursor.top = 99_980;
+        cursor.column = 1;
+        let (_, stats) = plain(&app, 80, 12, &config);
+        assert_eq!(stats.rows, 9);
+        assert_eq!(stats.cells, 18);
+        let (tiny, stats) = plain(&app, 2, 4, &config);
+        assert_eq!(stats.rows, 1);
+        assert_eq!(stats.cells, 1);
+        assert!(
+            tiny.backend().buffer()[(0, 2)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .navigator
+                .as_ref()
+                .unwrap()
+                .current()
+                .cursor
+                .row,
+            99_980
+        );
+    }
+    #[test]
+    fn structure_build_cancel_retries_explicitly_and_errors_are_latched_per_snapshot() {
+        let mut state = BuildSelection::new(9);
+        let first = state.begin().unwrap();
+        assert!(state.begin().is_none());
+        assert_eq!(state.cancel_build(), Some(first));
+        assert!(!state.ready(9, first));
+        let retry = state.begin().unwrap();
+        assert!(retry > first);
+        assert!(!state.unavailable(8, retry, "old generation".into()));
+        assert!(!state.unavailable(9, first, "old request".into()));
+        assert!(state.unavailable(9, retry, "invalid TOML".into()));
+        assert!(state.begin().is_none());
+        assert!(state.cancel_build().is_none());
+        assert!(!state.ready(9, retry));
+        assert_eq!(state.state, BuildState::Unavailable("invalid TOML".into()));
+    }
+    #[test]
+    fn structure_tab_only_toggles_on_unmodified_press_outside_editor_and_help() {
+        for code in [KeyCode::Tab, KeyCode::BackTab] {
+            let press = KeyEvent::new(code, KeyModifiers::SHIFT);
+            assert!(structure_toggle(&press, false, false));
+            assert!(!structure_toggle(&press, true, false));
+            assert!(!structure_toggle(&press, false, true));
+            for kind in [KeyEventKind::Repeat, KeyEventKind::Release] {
+                assert!(!structure_toggle(
+                    &KeyEvent::new_with_kind(code, KeyModifiers::NONE, kind),
+                    false,
+                    false
+                ));
+            }
+            assert!(!structure_toggle(
+                &KeyEvent::new(code, KeyModifiers::CONTROL | KeyModifiers::ALT),
+                false,
+                false
+            ));
+        }
     }
     #[test]
     fn unicode_highlights_use_safe_bytes_whole_graphemes_and_resize_anchor() {

@@ -39,6 +39,9 @@ pub struct Cli {
     /// Gramática integrada por nombre o extensión; nunca una ruta.
     #[arg(long)]
     pub language: Option<String>,
+    /// Mostrar inicialmente la estructura interpretada, cuando el formato la permite.
+    #[arg(long)]
+    pub structure: bool,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum, PartialEq, Eq)]
@@ -46,11 +49,18 @@ pub enum Format {
     Auto,
     Text,
     Code,
+    Toml,
 }
 
 impl Cli {
     /// Validate option semantics before configuration or document I/O.
     pub fn validate(&self) -> Result<(), crate::input::InputError> {
+        if self.structure && self.format == Format::Text {
+            return Err(crate::input::InputError::new(
+                2,
+                "elige --format text o --structure; no pueden coexistir",
+            ));
+        }
         if let Some(language) = &self.language {
             if self.format == Format::Text {
                 return Err(crate::input::InputError::new(

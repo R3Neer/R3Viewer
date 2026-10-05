@@ -167,3 +167,5 @@ Estado D1 TOML R1: candidato integrado en validación,145tests/build/fmt/Clippy 
 
 
 Estado D1 actualizado: revisiónR1 detectó dosP2 (presupuesto previo agregado e IPC trasSourceEnd), corregidos en candidatoR2 con147tests/build/Clippy. Revisión y AE del delta pendientes. AE independienteR1:69CLI/Nu+26semánticas y controles/cancel/reintento ConPTY pasan; límites exhaustivos y visual/matriz permanecen. Véase S03-D1.md. No cerrar RV106 ni eliminar JSON/YAML/XML ni los otros formatos del backlog.
+
+D1R2 integrado y revisado sin críticas, [cierre de candidato](reviews/S03-TOML-producto.md). AEfuncional69+26+2casos y147tests pasan. TOML mantiene pendientes exhaustivos/visual/matriz; RV106 sigue abierto con JSON/YAML/XML. JSON detalle técnico en revisión sobre este núcleo, no producciónJSON todavía.

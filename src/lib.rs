@@ -19,3 +19,12 @@ pub mod syntax_selection;
 pub mod syntax_worker;
 
 pub mod inline;
+
+pub mod structure_model;
+pub mod structure_output;
+
+pub mod worker_process;
+
+pub mod structure;
+mod structure_protocol;
+pub mod toml_worker;

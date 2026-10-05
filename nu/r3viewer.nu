@@ -10,6 +10,7 @@ export def viewer [
     --value(-v)
     --format: string = 'auto'
     --language: string
+    --structure
     --config: string
     --colour: string
     --theme: string
@@ -17,5 +18,5 @@ export def viewer [
     --no-line-numbers
 ] {
     # Keep encoder as the first command: any prelude statement loses PipelineData.
-    r3viewer encode | ^$reader --nu-wire ...(if $inline { ['--inline'] } else { [] }) ...(if $path { ['--path'] } else { [] }) ...(if $value { ['--value'] } else { [] }) --format $format ...(if $language == null { [] } else { ['--language' $language] }) ...(if $config == null { [] } else { ['--config' $config] }) ...(if $colour == null { [] } else { ['--colour' $colour] }) ...(if $theme == null { [] } else { ['--theme' $theme] }) ...(if $line_numbers { ['--line-numbers'] } else { [] }) ...(if $no_line_numbers { ['--no-line-numbers'] } else { [] }) -- ...(if $source == null { [] } else { [$source] })
+    r3viewer encode | ^$reader --nu-wire ...(if $inline { ['--inline'] } else { [] }) ...(if $path { ['--path'] } else { [] }) ...(if $value { ['--value'] } else { [] }) --format $format ...(if $structure { ['--structure'] } else { [] }) ...(if $language == null { [] } else { ['--language' $language] }) ...(if $config == null { [] } else { ['--config' $config] }) ...(if $colour == null { [] } else { ['--colour' $colour] }) ...(if $theme == null { [] } else { ['--theme' $theme] }) ...(if $line_numbers { ['--line-numbers'] } else { [] }) ...(if $no_line_numbers { ['--no-line-numbers'] } else { [] }) -- ...(if $source == null { [] } else { [$source] })
 }

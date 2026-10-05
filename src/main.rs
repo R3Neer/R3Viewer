@@ -11,15 +11,22 @@ use std::{
 
 fn main() -> ExitCode {
     let mut private_args = std::env::args_os().skip(1);
-    if private_args
-        .next()
-        .is_some_and(|arg| arg == "--syntax-worker")
-        && private_args.next().is_none()
-    {
-        return match r3viewer::syntax_worker::run_private_stdio() {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(_) => ExitCode::from(75),
+    let private = private_args.next();
+    if private_args.next().is_none() {
+        let worker = match private.as_deref() {
+            Some(arg) if arg == "--syntax-worker" => {
+                Some(r3viewer::syntax_worker::run_private_stdio())
+            }
+            Some(arg) if arg == "--toml-worker" => Some(r3viewer::toml_worker::run_private_stdio()),
+            _ => None,
         };
+        if let Some(result) = worker {
+            return if result.is_ok() {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(75)
+            };
+        }
     }
     let cli = Cli::parse();
     if let Err(error) = cli.validate() {
@@ -45,7 +52,7 @@ fn main() -> ExitCode {
             return ExitCode::from(err.code);
         }
     };
-    let source = match input::load(&cli, io::stdin().is_terminal(), cancelled.clone()) {
+    let mut source = match input::load(&cli, io::stdin().is_terminal(), cancelled.clone()) {
         Ok(source) => source,
         Err(err) => {
             eprintln!("r3viewer: {}", text::safe_text(&err.message));
@@ -56,6 +63,17 @@ fn main() -> ExitCode {
         return ExitCode::from(130);
     }
     let syntax = r3viewer::syntax_selection::SyntaxSelection::select(&cli, &source.origin);
+    let structure = match r3viewer::syntax_selection::StructureSelection::select(
+        &cli,
+        &source.origin,
+        source.typed.as_ref(),
+    ) {
+        Ok(selection) => selection,
+        Err(error) => {
+            eprintln!("r3viewer: {}", text::safe_text(&error.message));
+            return ExitCode::from(error.code);
+        }
+    };
     if !cli.inline && io::stdout().is_terminal() && session::available() {
         let model = match r3viewer::presentation::SafeTextModel::new(source.text, &cancelled) {
             Ok(model) => Arc::new(model),
@@ -71,6 +89,8 @@ fn main() -> ExitCode {
             &text::safe_text(&source.title),
             &presentation,
             &syntax,
+            &structure,
+            cli.structure,
             cancelled.clone(),
         ) {
             Ok(true) => return ExitCode::from(130),
@@ -84,7 +104,38 @@ fn main() -> ExitCode {
             }
         }
     }
-    let content = if io::stdout().is_terminal() {
+    if let Some(diagnostic) = structure.diagnostic() {
+        eprintln!("r3viewer: {}", text::safe_text(diagnostic));
+    }
+    let structured = if cli.structure && structure.is_toml() {
+        let original = Arc::new(std::mem::take(&mut source.text));
+        match r3viewer::structure_output::prepare(original.clone(), cancelled.clone()) {
+            Ok(r3viewer::structure_output::PreparedStructure::Rendered(content)) => {
+                // This labelled human representation has its own ordinal lines;
+                // source line numbers and source grammar do not describe it.
+                source.typed = None;
+                Some(content)
+            }
+            Ok(r3viewer::structure_output::PreparedStructure::Fallback(diagnostic)) => {
+                eprintln!("r3viewer: {}", text::safe_text(&diagnostic));
+                source.text = Arc::try_unwrap(original).unwrap_or_else(|shared| (*shared).clone());
+                None
+            }
+            Err(r3viewer::structure_output::OutputError::Cancelled) => return ExitCode::from(130),
+            Err(_) => {
+                eprintln!(
+                    "r3viewer: no se puede preparar estructura; se conserva la fuente completa"
+                );
+                source.text = Arc::try_unwrap(original).unwrap_or_else(|shared| (*shared).clone());
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let content = if let Some(content) = structured {
+        content
+    } else if io::stdout().is_terminal() {
         let model = match r3viewer::presentation::SafeTextModel::new(source.text, &cancelled) {
             Ok(model) => model,
             Err(r3viewer::presentation::PrepareError::Cancelled) => return ExitCode::from(130),

@@ -16,6 +16,9 @@ impl SyntaxSelection {
             return Self::plain();
         }
         let token = cli.language.as_deref().map(str::trim).or_else(|| {
+            if cli.format == Format::Toml {
+                return Some("toml");
+            }
             if let SourceOrigin::LocalFile(path) = origin {
                 path.extension().and_then(|e| e.to_str())
             } else {
@@ -56,6 +59,51 @@ impl SyntaxSelection {
         match self {
             Self::Plain { diagnostic } => diagnostic.as_deref(),
             Self::Language(_) => None,
+        }
+    }
+}
+/// Interpreter selection is independent of the highlighting language.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StructureSelection {
+    None { diagnostic: Option<String> },
+    Toml,
+}
+impl StructureSelection {
+    pub fn select(
+        cli: &Cli,
+        origin: &SourceOrigin,
+        typed: Option<&r3viewer_wire::TypedInput>,
+    ) -> Result<Self, crate::input::InputError> {
+        if cli.format == Format::Toml {
+            if !textual_input(typed) {
+                return Err(crate::input::InputError::new(
+                    2,
+                    "--format toml requiere texto; los valores Nu tipados conservan su inspección sin ese selector",
+                ));
+            }
+            return Ok(Self::Toml);
+        }
+        let candidate = cli.format != Format::Text
+            && textual_input(typed)
+            && matches!(origin, SourceOrigin::LocalFile(path) if path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("toml")));
+        if candidate {
+            return Ok(Self::Toml);
+        }
+        Ok(Self::None {
+            diagnostic: if cli.structure && typed.is_none() {
+                Some("no hay intérprete estructural para esta fuente; indica --format toml para interpretar TOML".into())
+            } else {
+                None
+            },
+        })
+    }
+    pub fn is_toml(&self) -> bool {
+        matches!(self, Self::Toml)
+    }
+    pub fn diagnostic(&self) -> Option<&str> {
+        match self {
+            Self::None { diagnostic } => diagnostic.as_deref(),
+            Self::Toml => None,
         }
     }
 }
@@ -148,7 +196,7 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn generated_catalog_matches_the_packaged_worker_grammar_set() {
-        let set = syntect::parsing::SyntaxSet::load_defaults_newlines();
+        let set = crate::syntax_worker::bundled_syntaxes().unwrap();
         assert_eq!(set.syntaxes().len(), LANGUAGES.len());
         for syntax in set.syntaxes() {
             for token in syntax
@@ -172,6 +220,112 @@ mod tests {
                     .unwrap();
                 assert_eq!(resolve(token), Some(expected.name.as_str()), "{token}");
             }
+        }
+    }
+    #[test]
+    fn toml_interpreter_requires_real_file_or_explicit_format_not_language_or_metadata() {
+        let auto = Cli::parse_from(["viewer", "--structure"]);
+        assert_eq!(
+            StructureSelection::select(&auto, &SourceOrigin::LocalFile("actual.TOML".into()), None)
+                .unwrap(),
+            StructureSelection::Toml
+        );
+        for origin in [
+            SourceOrigin::Literal,
+            SourceOrigin::StandardInput,
+            SourceOrigin::Nushell,
+        ] {
+            assert!(
+                !StructureSelection::select(&auto, &origin, None)
+                    .unwrap()
+                    .is_toml()
+            );
+        }
+        let language = Cli::parse_from(["viewer", "--language", "toml"]);
+        assert!(
+            !StructureSelection::select(&language, &SourceOrigin::Literal, None)
+                .unwrap()
+                .is_toml()
+        );
+        let override_language = Cli::parse_from(["viewer", "--language", "py"]);
+        assert!(
+            StructureSelection::select(
+                &override_language,
+                &SourceOrigin::LocalFile("actual.toml".into()),
+                None
+            )
+            .unwrap()
+            .is_toml()
+        );
+        let explicit = Cli::parse_from(["viewer", "--format", "toml", "--value", "x=1"]);
+        assert!(
+            StructureSelection::select(&explicit, &SourceOrigin::Literal, None)
+                .unwrap()
+                .is_toml()
+        );
+        let conflict = Cli::parse_from(["viewer", "--structure", "--format", "text"]);
+        assert_eq!(conflict.validate().unwrap_err().code, 2);
+    }
+    #[test]
+    fn explicit_toml_accepts_only_textual_nu_but_structure_is_idempotent_on_typed_data() {
+        use r3viewer_wire::{ByteStreamKind, Origin, Payload, Start, TypedInput, VERSION, Value};
+        let explicit = Cli::parse_from(["viewer", "--format", "toml"]);
+        let structure = Cli::parse_from(["viewer", "--structure"]);
+        for payload in [
+            Payload::SingleValue(Value::String("x=1".into())),
+            Payload::ByteStream {
+                kind: ByteStreamKind::String,
+                bytes: b"x=1".to_vec(),
+            },
+        ] {
+            let input = TypedInput {
+                start: Start {
+                    version: VERSION,
+                    cwd: "metadata.toml".into(),
+                    origin: Origin::SingleValue,
+                },
+                payload,
+            };
+            assert!(
+                StructureSelection::select(&explicit, &SourceOrigin::Nushell, Some(&input))
+                    .unwrap()
+                    .is_toml()
+            );
+            assert!(
+                !StructureSelection::select(&structure, &SourceOrigin::Nushell, Some(&input))
+                    .unwrap()
+                    .is_toml()
+            );
+        }
+        for payload in [
+            Payload::SingleValue(Value::Int(1)),
+            Payload::SingleValue(Value::Record(vec![])),
+            Payload::ListStream(vec![]),
+            Payload::ByteStream {
+                kind: ByteStreamKind::Unknown,
+                bytes: b"x=1".to_vec(),
+            },
+            Payload::SingleValue(Value::Binary(b"x=1".to_vec())),
+        ] {
+            let input = TypedInput {
+                start: Start {
+                    version: VERSION,
+                    cwd: "metadata.toml".into(),
+                    origin: Origin::SingleValue,
+                },
+                payload,
+            };
+            assert_eq!(
+                StructureSelection::select(&explicit, &SourceOrigin::Nushell, Some(&input))
+                    .unwrap_err()
+                    .code,
+                2
+            );
+            let selected =
+                StructureSelection::select(&structure, &SourceOrigin::Nushell, Some(&input))
+                    .unwrap();
+            assert!(!selected.is_toml());
+            assert!(selected.diagnostic().is_none());
         }
     }
     #[test]
