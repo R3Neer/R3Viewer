@@ -35,3 +35,7 @@ Oracle7B0DB2DDF792B48445C0C4004CF9C034C64DBA1C6DE1F5D18306025D0F3CB87F; resultad
 ## Siguiente aceptación
 
 Revisión independiente y contrato de adaptación contextual antes de integrar documento: alias/imagen/PDF en encabezado y cuerpo de tabla, escapes repetidos y pipes literales, código/HTML/Markdown ordinario inertes respecto a esa transformación, offsets y source exactos, dimensión y fragmento preservados, cotas/cancelación y rutas ambiguas. La selección de parser sigue viable, pero aceptar sólo su destination actual rompería enlaces reales. El gate previo no certificaba este caso; se conservan su alcance y estos fallos nuevos sin ajustar expectativas. Resolución, render, ciclos, rutas y QA visual completos permanecen abiertos.
+
+## Adaptación contextual refinada
+
+2026-10-06: [contrato R2](../refinement/OBSIDIAN-TABLE-ADAPTER-R2.md) con [revisión independiente](../reviews/Obsidian-table-adapter-plan-r2.md) SIN_CRITICAS_PENDIENTES para diseño. El rótulo de revisión pendiente dentro de la propuesta conserva su entrega anterior; el dictamen enlazado es posterior. Contexto derivado del graph validado, escape único de pipe en Wiki/TableCell y rechazo de evidencia contradictoria, sin normalización global. Implementación y aceptación siguen pendientes; OBS-PARSE01 y cobertura completa Obsidian permanecen abiertos.

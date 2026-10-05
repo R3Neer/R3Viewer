@@ -299,3 +299,5 @@ OBS-PARSE01 abierto: [investigación Obsidian](research/OBSIDIAN_RESOLUCION.md) 
 
 
 PDF UTF16 privado R1 congelado1076registros: [estado y evidencia](research/PDF_UTF16_GATE.md). Revisión de código rechazada por PDF-U16-ROOT01: callback marcaEOF antesclose real y acepta Failure prematura, lanzaV y publicaContentFailure. Reproducción propia + corroboración independiente, sinrescate; R1/oráculos/FAILSourceUnverified intactos. Corrección R2 separada requerida; AE R1 final NO APROBADO por PDF-U16-AE-EOF01, 53 evidencias verificadas por raíz. No cierre RV-204/G1 ni adopción.
+
+Refinamiento 2026-10-06: adaptación contextual [Obsidian R2](refinement/OBSIDIAN-TABLE-ADAPTER-R2.md) y spike [PluginCommand HTML R2](refinement/HTML-CONVERSOR-NU-R2.md), ambos con revisión independiente sin críticas pendientes de diseño. No cierran OBS-PARSE01/RV-301/304/305 ni RV-404. HTML inicia implementación privada de registro; documento enriquecido se integrará después de la frontera Unicode. Código, runtime y aceptación pendientes.
