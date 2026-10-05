@@ -296,3 +296,6 @@ GIPC privado R2: [evidencia final](research/GRAFICOS_IPC_GATE.md), [revisión de
 
 
 OBS-PARSE01 abierto: [investigación Obsidian](research/OBSIDIAN_RESOLUCION.md) y cinco fixtures propios previos a output detectan tres FAIL del parser fijado al conservar backslash de alias/tamaño en tablas (nota/PDF/imagen); dos controles PASS. Contexto TableCell/source necesita adaptación antes de resolver. Cinco lifecycle nativos cerrados sin rescate no acreditan semántica; fallo/oráculos conservados, revisión independiente iniciada. No tratar conteos regex del corpus como rutas Windows ni cerrar RV-301/304/305.
+
+
+PDF UTF16 privado R1 congelado1076registros: [estado y evidencia](research/PDF_UTF16_GATE.md). Revisión de código rechazada por PDF-U16-ROOT01: callback marcaEOF antesclose real y acepta Failure prematura, lanzaV y publicaContentFailure. Reproducción propia + corroboración independiente, sinrescate; R1/oráculos/FAILSourceUnverified intactos. Corrección R2 separada requerida; AE restante en curso. No cierre RV-204/G1 ni adopción.

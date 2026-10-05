@@ -1,0 +1,21 @@
+# Gate privado PDF UTF16: candidato R1 rechazado
+
+2026-10-06. Contrato [R3+deltaR4+V](../refinement/PDF-TEXTO-UTF16.md); candidato privado congelado, no integración ni aceptación. Revisión de código de raíz: **NO APROBADO**, PDF-U16-ROOT01. AE independiente corroboró el fallo y continúa sus contrastes; su informe final todavía pendiente. RV-204/G1 y SourceUnverified permanecen abiertos.
+
+## Identidad y comprobación
+
+Snapshot temporal pdf-utf16-mapping-candidate-r1: MANIFEST79043DF04C64675698CC9499B8E28AA5D1E980E97C302843172CD493F7647D1C,1076 registros. BinB34BD1A5CF394025A1DFAB6BA6E9C73EE2430E11D9D812210E516836C4B9D68B; supervisor7EDA58B4713AC58EDAEAF125E75AEECEFCAFEC54B910E6A7DDA4CA159AE91873. Raíz verificó todos los registros antes/después en original y copia propia; código y helper permanecen intactos. Entrega autor88005E8E00DAA23D6D87D45F004BE4B366F22B2955BE70FF9EFC1EC7BCC401FE. Su cobertura declarada no se presenta como aceptación independiente.
+
+## Defecto reproducido
+
+feed_native marca EOF por callback before_stdin_close antes del close real. Un wrapper propio demora ese cierre y permite observar Failure15 después de SourceEnd mientras stdin sigue abierto. El supervisor exacto lanza V y publica validated=true ContentFailure; debía rechazar la respuesta temprana sin V. El cierre posterior correcto de ambos procesos no valida retrospectivamente ese transporte.
+
+Oracle propio previo53F4C0D1DAFFB86F4500B620228F003AFA9CCBA0BA171BA81870BBAF570C6670; driverF9B41DB030CC6610056774CA39EB4CF3135C790EAF1543BC79BD52A83AD89871; resultadoFAIL9ED8998AD23C6F464F2B005AA4EB29A8140A1B993A52310F74257B5CE6083C2A. Copia temporal pdf-utf16-root-review-r1 contiene inputs/resultados. Dos procesos propios Reaped, handles/streams/readers cerrados, sin Pending ni rescate. Peer ficticio de protocolo, no fallo atribuido al comportamiento PDFium. AE reprodujo con peer nuevo independiente.
+
+Revisión privada de raíz PDF-UTF16-root-review-r1.md EA3325E0B1B0899A08504FA415ED69F698A4A5EA9E7712C97F8322C82CEFA0B6 preserva lectura main/UTF16/wire/supervisor y delta lib respectoR4, crítica y criterio. Informes intermedios permanecen fuera de Git según metodología.
+
+## Siguiente candidato y límites
+
+R2 debe acreditar cierre real de stdin y retener cualquier error/autoridad; Failure observada antes de EOF no admite V/publicación. Afinar ordering sin tratar flag local como prueba de consumo del peer y repetir controles de cierre atrasado/fallido y positivos posteriores a EOF. Candidato separado, nueva revisión y AE de bytes exactos; no modificar R1 ni goldens.
+
+Una llamada GetText, decoding UTF16, asociaciones/geometry/wire y ledger no eliminan los FAIL de ligaduras24B→22B, singleTJ32767 ni CMap0000. Semántica de fuente sigue Unverified, NativeEmpty no significa SourceNoText. Contención nativa/margen externo, producto completo, PDF gráfico, terminal/QA visual, Unix y distribución siguen pendientes.

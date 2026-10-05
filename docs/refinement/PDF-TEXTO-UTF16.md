@@ -8,3 +8,8 @@ Implementación privada autorizada después de cerrar U16-P01/02/03. No hay cand
 
 
 El gate privado usa un [validador Rust secuencial sin DLL](PDF-TEXTO-UTF16-VALIDADOR.md), con [revisión final](../reviews/PDF-texto-utf16-validator-plan-r1.md) sin críticas pendientes de diseño. Añade recibo tipado del wire y ledger combinado de buffers conocidos del supervisor/validador, manteniendo deadline único y publicación final tras ambas etapas. No hay aprobación de código ni runtime por esta revisión.
+
+
+## Estado posterior de implementación privada
+
+2026-10-06. El texto anterior de ausencia de candidato ejecutado es histórico. Candidato R1 congelado y revisado: [estado del gate](../research/PDF_UTF16_GATE.md), rechazado por PDF-U16-ROOT01 (EOF anticipado en supervisor). No cambia el contrato aprobado; requiere corrección/revisión/AE posterior y mantiene semántica y RV-204/G1 pendientes.
