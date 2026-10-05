@@ -1,6 +1,6 @@
 # Obsidian: resolución y escapes en tablas
 
-2026-10-05. Investigación y nuevo defecto de compatibilidad abierto, OBS-PARSE01. No adopción de parser/adaptador ni cierre RV-302/303. [Contrato vigente](../spec/CONTRATOS.md), [modelo de documento](../refinement/MARKDOWN-DOCUMENTO-WIRE.md).
+2026-10-05. Investigación y nuevo defecto de compatibilidad abierto, OBS-PARSE01. No adopción de parser/adaptador ni cierre RV-301/304/305. [Contrato vigente](../spec/CONTRATOS.md), [modelo de documento](../refinement/MARKDOWN-DOCUMENTO-WIRE.md).
 
 ## Fuentes y consecuencias para el diseño
 
