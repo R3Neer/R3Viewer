@@ -413,3 +413,215 @@ fn empty_natural_fence_plain_has_no_peak_even_when_consumer_full() {
         drop(held);
     }
 }
+
+#[test]
+fn predicates_descriptor_identity_and_no_new_payload() {
+    let doc = document("```rust\nA\n```\n\n```rust\nA\n```\n");
+    let foreign = document("```rust\nA\n```\n\n```rust\nA\n```\n");
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let ids = blocks(&doc).collect::<Vec<_>>();
+    let snapshot = ready(&doc, &budget, ids[0], &context());
+    let used = budget.used();
+    let peak = budget.peak();
+    for _ in 0..20 {
+        assert!(snapshot.key().matches_document_block(&doc, ids[0], "Rust"));
+        assert!(!snapshot.key().matches_document_block(&doc, ids[1], "Rust"));
+        assert!(
+            !snapshot
+                .key()
+                .matches_document_block(&foreign, ids[0], "Rust")
+        );
+        assert!(
+            !snapshot
+                .key()
+                .matches_document_block(&doc, ids[0], "Nushell")
+        );
+        assert!(
+            !snapshot
+                .key()
+                .matches_document_block(&doc, u32::MAX, "Rust")
+        );
+    }
+    assert_eq!((budget.used(), budget.peak()), (used, peak));
+    let alias = budget.clone();
+    let other = ConsumerBudget::new(&doc).unwrap();
+    assert!(budget.same(&alias));
+    assert!(!budget.same(&other));
+}
+#[test]
+fn predicates_coverage_lines_empty_eof_and_foreign_input() {
+    use crate::{document_code_cache::SemanticCoverage, syntax::Viewport};
+    let doc = document("```rust\nA\n\né\n```\n");
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let id = blocks(&doc).next().unwrap();
+    let snapshot = ready(&doc, &budget, id, &context());
+    assert_eq!(snapshot.input().text(), "A\n\né\n");
+    assert_eq!(snapshot.input().line_count(), Some(4));
+    let used = budget.used();
+    let peak = budget.peak();
+    let all = SemanticCoverage::from_request(&snapshot, None).unwrap();
+    let view = |first_line, line_count| {
+        Some(Viewport {
+            first_line,
+            line_count,
+        })
+    };
+    assert!(all.contains_request(&snapshot, view(1, 1)).unwrap());
+    assert!(all.contains_request(&snapshot, view(3, 1)).unwrap());
+    assert!(all.contains_request(&snapshot, view(u32::MAX, 1)).unwrap());
+    let middle = SemanticCoverage::from_request(&snapshot, view(1, 1)).unwrap();
+    assert!(middle.contains_request(&snapshot, view(1, 1)).unwrap());
+    assert!(!middle.contains_request(&snapshot, view(1, 2)).unwrap());
+    assert!(!middle.contains_request(&snapshot, view(3, 1)).unwrap());
+    assert!(!middle.contains_request(&snapshot, None).unwrap());
+    assert!(SemanticCoverage::from_request(&snapshot, view(0, 0)).is_err());
+    assert!(SemanticCoverage::from_request(&snapshot, view(0, 257)).is_err());
+    let second = ready(&doc, &budget, id, &context());
+    assert!(!all.contains_request(&second, None).unwrap());
+    drop(second);
+    assert_eq!(budget.used(), used);
+    // Queries themselves reserve/copy nothing; constructing second snapshot raised peak separately.
+    let final_peak = budget.peak();
+    for _ in 0..20 {
+        assert!(all.contains_request(&snapshot, view(0, 1)).unwrap());
+    }
+    assert_eq!(budget.peak(), final_peak);
+    assert!(final_peak >= peak);
+}
+#[test]
+fn predicates_semantic_mapping_does_not_authorize_expired_operation() {
+    let doc = document("```rust\né\n```\n");
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let ctx = OperationContext::document(71, deadline, Arc::new(AtomicBool::new(false)));
+    let snapshot = ready(&doc, &budget, blocks(&doc).next().unwrap(), &ctx);
+    let run = snapshot.segments()[0].run;
+    std::thread::sleep(
+        deadline.saturating_duration_since(Instant::now()) + Duration::from_millis(1),
+    );
+    assert!(Instant::now() >= deadline);
+    assert_eq!(
+        snapshot.offset_for(snapshot.key(), run, 0, &ctx),
+        Err(FallbackReason::RequestTimeout)
+    );
+    assert_eq!(snapshot.semantic_offset_for(snapshot.key(), run, 0), Ok(0));
+    assert_eq!(
+        snapshot.semantic_offset_for(snapshot.key(), run, 1),
+        Err(FallbackReason::InvalidIpc)
+    );
+    assert_eq!(
+        snapshot.offset_for(snapshot.key(), run, 0, &context()),
+        Err(FallbackReason::InvalidIpc)
+    );
+}
+#[test]
+fn predicates_cache_capacity_charge_empty_and_owner_lifetime() {
+    use crate::document_code_cache::SemanticCodeCache;
+    let doc = document("```rust\nA\n```\n");
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let base = budget.used();
+    assert!(SemanticCodeCache::new(&budget, 257).is_err());
+    assert_eq!(budget.used(), base);
+    let mut cache = SemanticCodeCache::new(&budget, 2).unwrap();
+    assert!(budget.used() > base);
+    assert!(
+        cache
+            .lookup(&doc, blocks(&doc).next().unwrap(), "Rust", None)
+            .is_none()
+    );
+    cache.clear();
+    assert!(budget.used() > base);
+    let needed = budget.used() - base;
+    drop(cache);
+    assert_eq!(budget.used(), base);
+    let exact_fill = budget
+        .reserve(crate::document_consumer_budget::CONSUMER_LIMIT - base - needed)
+        .unwrap();
+    let exact_cache = SemanticCodeCache::new(&budget, 2).unwrap();
+    assert_eq!(
+        budget.used(),
+        crate::document_consumer_budget::CONSUMER_LIMIT
+    );
+    drop(exact_cache);
+    drop(exact_fill);
+    let plus_fill = budget
+        .reserve(crate::document_consumer_budget::CONSUMER_LIMIT - base - needed + 1)
+        .unwrap();
+    let before_reject = budget.used();
+    assert!(SemanticCodeCache::new(&budget, 2).is_err());
+    assert_eq!(budget.used(), before_reject);
+    drop(plus_fill);
+    let fill = budget
+        .reserve(crate::document_consumer_budget::CONSUMER_LIMIT - base)
+        .unwrap();
+    assert!(SemanticCodeCache::new(&budget, 1).is_err());
+    assert_eq!(
+        budget.used(),
+        crate::document_consumer_budget::CONSUMER_LIMIT
+    );
+    drop(fill);
+    assert_eq!(budget.used(), base);
+}
+#[test]
+fn predicates_local_stop_during_copy_does_not_mutate_global_context() {
+    use std::sync::atomic::Ordering;
+    let doc = document(&format!("```rust\n{}\n```\n", "a".repeat(9000)));
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let base = budget.used();
+    let global = Arc::new(AtomicBool::new(false));
+    let ctx =
+        OperationContext::document(72, Instant::now() + Duration::from_secs(20), global.clone());
+    let local = AtomicBool::new(false);
+    RetainedSyntaxInput::own_local_stop_after_copy(Some(4096));
+    let result = CodeSnapshot::construct_with_stop(
+        &doc,
+        &budget,
+        blocks(&doc).next().unwrap(),
+        &ctx,
+        true,
+        &local,
+    );
+    RetainedSyntaxInput::own_local_stop_after_copy(None);
+    assert!(matches!(result, Err(FallbackReason::Cancelled)));
+    assert!(local.load(Ordering::Acquire));
+    assert!(!global.load(Ordering::Acquire));
+    assert_eq!(budget.used(), base);
+    assert!(ctx.check(Instant::now()).is_ok());
+    let fresh_local = AtomicBool::new(false);
+    assert!(matches!(
+        CodeSnapshot::construct_with_stop(
+            &doc,
+            &budget,
+            blocks(&doc).next().unwrap(),
+            &ctx,
+            true,
+            &fresh_local
+        ),
+        Ok(CodeConstruction::Ready(_))
+    ));
+}
+#[test]
+fn predicates_local_stop_preserves_global_timeout_and_cancel() {
+    let doc = document("```rust\nA\n```\n");
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let id = blocks(&doc).next().unwrap();
+    let local = AtomicBool::new(true);
+    let expired = OperationContext::document(73, Instant::now(), Arc::new(AtomicBool::new(false)));
+    assert!(matches!(
+        CodeSnapshot::construct_with_stop(&doc, &budget, id, &expired, true, &local),
+        Err(FallbackReason::RequestTimeout)
+    ));
+    let cancelled = OperationContext::document(
+        74,
+        Instant::now() + Duration::from_secs(20),
+        Arc::new(AtomicBool::new(true)),
+    );
+    assert!(matches!(
+        CodeSnapshot::construct_with_stop(&doc, &budget, id, &cancelled, true, &local),
+        Err(FallbackReason::Cancelled)
+    ));
+    assert!(matches!(
+        CodeSnapshot::construct_with_stop(&doc, &budget, id, &context(), true, &local),
+        Err(FallbackReason::Cancelled)
+    ));
+}

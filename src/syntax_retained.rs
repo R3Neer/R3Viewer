@@ -89,6 +89,17 @@ impl std::fmt::Debug for RetainedSyntaxInput {
     }
 }
 impl RetainedSyntaxInput {
+    pub(crate) fn check_code_operation(
+        context: &OperationContext,
+        local_stop: &AtomicBool,
+    ) -> Result<(), FallbackReason> {
+        check_code_operation(context, local_stop)
+    }
+    #[cfg(test)]
+    pub(crate) fn own_local_stop_after_copy(bytes: Option<usize>) {
+        own_local_stop_after_copy(bytes);
+    }
+
     pub(crate) fn legacy(source: Arc<String>) -> Arc<Self> {
         Arc::new(Self {
             source,
@@ -171,14 +182,30 @@ impl RetainedSyntaxInput {
     }
     /// One complete copy of validated CodeText, never an intermediate flat String.
     /// Domain is validated again at this boundary; all allocations use the input's document budget.
+    #[allow(dead_code)] // Retained compatibility entry; kernel uses borrowed stop-aware entry.
     pub(crate) fn copy_code_domain(
         document: &Arc<Document>,
         budget: &ConsumerBudget,
         domain_id: u32,
         context: &OperationContext,
     ) -> Result<Option<CodeDomainCopy>, FallbackReason> {
+        Self::copy_code_domain_with_stop(
+            document,
+            budget,
+            domain_id,
+            context,
+            &AtomicBool::new(false),
+        )
+    }
+    pub(crate) fn copy_code_domain_with_stop(
+        document: &Arc<Document>,
+        budget: &ConsumerBudget,
+        domain_id: u32,
+        context: &OperationContext,
+        local_stop: &AtomicBool,
+    ) -> Result<Option<CodeDomainCopy>, FallbackReason> {
         use sha2::{Digest, Sha256};
-        context.check(Instant::now())?;
+        check_code_operation(context, local_stop)?;
         if !budget.belongs_to(document) || !matches!(context, OperationContext::Document { .. }) {
             return Err(FallbackReason::InvalidIpc);
         }
@@ -210,7 +237,7 @@ impl RetainedSyntaxInput {
         let mut count = 1usize;
         let mut line_bytes = 0usize;
         for (ordinal, run) in runs.iter().enumerate() {
-            context.check(Instant::now())?;
+            check_code_operation(context, local_stop)?;
             #[cfg(test)]
             CODE_DOMAIN_STATS.with(|slot| {
                 let mut n = slot.get();
@@ -237,7 +264,7 @@ impl RetainedSyntaxInput {
                 .map_err(|_| FallbackReason::SourceBudget)?;
             let mut at = 0;
             while at < part.len() {
-                context.check(Instant::now())?;
+                check_code_operation(context, local_stop)?;
                 let end = utf8_chunk_end(part, at);
                 for &b in &part.as_bytes()[at..end] {
                     line_bytes = line_bytes.checked_add(1).ok_or(FallbackReason::LongLine)?;
@@ -252,7 +279,7 @@ impl RetainedSyntaxInput {
                 at = end;
             }
         }
-        context.check(Instant::now())?;
+        check_code_operation(context, local_stop)?;
         if total == 0 {
             return Ok(None);
         }
@@ -277,7 +304,7 @@ impl RetainedSyntaxInput {
         lines.push(0).map_err(|_| FallbackReason::SourceBudget)?;
         let mut hash = Sha256::new();
         for run in runs {
-            context.check(Instant::now())?;
+            check_code_operation(context, local_stop)?;
             #[cfg(test)]
             CODE_DOMAIN_STATS.with(|slot| {
                 let mut n = slot.get();
@@ -290,6 +317,7 @@ impl RetainedSyntaxInput {
             let mut at = 0;
             while at < part.len() {
                 code_copy_checkpoint(context)?;
+                check_code_operation(context, local_stop)?;
                 let end = utf8_chunk_end(part, at);
                 let base = text.len();
                 for (local, &b) in part.as_bytes()[at..end].iter().enumerate() {
@@ -309,7 +337,7 @@ impl RetainedSyntaxInput {
                 at = end;
             }
         }
-        context.check(Instant::now())?;
+        check_code_operation(context, local_stop)?;
         if text.len() != total || lines.as_slice().len() != count {
             return Err(FallbackReason::InvalidIpc);
         }
@@ -358,6 +386,10 @@ impl RetainedSyntaxInput {
     }
     pub(crate) fn len(&self) -> usize {
         self.source.len()
+    }
+    /// Document inputs have charged precomputed line starts; Legacy has no such table.
+    pub(crate) fn line_count(&self) -> Option<usize> {
+        self.lines.as_ref().map(|lines| lines.as_slice().len())
     }
     pub(crate) fn budget(&self) -> Option<&ConsumerBudget> {
         self.budget.as_ref()
@@ -778,6 +810,7 @@ fn utf8_chunk_end(text: &str, at: usize) -> usize {
 #[cfg(test)]
 std::thread_local! {
     static CODE_COPY_CANCEL_AFTER: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    static CODE_LOCAL_STOP_AFTER: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
     static CODE_COPY_BYTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static CODE_DOMAIN_STATS: std::cell::Cell<[usize;3]> = const {std::cell::Cell::new([0;3])};
 }
@@ -795,4 +828,31 @@ fn code_copy_checkpoint(context: &OperationContext) -> Result<(), FallbackReason
         }
     });
     context.check(Instant::now())
+}
+
+/// Check the real operation first, then the owner-local priority stop. Neither is renewed.
+pub(crate) fn check_code_operation(
+    context: &OperationContext,
+    local_stop: &AtomicBool,
+) -> Result<(), FallbackReason> {
+    #[cfg(test)]
+    CODE_LOCAL_STOP_AFTER.with(|slot| {
+        if slot
+            .get()
+            .is_some_and(|n| CODE_COPY_BYTES.with(|bytes| bytes.get() >= n))
+        {
+            local_stop.store(true, Ordering::Release);
+        }
+    });
+    context.check(Instant::now())?;
+    if local_stop.load(Ordering::Acquire) {
+        return Err(FallbackReason::Cancelled);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn own_local_stop_after_copy(bytes: Option<usize>) {
+    CODE_LOCAL_STOP_AFTER.with(|slot| slot.set(bytes));
+    CODE_COPY_BYTES.with(|slot| slot.set(0));
 }

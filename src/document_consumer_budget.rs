@@ -30,6 +30,9 @@ impl ConsumerBudget {
             checkpoints: AtomicUsize::new(0),
         })))
     }
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
     pub(crate) fn belongs_to(&self, document: &Arc<Document>) -> bool {
         Arc::ptr_eq(&self.0.document, document)
     }

@@ -6,7 +6,10 @@ use crate::{
     syntax::{FallbackReason, OperationContext, RetainedSyntaxInput},
     syntax_selection::select_explicit_token,
 };
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::{Arc, atomic::AtomicBool},
+    time::Instant,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CodeSegment {
@@ -37,6 +40,26 @@ impl CodeBlockKey {
             && self.domain == other.domain
             && self.language == other.language
             && self.payload_hash == other.payload_hash
+    }
+    /// Descriptor identity only: immutable validated document ownership proves the payload.
+    /// This does not authorize an operation, a receipt, or color publication.
+    pub(crate) fn matches_document_block(
+        &self,
+        document: &Arc<Document>,
+        block: u32,
+        language: &str,
+    ) -> bool {
+        Arc::ptr_eq(&self.document, document)
+            && self.source_generation == document.source().generation()
+            && self.source_request == document.source().request()
+            && self.source_hash == *document.source().hash()
+            && self.profile == document.profile()
+            && self.block == block
+            && self.language == language
+            && document
+                .blocks()
+                .get(block as usize)
+                .is_some_and(|b| b.kind() == 10 && b.domain() == self.domain)
     }
     pub(crate) fn language(&self) -> &'static str {
         self.language
@@ -71,7 +94,25 @@ impl CodeSnapshot {
         context: &OperationContext,
         color: bool,
     ) -> Result<CodeConstruction, FallbackReason> {
-        context.check(Instant::now())?;
+        Self::construct_with_stop(
+            document,
+            budget,
+            block_id,
+            context,
+            color,
+            &AtomicBool::new(false),
+        )
+    }
+    /// The borrowed kernel stop is additional to the original operation, never its replacement.
+    pub(crate) fn construct_with_stop(
+        document: &Arc<Document>,
+        budget: &ConsumerBudget,
+        block_id: u32,
+        context: &OperationContext,
+        color: bool,
+        local_stop: &AtomicBool,
+    ) -> Result<CodeConstruction, FallbackReason> {
+        RetainedSyntaxInput::check_code_operation(context, local_stop)?;
         if !budget.belongs_to(document) || !matches!(context, OperationContext::Document { .. }) {
             return Err(FallbackReason::InvalidIpc);
         }
@@ -103,7 +144,7 @@ impl CodeSnapshot {
         if domain.run_count() == 0 {
             return Ok(CodeConstruction::Plain { reason: None });
         }
-        let result = Self::build(document, budget, block_id, language, context);
+        let result = Self::build(document, budget, block_id, language, context, local_stop);
         match result {
             Ok(None) => Ok(CodeConstruction::Plain { reason: None }),
             Ok(Some(snapshot)) => Ok(CodeConstruction::Ready(Arc::new(snapshot))),
@@ -121,6 +162,7 @@ impl CodeSnapshot {
         block_id: u32,
         language: &'static str,
         context: &OperationContext,
+        local_stop: &AtomicBool,
     ) -> Result<Option<Self>, FallbackReason> {
         let block = &document.blocks()[block_id as usize];
         let domain_id = block.domain();
@@ -131,8 +173,9 @@ impl CodeSnapshot {
         if domain.kind() != 0 || domain.owner() != block_id {
             return Err(FallbackReason::InvalidIpc);
         }
-        let Some(prepared) =
-            RetainedSyntaxInput::copy_code_domain(document, budget, domain_id, context)?
+        let Some(prepared) = RetainedSyntaxInput::copy_code_domain_with_stop(
+            document, budget, domain_id, context, local_stop,
+        )?
         else {
             return Ok(None);
         };
@@ -140,7 +183,7 @@ impl CodeSnapshot {
         let input = prepared.input;
         let segments = prepared.segments;
         let payload_hash = prepared.digest;
-        context.check(Instant::now())?;
+        RetainedSyntaxInput::check_code_operation(context, local_stop)?;
         Ok(Some(Self {
             key: CodeBlockKey {
                 document: document.clone(),
@@ -177,7 +220,19 @@ impl CodeSnapshot {
         context: &OperationContext,
     ) -> Result<u32, FallbackReason> {
         context.check(Instant::now())?;
-        if !self.key.same(key) || !self.context.same(context) {
+        if !self.context.same(context) {
+            return Err(FallbackReason::InvalidIpc);
+        }
+        self.semantic_offset_for(key, run, local)
+    }
+    /// Read-only immutable mapping. No operation deadline or authority is granted here.
+    pub(crate) fn semantic_offset_for(
+        &self,
+        key: &CodeBlockKey,
+        run: u32,
+        local: usize,
+    ) -> Result<u32, FallbackReason> {
+        if !self.key.same(key) {
             return Err(FallbackReason::InvalidIpc);
         }
         let domain = &self.key.document.domains()[self.key.domain as usize];
