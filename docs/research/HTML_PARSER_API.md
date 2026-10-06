@@ -67,3 +67,12 @@ El bootstrap C comunica el exit de Nu en C_receipt.exit, pero el driver sólo ex
 Informe privado HTML-NU-root-review-r1.md SHA9B8F35DCFCC4AC3BA2C3CBC46C8E724E477C109B57E7AF87E6F2702B919C89E8; oracle027151F196FF13D269A3FA231DE54CAD69ABAD2F6C32F732854772D8F23F2828, resultados2BA58590704F731675F7B0590B5B8C9E3DEA3A2B872911A9C911E0CDB94F0945. Nueve archivos runtime/fuente copiados byteexactos antes/después, no se afirma copia completa del SDK. R1/oráculos/FAIL permanecen intactos.
 
 Corrección R2 debe exigir exit0 de Nu además de todos recibos actuales, incluso con stdout válido seguido de error. Repetir oráculos sin cambiarlos y los positivos de registro, revisar delta antes de recomendar adopción. SDK/bin/parser no se modifican por este error del helper. RV-404, conversión DOM, producto y QA siguen pendientes.
+
+
+## Spike PluginCommand R2 aceptado, conversor de producto pendiente
+
+2026-10-06. [Código revisado por raíz](../reviews/HTML-conversor-nu-code-r2.md) y [aceptación independiente](../reviews/HTML-conversor-nu-aceptacion-r2.md), ambos sin críticas pendientes para registro pequeño y corrección HNU-R01. Identidad compuesta parent69EACB…14583 registros + overlay97F80B…49; raíz verificó ambos ámbitos y delta byteexacto: únicamente exigir Nu exit0 además del bootstrap y recibos existentes. Mismos tres oráculos propios R1 ahora PASS sin cambio. HNU-R01 cerrado en este candidato; resultados R1 preservados.
+
+AE independiente satisface15 expectativas previas: open HTML/HTM, HTTP plain/charset, direct html/htm, raw open/http, ausencia plugin open/http, sentinel válido seguido de Nu7 rechazado/Nu0 aprobado, writer/reader fallidos y Pending sin siguiente spawn. No son15 éxitos del driver: controles negativos deben fallar. Fixture25B/LF exacta, Nu0.115.1 -n y plugins temporales, sin perfiles. Primera ejecución sandbox conserva cuatro FAIL HTTP PermissionDenied; repetición elevada con los mismos oráculos pasa. Los11 archivos de evidencia/receipt00D43EE3… verificados por raíz; final Pendingfalse/serverclosedjoined/MainThread1. Cierre explícito posterior del Pending propio no reclasifica FAIL ni prueba rescate universal.
+
+Conclusión implementable: companion opcional con PluginCommand directo puede satisfacer descubrimiento nativo, sin sustituir open/http. El conversor completo aún debe construir DOM ordenado con atributos/texto, compartir parser con viewer, preservar origen/codificación/bases y aplicar límites/cancelación. Este spike no se integra como parser ni acredita128MiB, RV-404, Unix, visual o distribución.
