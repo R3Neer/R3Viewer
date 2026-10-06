@@ -1,5 +1,8 @@
 # Integración Unicode: UIR-01 corregido en R2
 
+Estado actual: integración R2 **no aprobada** por S03-AE-NUKEY01; corrección R3 privada en revisión/aceptación. UIR-01 sigue cerrado en el delta ya revisado.
+
+
 ## Estado vigente R2
 
 2026-10-06. [Revisión independiente final](../reviews/S03-unicode-integracion-r2.md) sin críticas pendientes para el delta UIR-01: 24/24 controles propios pasan (diez originales sin cambio y catorce preparados antes de outputs). Snapshot528 registros, MANIFEST56EA09960104D701CB906E752CD403A7BA400FA80481EA8B75EFEBDBD8886F95. Raíz verificó receipt8135E2B255E8E5D3614AAE482237F4127B74C3E5916C0F31BE0ACEE1E6E6D320 y sus ocho evidencias. UIR-01 cerrado en ese snapshot; R1 y sus FAIL históricos se conservan abajo. No cierra S03-UNICODE01, RV ni adopción operacional completa.
@@ -28,3 +31,12 @@ Evidencia temporal unicode-review-r1/INDEPENDENT-PREOUTPUT-MULTIROW.json 5A7D4BD
 Raíz ejecutó pruebas propias Source32MB: referencia del grafema completo antes de materializar, recuperación de líneas ordinarias y búsqueda original. Regional Indicators mantienen pares/checkpoints y rechazan cursor de otro owner. Controles ESC/C1, CRLF y grafemas completos pasan tras corregir una consulta mal escrita del harness (dos backslashes frente a uno en fixture); ambos FAIL originales y diagnóstico conservados, sin cambio de producto ni oráculo semántico. Informe parcial privado S03-unicode-root-acceptance-partial-r1.md F59DB4EB804BA404ABDADBCE320786F9DB54191FD6CAC1DC3A12A757C30A74D5, siete evidencias. Estas pruebas no aprueban consumidores YAML/XML ni el candidato completo.
 
 YAML32MB falla en la cuota existente del modelo antes de Pane; Fuente sigue íntegra. No es un PASS borrowed:16MB admitido es otra prueba. Cancelación durante rutas integradas, historial/procedencia, resto de aceptación, ConPTY funcional y QA visual/Unix siguen pendientes. No cerrar RV ni declarar producto completo por conteos de tests, compilación cruzada o SHA.
+
+
+## S03-AE-NUKEY01: clave Nu atribuida a Fuente
+
+Aceptación independiente R2: clave de Record Nushell `a` +8192 U+0301 (16385B), Source vacía, file=None. K crea pane.key=true/node_identity=None; render asigna Source a None sin consultar key y muestra origen exacto0..16385. `o` conserva Fuente vacía, pero referencia/rangos atribuyen un origen inexistente. Repetición TestBackend300x8 confirma objeto y mensaje completo: defecto de procedencia, no truncado ni QA visual. Informe privado S03-unicode-independent-acceptance-r2.md3305E2B9…, manifiesto1BCB03A3…101 evidencias verificadas por raíz, incluyendo reproA6B920FF… y postcheck. R2 no aprueba la integración completa.
+
+Cancelación durante Source.prepare/provenance/inline, recuperación del viewport, YAMLprocedencia/historial y cuota semántica pasan en esa aceptación. El primer oráculo propio de dos planes ASCII3000 era infundado (reservas cabían); FAIL preservado y nueva expectativa previa exact262144/+1 y viewport262145 rechaza completo. No adaptar aceptación al output. YAML32M ArenaBudget más fallbackSource aislado5.948s no explica3695.62s ni WorkerExited históricos. ConPTY, runtime externo congelado, visual/Unix y aceptación general siguen pendientes.
+
+Corrección privada R3 por raíz: único brazo `None if pane.key => NuValue { key:true }` antes del NoneSource. Controles propios preparados antesoutputs: claveRecordK/Enter, claveTableK y Source literal. OriginalSourcePASS/keyFAIL, mismos dos tests despuésPASS (bucle recorre las tres acciones); fmt/Clippyalltargets/build privados0. ParentR2 MANIFEST56EA… + overlay explícito DELTA-MANIFEST2D524BDCC68B7AE59C461CB6151917FC970B2F1AF321E91A09D8C2A442FE40A7; PRODUCTviewersession09D3324D63775E6E844FFE23145F60A28E33190AF7C40702144CA77F0F848413. Oráculos/FAILR2 intactos, código compartido no adoptado. Revisor/AE repetirán casos originales sin cambio; no cierre por tests del autor.
