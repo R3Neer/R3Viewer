@@ -80,3 +80,6 @@ mod document_code_cache;
 
 #[allow(dead_code)] // Source fallback will be connected by the D3 inline emitter.
 mod document_inline_source;
+
+mod document_layout;
+mod document_view;

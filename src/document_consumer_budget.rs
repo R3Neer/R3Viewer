@@ -161,6 +161,12 @@ impl<T> ChargedVec<T> {
     pub(crate) fn pop(&mut self) -> Option<T> {
         self.data.pop()
     }
+    pub(crate) fn last_mut(&mut self) -> Option<&mut T> {
+        self.data.last_mut()
+    }
+    pub(crate) fn capacity(&self) -> usize {
+        self.data.capacity()
+    }
     pub fn as_slice(&self) -> &[T] {
         &self.data
     }

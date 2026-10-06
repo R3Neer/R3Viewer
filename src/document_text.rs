@@ -413,9 +413,10 @@ impl SegmentedText {
             return Err(Error::Invalid);
         }
         let points = self.checkpoints.as_slice();
-        let i = points
-            .partition_point(|p| p.pos.offset <= offset)
-            .saturating_sub(1);
+        let i = charged_upper(points.len(), w, std::mem::size_of::<Checkpoint>(), |i| {
+            points[i].pos.offset <= offset
+        })?
+        .saturating_sub(1);
         let mut at = points[i].pos;
         while at.offset < offset {
             let (_, next) = self.character(at, w)?.ok_or(Error::Invalid)?;
@@ -459,9 +460,10 @@ impl SegmentedText {
     fn context(&self, end: usize, w: &mut DocumentWork<'_>) -> Result<Chunk> {
         let wanted = end.saturating_sub(CHUNK);
         let points = self.checkpoints.as_slice();
-        let i = points
-            .partition_point(|p| p.pos.offset <= wanted)
-            .saturating_sub(1);
+        let i = charged_upper(points.len(), w, std::mem::size_of::<Checkpoint>(), |i| {
+            points[i].pos.offset <= wanted
+        })?
+        .saturating_sub(1);
         let mut at = points[i].pos;
         while at.offset < wanted {
             at = self.character(at, w)?.ok_or(Error::Invalid)?.1;
@@ -535,6 +537,87 @@ impl SegmentedText {
                 _ => return Err(Error::Invalid),
             }
         }
+    }
+
+    pub(crate) fn locate_raw(
+        &self,
+        run: u32,
+        byte: usize,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<usize> {
+        let target = Raw {
+            run: run as usize,
+            byte,
+        };
+        if !self.runs.contains(&target.run) {
+            return Err(Error::Invalid);
+        }
+        let record = &self.document.runs()[target.run];
+        w.admit_structure(std::mem::size_of_val(record))?;
+        let text = match record.kind() {
+            0 | 1 | 4 | 6 | 7 => self
+                .document
+                .text(record.text())
+                .map_err(|_| Error::Invalid)?,
+            2 => " ",
+            3 => "\n",
+            k => return Err(Error::UnsupportedRun(k)),
+        };
+        if byte > text.len() || !text.is_char_boundary(byte) {
+            return Err(Error::Invalid);
+        }
+        let points = self.checkpoints.as_slice();
+        let i = charged_upper(points.len(), w, std::mem::size_of::<Checkpoint>(), |i| {
+            let p = points[i].pos;
+            (p.raw.run, p.raw.byte, p.part) <= (target.run, target.byte, 0)
+        })?
+        .saturating_sub(1);
+        let mut at = points[i].pos;
+        loop {
+            // Cursor positions lazily retain the exhausted previous Run. Normalize its
+            // boundary BEFORE consuming the next scalar, or seeking B:0 would skip B.
+            while at.part == 0 && at.raw.run < target.run {
+                w.admit_structure(
+                    std::mem::size_of::<crate::document_model::Run>()
+                        + std::mem::size_of::<crate::document_model::TextRef>(),
+                )?;
+                let r = &self.document.runs()[at.raw.run];
+                let length = if matches!(r.kind(), 2 | 3) {
+                    1
+                } else {
+                    self.document
+                        .text(r.text())
+                        .map_err(|_| Error::Invalid)?
+                        .len()
+                };
+                if at.raw.byte != length {
+                    break;
+                }
+                at.raw.run = at.raw.run.checked_add(1).ok_or(Error::Invalid)?;
+                at.raw.byte = 0;
+            }
+            if (at.raw.run, at.raw.byte, at.part) >= (target.run, target.byte, 0) {
+                break;
+            }
+            at = self.character(at, w)?.ok_or(Error::Invalid)?.1;
+        }
+        if (at.raw.run, at.raw.byte, at.part) == (target.run, target.byte, 0) {
+            Ok(at.offset)
+        } else {
+            Err(Error::Invalid)
+        }
+    }
+    pub(crate) fn locate_visual(
+        &self,
+        run: u32,
+        byte: usize,
+        part: u8,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<usize> {
+        validate_visual_part(&self.document, run, byte, part, work)?;
+        self.locate_raw(run, byte, work)?
+            .checked_add(usize::from(part))
+            .ok_or(Error::Invalid)
     }
     pub fn visit_projected(
         &self,
@@ -846,6 +929,45 @@ pub struct SegmentedIndex {
     preparation_counters: [usize; 5],
 }
 impl SegmentedIndex {
+    pub(crate) fn raw_anchor_with_work(
+        &self,
+        p: &Point,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<(u32, usize)> {
+        if !p.identity.same(&self.text.identity) {
+            return Err(Error::Invalid);
+        }
+        if let Some(s) = self.text.raw_scalar(p.position.raw, w)? {
+            return Ok((
+                u32::try_from(s.raw.run).map_err(|_| Error::Invalid)?,
+                s.raw.byte,
+            ));
+        }
+        let run = self.text.runs.end.checked_sub(1).ok_or(Error::Invalid)?;
+        w.admit_structure(std::mem::size_of::<crate::document_model::Run>())?;
+        let r = &self.text.document.runs()[run];
+        let byte = if matches!(r.kind(), 2 | 3) {
+            0
+        } else {
+            w.admit_structure(std::mem::size_of::<crate::document_model::TextRef>())?;
+            self.text
+                .document
+                .text(r.text())
+                .map_err(|_| Error::Invalid)?
+                .len()
+        };
+        Ok((u32::try_from(run).map_err(|_| Error::Invalid)?, byte))
+    }
+    pub(crate) fn visual_anchor_with_work(
+        &self,
+        point: &Point,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<(u32, usize, u8)> {
+        let (run, byte) = self.raw_anchor_with_work(point, work)?;
+        let part = u8::try_from(point.position.part).map_err(|_| Error::Invalid)?;
+        validate_visual_part(&self.text.document, run, byte, part, work)?;
+        Ok((run, byte, part))
+    }
     pub fn prepare(
         text: SegmentedText,
         budget: &ConsumerBudget,
@@ -1015,13 +1137,71 @@ impl SegmentedIndex {
             return Err(Error::Invalid);
         }
         let exceptions = self.exceptions.as_slice();
-        let i = exceptions.partition_point(|e| e.before < point.offset);
+        let i = charged_upper(exceptions.len(), w, std::mem::size_of::<Exception>(), |i| {
+            exceptions[i].before < point.offset
+        })?;
         if let Some(e) = exceptions.get(i).filter(|e| e.before == point.offset) {
             w.admit(std::mem::size_of::<Exception>())?;
             *point = e.after.clone();
             return Ok(Some(e.unit.clone()));
         }
         self.compute(point, hint, false, w)
+    }
+
+    pub(crate) fn seek_before_with_work(
+        &self,
+        offset: usize,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<Point> {
+        if offset > self.text.len {
+            return Err(Error::Invalid);
+        }
+        let p = self.points.as_slice();
+        let i = charged_upper(p.len(), w, std::mem::size_of::<Point>(), |i| {
+            p[i].offset <= offset
+        })?
+        .saturating_sub(1);
+        w.admit_structure(std::mem::size_of::<Point>())?;
+        Ok(p[i].clone())
+    }
+    pub(crate) fn seek_line_with_work(
+        &self,
+        line: usize,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<Point> {
+        let p = self.points.as_slice();
+        let i = charged_upper(p.len(), w, std::mem::size_of::<Point>(), |i| {
+            p[i].line < line
+        })?
+        .saturating_sub(1);
+        w.admit_structure(std::mem::size_of::<Point>())?;
+        let mut at = p[i].clone();
+        while at.line < line {
+            if self.step(&mut at, 4096, w)?.is_none() {
+                break;
+            }
+        }
+        Ok(at)
+    }
+    pub(crate) fn seek_cell_with_work(
+        &self,
+        line: usize,
+        column: usize,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<Point> {
+        let points = self.points.as_slice();
+        let i = charged_upper(points.len(), w, std::mem::size_of::<Point>(), |i| {
+            points[i].line < line || points[i].line == line && points[i].column <= column
+        })?
+        .saturating_sub(1);
+        w.admit_structure(std::mem::size_of::<Point>())?;
+        let mut at = points[i].clone();
+        while at.line < line || at.line == line && at.column < column {
+            if self.step(&mut at, 4096, w)?.is_none() {
+                break;
+            }
+        }
+        Ok(at)
     }
     pub fn seek_before(&self, offset: usize) -> Result<Point> {
         if offset > self.text.len {
@@ -1033,6 +1213,58 @@ impl SegmentedIndex {
             .saturating_sub(1);
         Ok(points[i].clone())
     }
+}
+
+/// Physical Run/local bytes remain Source coordinates. Only expanded C1 spelling
+/// has nonzero visual affinity; this never becomes a Source or Code offset.
+pub(crate) fn validate_visual_part(
+    document: &Document,
+    run: u32,
+    byte: usize,
+    part: u8,
+    work: &mut DocumentWork<'_>,
+) -> Result<()> {
+    work.admit_structure(0)?;
+    if part == 0 {
+        return Ok(());
+    }
+    work.admit_structure(std::mem::size_of::<crate::document_model::Run>())?;
+    let record = document.runs().get(run as usize).ok_or(Error::Invalid)?;
+    if matches!(record.kind(), 2 | 3 | 5) {
+        return Err(Error::Invalid);
+    }
+    work.admit_structure(std::mem::size_of::<crate::document_model::TextRef>() + 8)?;
+    let text = document.text(record.text()).map_err(|_| Error::Invalid)?;
+    let ch = text
+        .get(byte..)
+        .ok_or(Error::Invalid)?
+        .chars()
+        .next()
+        .ok_or(Error::Invalid)?;
+    if !matches!(ch, '\u{80}'..='\u{9f}') {
+        return Err(Error::Invalid);
+    }
+    let mut bytes = [0; 8];
+    let projected = text_projection::scalar(ch, None, &mut bytes);
+    if usize::from(part) >= projected.len() || !projected.is_char_boundary(usize::from(part)) {
+        return Err(Error::Invalid);
+    }
+    Ok(())
+}
+
+fn charged_upper(
+    n: usize,
+    w: &mut DocumentWork<'_>,
+    bytes: usize,
+    mut check: impl FnMut(usize) -> bool,
+) -> Result<usize> {
+    let (mut lo, mut hi) = (0, n);
+    while lo < hi {
+        w.admit_structure(bytes)?;
+        let mid = lo + (hi - lo) / 2;
+        if check(mid) { lo = mid + 1 } else { hi = mid }
+    }
+    Ok(lo)
 }
 #[cfg(test)]
 #[path = "document_text_tests.rs"]

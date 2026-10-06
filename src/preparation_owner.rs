@@ -143,6 +143,12 @@ pub(crate) struct OwnerReceipt {
     pub joined: bool,
 }
 impl<I: Send + Sync + 'static, O: Send + 'static> OwnedPreparation<I, O> {
+    pub(crate) fn known_parts_bytes() -> usize {
+        std::mem::size_of::<Parts<I, O>>()
+    }
+    pub(crate) fn known_completion_bytes() -> usize {
+        std::mem::size_of::<Completion<O>>()
+    }
     pub(crate) fn spawn(
         input: Arc<I>,
         binding: Binding,

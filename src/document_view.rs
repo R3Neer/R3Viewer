@@ -1,0 +1,667 @@
+//! Private b1 library: real Flow/text preparation, typed final commit, no session/pump/renderer.
+#![allow(dead_code)]
+use crate::{
+    document_consumer_budget::{Charge, ChargedVec, ConsumerBudget},
+    document_consumer_profile::ConsumerProfile,
+    document_flow::{FlowHandle, FlowIndex, FoldOverride, SharedFlow},
+    document_layout::{self, Geometry, LayoutWindow, ReferenceReason, SequenceSlot, WindowBuilder},
+    document_model::{Document, NONE},
+    document_navigation::{NavigationStorage, Navigator, State},
+    document_text::{DocumentWork, Error, IndexProfile},
+    preparation_owner::{Binding, Cause, Outcome, OwnedPreparation, PreparationAuthority},
+    source_preparation::{PreparedSourceContext, SourcePreparationInput},
+};
+use std::{
+    mem::size_of,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+};
+static NEXT_REVISION: AtomicU64 = AtomicU64::new(1);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct RawAnchor {
+    pub block: u32,
+    pub run: u32,
+    pub byte: usize,
+}
+impl RawAnchor {
+    fn state(s: &State) -> Self {
+        Self {
+            block: s.block(),
+            run: s.run(),
+            byte: s.raw_byte(),
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct LayoutAnchor {
+    pub raw: RawAnchor,
+    pub projection_part: u8,
+}
+impl LayoutAnchor {
+    fn state(s: &State) -> Self {
+        Self {
+            raw: RawAnchor::state(s),
+            projection_part: s.projection_part(),
+        }
+    }
+    fn physical(raw: RawAnchor) -> Self {
+        Self {
+            raw,
+            projection_part: 0,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Operation {
+    Initial,
+    Home,
+    End,
+    Resize,
+    Seek(RawAnchor),
+    Continue(LayoutAnchor),
+    Fold { block: u32, expanded: bool },
+    Line { delta: i32 },
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct DocumentKey {
+    pub binding: Binding,
+    pub geometry: Geometry,
+    pub fold_revision: u64,
+    pub operation: Operation,
+}
+struct ViewStorage {
+    _reference_current: ChargedVec<u8>,
+    _reference_candidate: ChargedVec<u8>,
+    _scratch: ChargedVec<u8>,
+    _roles: ChargedVec<u32>,
+    _fixed: Charge,
+}
+impl ViewStorage {
+    fn new(budget: &ConsumerBudget) -> Result<Arc<Self>, Error> {
+        let fixed = budget.reserve(
+            size_of::<Self>()
+                .checked_add(2 * size_of::<usize>())
+                .and_then(|n| n.checked_add(size_of::<DocumentView>()))
+                .ok_or(Error::Budget)?,
+        )?;
+        Ok(Arc::new(Self {
+            _reference_current: ChargedVec::new(budget, 4096)?,
+            _reference_candidate: ChargedVec::new(budget, 4096)?,
+            _scratch: ChargedVec::new(budget, 8192)?,
+            _roles: ChargedVec::new(budget, 65)?,
+            _fixed: fixed,
+        }))
+    }
+}
+pub(crate) struct DocumentPreparationInput {
+    document: Arc<Document>,
+    budget: ConsumerBudget,
+    source: Arc<PreparedSourceContext>,
+    storage: Arc<ViewStorage>,
+    key: DocumentKey,
+    old_flow: Option<FlowHandle>,
+    old_slot: Option<Arc<SequenceSlot>>,
+    anchor: Option<LayoutAnchor>,
+    old_window_bytes: usize,
+    _metadata: Charge,
+    _source_metadata: Arc<Charge>,
+}
+impl DocumentPreparationInput {
+    pub(crate) fn key(&self) -> DocumentKey {
+        self.key
+    }
+    pub(crate) fn budget(&self) -> &ConsumerBudget {
+        &self.budget
+    }
+    pub(crate) fn document(&self) -> &Arc<Document> {
+        &self.document
+    }
+}
+pub(crate) struct PreparedViewport {
+    input: Arc<DocumentPreparationInput>,
+    new_flow: Option<SharedFlow>,
+    selection: Option<State>,
+    navigation: Option<NavigationStorage>,
+    layout: LayoutWindow,
+    _metadata: Charge,
+}
+pub(crate) struct PreparedPending {
+    input: Arc<DocumentPreparationInput>,
+    cause: Error,
+    _metadata: Charge,
+}
+pub(crate) enum PreparedState {
+    Viewport(Box<PreparedViewport>),
+    PositionPending(Box<PreparedPending>),
+}
+pub(crate) type DocumentPreparationAuthority =
+    PreparationAuthority<DocumentPreparationInput, PreparedState>;
+pub(crate) struct DocumentView {
+    document: Arc<Document>,
+    budget: ConsumerBudget,
+    source: Arc<PreparedSourceContext>,
+    storage: Arc<ViewStorage>,
+    _source_metadata: Arc<Charge>,
+    navigator: Navigator,
+    layout: LayoutWindow,
+    geometry: Geometry,
+    fold_revision: u64,
+    expected: Option<DocumentKey>,
+}
+fn map_cause(e: Error) -> Cause {
+    match e {
+        Error::Cancelled => Cause::Cancelled,
+        Error::Invalid => Cause::Stale,
+        Error::Work => Cause::Limit("DocumentWork"),
+        Error::Budget => Cause::Limit("ConsumerBudget"),
+        Error::UnsupportedRun(_) => Cause::Limit("DocumentRun"),
+    }
+}
+fn revision() -> Result<u64, Cause> {
+    NEXT_REVISION
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1))
+        .map_err(|_| Cause::Limit("Document revision"))
+}
+fn input_charge(budget: &ConsumerBudget, has_flow: bool) -> Result<Charge, Error> {
+    // FlowHandle owns its separate value charge; the input descriptor excludes that value.
+    let input = size_of::<DocumentPreparationInput>()
+        .checked_sub(if has_flow { size_of::<FlowHandle>() } else { 0 })
+        .and_then(|n| n.checked_add(2 * size_of::<usize>()))
+        .ok_or(Error::Budget)?;
+    // Known Rust owner/container/closure values; channel/thread runtime allocation remains unknown.
+    let kernel = OwnedPreparation::<DocumentPreparationInput, PreparedState>::known_parts_bytes()
+        .checked_add(
+            OwnedPreparation::<DocumentPreparationInput, PreparedState>::known_completion_bytes(),
+        )
+        .and_then(|n| n.checked_add(size_of::<Binding>() + 4 * size_of::<usize>() + 64))
+        .ok_or(Error::Budget)?;
+    budget
+        .reserve(input.checked_add(kernel).ok_or(Error::Budget)?)
+        .map_err(Into::into)
+}
+impl DocumentView {
+    pub(crate) fn initial_input(
+        document: Arc<Document>,
+        geometry: Geometry,
+    ) -> Result<Arc<DocumentPreparationInput>, Cause> {
+        let budget = ConsumerBudget::new(&document).map_err(|_| Cause::Limit("ConsumerBudget"))?;
+        let storage = ViewStorage::new(&budget).map_err(map_cause)?;
+        let source_meta = size_of::<SourcePreparationInput>()
+            .checked_add(size_of::<PreparedSourceContext>())
+            .and_then(|n| n.checked_add(6 * size_of::<usize>()))
+            .ok_or(Cause::Limit("Source context"))?;
+        let path = match document.source().origin() {
+            crate::input::SourceOrigin::LocalFile(p) => p.capacity(),
+            _ => 0,
+        };
+        let source_metadata = Arc::new(
+            budget
+                .reserve(
+                    source_meta
+                        .checked_add(path)
+                        .ok_or(Cause::Limit("Source context"))?,
+                )
+                .map_err(|_| Cause::Limit("Source context"))?,
+        );
+        let source = PreparedSourceContext::from_document(document.clone())?;
+        let actual = source.input().origin_capacity();
+        if actual > path {
+            return Err(Cause::Limit("Source context actual capacity"));
+        }
+        let binding = source.binding(revision()?);
+        let metadata = input_charge(&budget, false).map_err(map_cause)?;
+        Ok(Arc::new(DocumentPreparationInput {
+            document,
+            budget,
+            source,
+            storage,
+            key: DocumentKey {
+                binding,
+                geometry,
+                fold_revision: 0,
+                operation: Operation::Initial,
+            },
+            old_flow: None,
+            old_slot: None,
+            anchor: None,
+            old_window_bytes: 0,
+            _metadata: metadata,
+            _source_metadata: source_metadata,
+        }))
+    }
+    pub(crate) fn from_prepared(state: PreparedState) -> Result<Self, Cause> {
+        let PreparedState::Viewport(v) = state else {
+            return Err(Cause::Limit("Initial position pending"));
+        };
+        let PreparedViewport {
+            input,
+            new_flow,
+            selection,
+            navigation,
+            layout,
+            _metadata,
+        } = *v;
+        if input.key.operation != Operation::Initial {
+            return Err(Cause::Stale);
+        }
+        let flow = new_flow.ok_or(Cause::Missing)?;
+        let navigation = navigation.ok_or(Cause::Missing)?;
+        let navigator = Navigator::from_storage(flow, selection, navigation);
+        Ok(Self {
+            document: input.document.clone(),
+            budget: input.budget.clone(),
+            source: input.source.clone(),
+            storage: input.storage.clone(),
+            _source_metadata: input._source_metadata.clone(),
+            navigator,
+            layout,
+            geometry: input.key.geometry,
+            fold_revision: input.key.fold_revision,
+            expected: None,
+        })
+    }
+    pub(crate) fn request(
+        &mut self,
+        operation: Operation,
+        geometry: Geometry,
+    ) -> Result<Arc<DocumentPreparationInput>, Cause> {
+        if operation == Operation::Initial {
+            return Err(Cause::Stale);
+        }
+        let flow = self.navigator.share_flow().map_err(map_cause)?;
+        let metadata = input_charge(&self.budget, true).map_err(map_cause)?;
+        let fold_revision = if matches!(operation, Operation::Fold { .. }) {
+            self.fold_revision
+                .checked_add(1)
+                .ok_or(Cause::Limit("Fold revision"))?
+        } else {
+            self.fold_revision
+        };
+        let key = DocumentKey {
+            binding: self.source.binding(revision()?),
+            geometry,
+            fold_revision,
+            operation,
+        };
+        let mut anchor = self.navigator.current().map(LayoutAnchor::state);
+        let mut operation = operation;
+        if let Operation::Line { delta } = operation
+            && delta > 0
+            && geometry == self.geometry
+            && let Some(w) = self.layout.text()
+            && let Some(a) = w.row_anchor(delta as usize).or_else(|| w.next_anchor())
+        {
+            anchor = Some(a);
+            operation = Operation::Continue(a);
+        }
+        let key = DocumentKey { operation, ..key };
+        let old_slot = self.layout.text().and_then(|w| w.slot_alias());
+        let input = Arc::new(DocumentPreparationInput {
+            document: self.document.clone(),
+            budget: self.budget.clone(),
+            source: self.source.clone(),
+            storage: self.storage.clone(),
+            key,
+            old_flow: Some(flow),
+            old_slot,
+            anchor,
+            old_window_bytes: self.layout.bytes(),
+            _metadata: metadata,
+            _source_metadata: self._source_metadata.clone(),
+        });
+        self.expected = Some(key);
+        Ok(input)
+    }
+    pub(crate) fn commit(&mut self, state: PreparedState) -> Result<(), Cause> {
+        match state {
+            PreparedState::PositionPending(p) => {
+                self.check(&p.input)?;
+                Err(map_cause(p.cause)) // preserve current/frame/history; not NoMatch or destructive Back.
+            }
+            PreparedState::Viewport(v) => {
+                self.check(&v.input)?;
+                let PreparedViewport {
+                    input,
+                    new_flow,
+                    selection,
+                    navigation,
+                    layout,
+                    _metadata,
+                } = *v;
+                if navigation.is_some() {
+                    return Err(Cause::Stale);
+                }
+                self.navigator
+                    .commit_prepared(new_flow, selection)
+                    .map_err(map_cause)?;
+                self.layout = layout;
+                self.geometry = input.key.geometry;
+                self.fold_revision = input.key.fold_revision;
+                self.expected = None;
+                Ok(())
+            }
+        }
+    }
+    fn check(&self, input: &DocumentPreparationInput) -> Result<(), Cause> {
+        if self.expected != Some(input.key)
+            || !Arc::ptr_eq(&self.document, &input.document)
+            || !Arc::ptr_eq(&self.source, &input.source)
+            || !input
+                .old_flow
+                .as_ref()
+                .is_some_and(|f| self.navigator.same_flow(f))
+        {
+            return Err(Cause::Stale);
+        }
+        Ok(())
+    }
+    pub(crate) fn layout(&self) -> &LayoutWindow {
+        &self.layout
+    }
+    pub(crate) fn navigator(&self) -> &Navigator {
+        &self.navigator
+    }
+    pub(crate) fn budget(&self) -> &ConsumerBudget {
+        &self.budget
+    }
+    pub(crate) fn geometry(&self) -> Geometry {
+        self.geometry
+    }
+}
+pub(crate) fn start_document(
+    input: Arc<DocumentPreparationInput>,
+    authority: &mut DocumentPreparationAuthority,
+) -> Result<(), Cause> {
+    let binding = input.key.binding;
+    let context = input.clone();
+    authority.start_document_owner(move || {
+        OwnedPreparation::spawn(input, binding, move |_, stop| run_prepare(context, stop))
+    })
+}
+fn remap(flow: &FlowHandle, layout: LayoutAnchor, cancel: &AtomicBool) -> Result<State, Error> {
+    let anchor = layout.raw;
+    if anchor.run == NONE {
+        State::prepared_role(flow.index(), anchor.block, cancel)
+    } else {
+        State::prepared_visual(
+            flow.index(),
+            anchor.run,
+            anchor.byte,
+            layout.projection_part,
+            cancel,
+        )
+    }
+}
+fn validate_raw_anchor(
+    document: &Document,
+    anchor: RawAnchor,
+    work: &mut DocumentWork<'_>,
+) -> Result<(), Error> {
+    work.admit_structure(size_of::<crate::document_model::Block>())?;
+    document
+        .blocks()
+        .get(anchor.block as usize)
+        .ok_or(Error::Invalid)?;
+    if anchor.run == NONE {
+        return if anchor.byte == 0 {
+            Ok(())
+        } else {
+            Err(Error::Invalid)
+        };
+    }
+    work.admit_structure(
+        size_of::<crate::document_model::Run>() + size_of::<crate::document_model::Domain>(),
+    )?;
+    let run = document
+        .runs()
+        .get(anchor.run as usize)
+        .ok_or(Error::Invalid)?;
+    let domain = document
+        .domains()
+        .get(run.domain() as usize)
+        .ok_or(Error::Invalid)?;
+    if domain.owner() != anchor.block || !matches!(domain.kind(), 0..=2) {
+        return Err(Error::Invalid);
+    }
+    if matches!(run.kind(), 2 | 3 | 5) {
+        return if anchor.byte == 0 {
+            Ok(())
+        } else {
+            Err(Error::Invalid)
+        };
+    }
+    work.admit_structure(size_of::<crate::document_model::TextRef>() + 1)?;
+    let text = document.text(run.text()).map_err(|_| Error::Invalid)?;
+    if anchor.byte > text.len() || !text.is_char_boundary(anchor.byte) {
+        return Err(Error::Invalid);
+    }
+    Ok(())
+}
+fn candidate_folds(
+    input: &DocumentPreparationInput,
+    block: u32,
+    expanded: bool,
+    cancel: &AtomicBool,
+) -> Result<ChargedVec<FoldOverride>, Error> {
+    let old = input
+        .old_flow
+        .as_ref()
+        .ok_or(Error::Invalid)?
+        .index()
+        .overrides();
+    let mut folds = ChargedVec::new(
+        &input.budget,
+        old.len().checked_add(1).ok_or(Error::Budget)?,
+    )?;
+    let mut inserted = false;
+    let mut w = DocumentWork::preparation(cancel);
+    for &f in old {
+        w.admit_structure(size_of::<FoldOverride>())?;
+        if !inserted && block < f.block {
+            folds.push(FoldOverride { block, expanded })?;
+            inserted = true;
+        }
+        if f.block == block {
+            if !inserted {
+                folds.push(FoldOverride { block, expanded })?;
+                inserted = true;
+            }
+        } else {
+            folds.push(f)?;
+        }
+    }
+    if !inserted {
+        w.admit_structure(size_of::<FoldOverride>())?;
+        folds.push(FoldOverride { block, expanded })?;
+    }
+    Ok(folds)
+}
+fn run_prepare(
+    input: Arc<DocumentPreparationInput>,
+    cancel: &AtomicBool,
+) -> Outcome<PreparedState> {
+    let result = prepare(input.clone(), cancel);
+    match result {
+        Ok(v) => Outcome::Ready(PreparedState::Viewport(Box::new(v))),
+        Err(Error::Cancelled) => Outcome::Cancelled,
+        Err(e) => match input.budget.reserve(size_of::<PreparedPending>()) {
+            Ok(metadata) => {
+                Outcome::Ready(PreparedState::PositionPending(Box::new(PreparedPending {
+                    input,
+                    cause: e,
+                    _metadata: metadata,
+                })))
+            }
+            Err(_) => Outcome::Limit("ConsumerBudget pending receipt"),
+        },
+    }
+}
+fn prepare(
+    input: Arc<DocumentPreparationInput>,
+    cancel: &AtomicBool,
+) -> Result<PreparedViewport, Error> {
+    let mut prep = DocumentWork::preparation(cancel);
+    prep.admit_structure(0)?;
+    let metadata = input.budget.reserve(size_of::<PreparedViewport>())?;
+    let navigation = if input.key.operation == Operation::Initial {
+        Some(NavigationStorage::new(&input.budget)?)
+    } else {
+        None
+    };
+    // Logical input validity precedes geometry/quota Reference and any window allocation.
+    // A closed Source/Document does not prove a caller-supplied raw Run/local anchor.
+    let requested = match input.key.operation {
+        Operation::Seek(raw) => Some(LayoutAnchor::physical(raw)),
+        Operation::Continue(layout) => Some(layout),
+        _ => input.anchor,
+    };
+    if let Some(layout) = requested {
+        validate_raw_anchor(&input.document, layout.raw, &mut prep)?;
+        if layout.raw.run == NONE && layout.projection_part != 0 {
+            return Err(Error::Invalid);
+        }
+        crate::document_text::validate_visual_part(
+            &input.document,
+            layout.raw.run,
+            layout.raw.byte,
+            layout.projection_part,
+            &mut prep,
+        )?;
+    }
+    // Window capacity is mandatory and admitted before adaptive sparse-index density.
+    let builder = WindowBuilder::new(&input.budget, input.key.geometry, input.old_window_bytes);
+    let profile = ConsumerProfile::plan(
+        &input.budget,
+        512,
+        IndexProfile {
+            projection_points: 256,
+            unicode_points: 256,
+            exceptions: 8,
+        },
+        2,
+    )?;
+    let new_flow = match input.key.operation {
+        Operation::Initial => Some(SharedFlow::new(FlowIndex::prepare_visible(
+            input.document.clone(),
+            &input.budget,
+            profile.flow_slots,
+            &[],
+            cancel,
+        )?)?),
+        Operation::Fold { block, expanded } => {
+            prep.admit_structure(size_of::<crate::document_model::Block>())?;
+            if input
+                .document
+                .blocks()
+                .get(block as usize)
+                .is_none_or(|b| b.kind() != 4)
+            {
+                return Err(Error::Invalid);
+            }
+            let overrides = candidate_folds(&input, block, expanded, cancel)?;
+            Some(SharedFlow::new(FlowIndex::prepare_visible(
+                input.document.clone(),
+                &input.budget,
+                profile.flow_slots,
+                overrides.as_slice(),
+                cancel,
+            )?)?)
+        }
+        _ => None,
+    };
+    let flow = if let Some(f) = &new_flow {
+        f.alias()?
+    } else {
+        input.old_flow.as_ref().ok_or(Error::Invalid)?.try_alias()?
+    };
+    let mut selection = match input.key.operation {
+        Operation::Initial | Operation::Home => flow.index().first().map(State::from_target),
+        Operation::End => flow.index().terminal().map(State::from_target),
+        Operation::Seek(raw) => Some(remap(&flow, LayoutAnchor::physical(raw), cancel)?),
+        Operation::Continue(layout) => Some(remap(&flow, layout, cancel)?),
+        Operation::Fold { block, .. } => match input.anchor {
+            Some(raw) => match remap(&flow, raw, cancel) {
+                Ok(s) => Some(s),
+                Err(Error::Cancelled) => return Err(Error::Cancelled),
+                Err(_) => Some(State::prepared_role(flow.index(), block, cancel)?),
+            },
+            None => flow.index().first().map(State::from_target),
+        },
+        Operation::Resize | Operation::Line { .. } => {
+            input.anchor.map(|r| remap(&flow, r, cancel)).transpose()?
+        }
+    };
+    let mut shifted_slot = None;
+    if let Operation::Line { delta } = input.key.operation
+        && let Some(selected) = selection.as_ref()
+    {
+        let (s, slot) = document_layout::shift_line(
+            input.document.clone(),
+            &flow,
+            selected,
+            delta,
+            input.old_slot.as_ref(),
+            &input.budget,
+            cancel,
+            profile,
+        )?;
+        selection = Some(s);
+        shifted_slot = slot;
+    }
+    let layout = match (builder, selection.as_ref()) {
+        (_, None) => LayoutWindow::Reference {
+            reason: ReferenceReason::Geometry,
+            work: document_layout::REFERENCE_WORK,
+        },
+        (Err(Error::Cancelled), _) => return Err(Error::Cancelled),
+        (Err(_), _) => LayoutWindow::Reference {
+            reason: if input.key.geometry.width == 0 || input.key.geometry.height == 0 {
+                ReferenceReason::Geometry
+            } else {
+                ReferenceReason::Window
+            },
+            work: document_layout::REFERENCE_WORK,
+        },
+        (Ok(mut builder), Some(selected)) => {
+            builder.retain_candidate(shifted_slot.take());
+            let end_anchor = input.key.operation == Operation::End
+                || matches!(input.key.operation,Operation::Line{delta} if delta<0)
+                    && selected.run() != u32::MAX
+                    && input
+                        .document
+                        .runs()
+                        .get(selected.run() as usize)
+                        .is_some_and(|r| {
+                            input
+                                .document
+                                .text(r.text())
+                                .is_ok_and(|t| selected.raw_byte() == t.len())
+                        });
+            document_layout::build_window(
+                builder,
+                input.document.clone(),
+                &flow,
+                selected,
+                input.old_slot.as_ref(),
+                &input.budget,
+                cancel,
+                profile,
+                end_anchor,
+            )?
+        }
+    };
+    prep.admit_structure(0)?;
+    Ok(PreparedViewport {
+        input,
+        new_flow,
+        selection,
+        navigation,
+        layout,
+        _metadata: metadata,
+    })
+}
+#[cfg(test)]
+#[path = "document_view_tests.rs"]
+mod tests;
