@@ -1,4 +1,13 @@
-# Integración Unicode: candidato R1 sin aprobar
+# Integración Unicode: UIR-01 corregido en R2
+
+## Estado vigente R2
+
+2026-10-06. [Revisión independiente final](../reviews/S03-unicode-integracion-r2.md) sin críticas pendientes para el delta UIR-01: 24/24 controles propios pasan (diez originales sin cambio y catorce preparados antes de outputs). Snapshot528 registros, MANIFEST56EA09960104D701CB906E752CD403A7BA400FA80481EA8B75EFEBDBD8886F95. Raíz verificó receipt8135E2B255E8E5D3614AAE482237F4127B74C3E5916C0F31BE0ACEE1E6E6D320 y sus ocho evidencias. UIR-01 cerrado en ese snapshot; R1 y sus FAIL históricos se conservan abajo. No cierra S03-UNICODE01, RV ni adopción operacional completa.
+
+Investigación focalizada del autor, 22 evidencias verificadas por raíz: XML32MB aislado9.39s (modelo2.93s, pane5.78s); YAML16MB aislado2.68s (modelo0.70s, pane1.17s). Ambos mantienen texto/rangos completos y terminan sin procesos pendientes. No reproducen la hora, pero no explican la regresión serial3695.62s ni el WorkerExited previo. El XML de ese test llama project directamente en el proceso de pruebas: WorkerExited no prueba una salida de hijo del SO; existen rutas deadline/cancel que producen esa categoría, sin identificar cuál causó el fallo. Informe temporal S03-unicode-performance-investigation-r1.md SHA7C40C1C878DF823DD8046AC072B43496FFAEC9C318FFAB0FBC29199DB7B385F1, manifiestoE4F0C81B1F16E179C98201C9AF3CB7FC86B4FE48F6C2ECBC90CD84D91189ACE0. Rendimiento/estabilidad originales pendientes, sin SLA ni conclusión por un PASS aislado.
+
+## Historia R1 — rechazada
+
 
 2026-10-06. Contrato [operacional](../refinement/S03-UNICODE-INTEGRACION.md) y [grafemas](../refinement/S03-GRAFEMAS.md). El gate mecánico privado aceptado no acredita los consumidores del producto. Candidato integrado R1 congelado y revisión/aceptación independientes en curso; **UIR-01 reproducido impide aprobarlo**. S03-UNICODE01 y tareas principales siguen abiertas.
 
