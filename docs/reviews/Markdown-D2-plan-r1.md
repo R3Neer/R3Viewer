@@ -1,0 +1,13 @@
+# Revisión adversaria operacional D2 R1
+
+2026-10-06. Propuesta Markdown-document-D2-operational-plan-r1.md SHA38A4D2F16D4518F53BA1BDAD356BAF2B0A8FD4EA7B7545BC9E6F4CBD888F9C90. SIN_CRITICAS_PENDIENTES dentro del diseño D2 descrito; implementación no iniciada por este dictamen.
+
+Se contrastó el plan consumidor general aprobado, el código D1 congelado y su aceptación raíz, y APIs reales de controller/arena. Un ConsumerBudget único por DocumentView comparte toda la capacidad entre Flow, dominios, current, historia y candidatos. Profiles adaptativos necesarios se declaran como extensión D1 explícita; no se atribuye capacidad1536 gratis a cada secuencia. Old+new, scratch, ventanas, symbols/buffer clones, endpoints y checkpoints comparten límites; dos slots es techo, no garantía de dos índices grandes. La modificación futura de profiles debe preservar y verificar D1 con delta propio.
+
+Flow recorre Items reales sin ID-preorder ni Root por draw. Home/End guardan cursor estructural y seleccionan la secuencia necesaria; un final del mismo dominio con cluster gigante puede requerir preparación cancelable, sin promesa de tiempo constante. Seek/locateWork agotado conserva anchor e indica Pending/Reference sin repetir replay en redraw. Fold/resize/identidades se distinguen, history129 rechaza como el contrato general aceptado.
+
+El layout respeta barreras Resource y dominios, clústeres indivisibles y OR de estilos, elección explícita ante múltiples enlaces y procedencia Exact/disjoint/Enclosing/Synthetic. Una ventana insuficiente se descarta completa, sin prefijo presentado como lectura completa. No abrir targets desde layout. Search/índice conservan FlowLocation y consultas por dominios, sin listas completas de hits/headings. Un Work de frame compartido evita allowances repetidas por Run/panel. Commit transaccional preserva estado ante cancel/stale/fallo.
+
+La propuesta divide D2a Flow/budget, D2b layout/search y D2c branch TUI; cada corte necesita fuente congelada, tests propios y aceptación ajena. D3 conserva routing auto/CLI/inline y D4 conserva Syntect de fences; los recursos gráficos y resolver siguen obligatorios posteriores. La integración debe usar A–C corregido y aceptado (R4 de callouts aún en revisión) y D1 revisado, no baselines provisionales para declarar producto entregado. El argumento de arena común entre documentos requiere que el host suministre la misma ActorArena al controller; no se deduce una cuota compartida entre Document arbitrarios ya creados por separado.
+
+Aprobación de diseño sin TUI/QA visual/Unix/SLA/runtime ni cierre RV. La evidencia de D1 no cubre estas extensiones todavía. Autor puede preparar casos/preoutput y después implementar D2a cuando su base combinada cumpla los gates declarados.
