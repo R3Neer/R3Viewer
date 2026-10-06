@@ -167,3 +167,102 @@ fn rf04_whole_giant_tail() {
     }
     assert_eq!(rest, " AFTER");
 }
+
+#[test]
+fn ru_ref_wrapper_preadmission_and_real_coverage() {
+    let doc = document("![ALT](x \"a\u{301} 👩‍💻 🇪🇸\")\n");
+    let cancel = AtomicBool::new(false);
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let id = doc.resources()[0].title_decoded();
+    let index = TextRefIndex::prepare(doc, id, &budget, &cancel, profile()).unwrap();
+    let before = std::mem::size_of::<Position>();
+    let core = std::mem::size_of::<ResolvedUnit<'_>>();
+    let whole = std::mem::size_of::<ResolvedRefUnit<'_>>();
+    assert!(whole > core);
+    for cap in [before + core - 1, before + whole - 1, before + whole] {
+        let mut p = index.start();
+        let saved = p.clone();
+        let mut work = DocumentWork::bounded(&cancel, cap).unwrap();
+        assert!(matches!(
+            index.step_resolved(&mut p, 4, &mut work),
+            Err(Error::Work)
+        ));
+        assert_eq!(p.position, saved.position);
+        assert_eq!(p.previous, saved.previous);
+        assert_eq!(
+            (p.offset, p.line, p.column, p.cursor.cur_cursor()),
+            (
+                saved.offset,
+                saved.line,
+                saved.column,
+                saved.cursor.cur_cursor()
+            )
+        );
+    }
+    let mut p = index.start();
+    let mut glyphs = Vec::new();
+    while let Some(token) = index
+        .step_resolved(&mut p, 4, &mut DocumentWork::frame(&cancel))
+        .unwrap()
+    {
+        let mut s = String::new();
+        token
+            .visit_projected(&mut DocumentWork::frame(&cancel), |v| {
+                s.push_str(v);
+                Ok(())
+            })
+            .unwrap();
+        glyphs.push(s);
+        token
+            .visit_coverage(&mut DocumentWork::frame(&cancel), |c| {
+                assert_eq!(c.text_ref, id);
+                assert_eq!(c.relation, Relation::EnclosingToken);
+                Ok(())
+            })
+            .unwrap();
+    }
+    assert_eq!(glyphs, ["a\u{301}", " ", "👩‍💻", " ", "🇪🇸"]);
+}
+
+#[test]
+fn ru_ref_exact_total_and_cancel_before_commit() {
+    let doc = document("![ALT](x \"abc\")\n");
+    let cancel = Arc::new(AtomicBool::new(false));
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let id = doc.resources()[0].title_decoded();
+    let index = TextRefIndex::prepare(doc, id, &budget, &cancel, profile()).unwrap();
+    let mut expected = index.start();
+    let original = expected.clone();
+    let mut work = DocumentWork::frame(&cancel);
+    index
+        .step_resolved(&mut expected, 4, &mut work)
+        .unwrap()
+        .unwrap();
+    let total = work.used();
+    for cap in [total - 1, total, total + 1] {
+        let mut at = original.clone();
+        let mut work = DocumentWork::bounded(&cancel, cap).unwrap();
+        let result = index.step_resolved(&mut at, 4, &mut work);
+        if cap < total {
+            assert!(matches!(result, Err(Error::Work)));
+            assert_eq!(at.position, original.position);
+            assert_eq!(at.cursor.cur_cursor(), original.cursor.cur_cursor());
+        } else {
+            assert!(result.unwrap().is_some());
+            assert_eq!(at.position, expected.position);
+            assert_eq!(work.used(), total);
+        }
+    }
+    let signal = cancel.clone();
+    RESOLVED_PRECOMMIT
+        .with(|h| *h.borrow_mut() = Some(Box::new(move || signal.store(true, Ordering::Release))));
+    let mut at = original.clone();
+    let mut work = DocumentWork::frame(&cancel);
+    assert!(matches!(
+        index.step_resolved(&mut at, 4, &mut work),
+        Err(Error::Cancelled)
+    ));
+    assert_eq!(at.position, original.position);
+    assert_eq!(at.previous, original.previous);
+    assert_eq!(at.cursor.cur_cursor(), original.cursor.cur_cursor());
+}

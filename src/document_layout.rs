@@ -333,9 +333,10 @@ impl WindowBuilder {
         self.window.slot = Some(slot.clone());
         loop {
             let before_raw = index.visual_anchor_with_work(&point, w)?;
-            let Some(unit) = index.step(&mut point, 4096, w)? else {
+            let Some(resolved) = index.step_resolved(&mut point, 4, w)? else {
                 break;
             };
+            let unit = resolved.unit();
             if unit.oversized {
                 return Err(Error::UnsupportedRun(u32::MAX));
             }
@@ -355,12 +356,10 @@ impl WindowBuilder {
             let mut width = unit.width;
             let is_tab = unit.projected.end - unit.projected.start == 1 && {
                 let mut tab = false;
-                index
-                    .text()
-                    .visit_projected(unit.projected.clone(), w, |s| {
-                        tab = s == "\t";
-                        Ok(())
-                    })?;
+                resolved.visit_projected(w, |s| {
+                    tab = s == "\t";
+                    Ok(())
+                })?;
                 tab
             };
             if is_tab {
@@ -438,43 +437,39 @@ impl WindowBuilder {
                 }
             } else {
                 w.admit_structure(unit.projected.len())?;
-                index
-                    .text()
-                    .visit_projected(unit.projected.clone(), w, |s| {
-                        for &b in s.as_bytes() {
-                            self.window.symbols.push(b)?;
-                        }
-                        Ok(())
-                    })?;
+                resolved.visit_projected(w, |s| {
+                    for &b in s.as_bytes() {
+                        self.window.symbols.push(b)?;
+                    }
+                    Ok(())
+                })?;
             }
             let end = self.window.symbols.as_slice().len();
             let mut first = None;
             let mut styles = 0;
             let mut links = 0usize;
             let mut relation_mask = 0u8;
-            index
-                .text()
-                .visit_coverage(unit.projected.clone(), w, |c| {
-                    if first.is_none() {
-                        first = Some(FirstComponent {
-                            block,
-                            domain: slot.domain,
-                            run: c.run,
-                            local: c.local.start,
-                        });
-                    }
-                    styles |= c.styles;
-                    links = links
-                        .checked_add(usize::from(c.link.is_some()))
-                        .ok_or(Error::Work)?;
-                    relation_mask |= match c.relation {
-                        Relation::ExactSource => 1,
-                        Relation::ControlProjection => 2,
-                        Relation::EnclosingToken => 4,
-                        Relation::Synthetic => 8,
-                    };
-                    Ok(())
-                })?;
+            resolved.visit_coverage(w, |c| {
+                if first.is_none() {
+                    first = Some(FirstComponent {
+                        block,
+                        domain: slot.domain,
+                        run: c.run,
+                        local: c.local.start,
+                    });
+                }
+                styles |= c.styles;
+                links = links
+                    .checked_add(usize::from(c.link.is_some()))
+                    .ok_or(Error::Work)?;
+                relation_mask |= match c.relation {
+                    Relation::ExactSource => 1,
+                    Relation::ControlProjection => 2,
+                    Relation::EnclosingToken => 4,
+                    Relation::Synthetic => 8,
+                };
+                Ok(())
+            })?;
             w.admit_structure(size_of::<Glyph>())?;
             if width == 0 {
                 let last = self.window.glyphs.last_mut().ok_or(Error::Invalid)?;

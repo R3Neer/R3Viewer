@@ -804,3 +804,326 @@ fn dc05_midrun_header_and_index_owner() {
     assert_eq!(point.offset(), offset);
     assert_eq!(work.counters()[4], 0);
 }
+
+fn ru_index(doc: Arc<Document>, cancel: &AtomicBool) -> (SegmentedIndex, ConsumerBudget) {
+    let budget = ConsumerBudget::new(&doc).unwrap();
+    let count = doc.domains()[0].run_count() as usize;
+    let text = SegmentedText::prepare(doc, 0, 0..count, &budget, cancel).unwrap();
+    let index = SegmentedIndex::prepare(text, &budget, cancel).unwrap();
+    (index, budget)
+}
+fn ru_same_point(a: &Point, b: &Point) {
+    assert!(a.identity.same(&b.identity));
+    assert_eq!(
+        (
+            a.offset,
+            a.line,
+            a.column,
+            a.position,
+            a.previous,
+            a.cursor.cur_cursor()
+        ),
+        (
+            b.offset,
+            b.line,
+            b.column,
+            b.position,
+            b.previous,
+            b.cursor.cur_cursor()
+        )
+    );
+}
+#[test]
+fn ru01_foreign_and_tampered_point_no_publish() {
+    let cancel = AtomicBool::new(false);
+    let (a, _a) = ru_index(fixture(&[("aé", 0)], false), &cancel);
+    let (b, _b) = ru_index(fixture(&[("abc", 0)], false), &cancel);
+    let mut point = b.start();
+    let original = point.clone();
+    assert!(matches!(
+        a.step_resolved(&mut point, 4, &mut DocumentWork::frame(&cancel)),
+        Err(Error::Invalid)
+    ));
+    ru_same_point(&point, &original);
+    let mut point = a.start();
+    point.position.part = 1;
+    // Part corruption must fail in actual projection before publication.
+    let original = point.clone();
+    assert!(
+        a.step_resolved(&mut point, 4, &mut DocumentWork::frame(&cancel))
+            .is_err()
+    );
+    ru_same_point(&point, &original);
+}
+#[test]
+fn ru04_source_and_decoded_match_existing_visitors() {
+    for decoded in [false, true] {
+        let cancel = AtomicBool::new(false);
+        let (index, _budget) = ru_index(fixture(&[("é", 1), ("\u{301}", 2)], decoded), &cancel);
+        let mut point = index.start();
+        let token = index
+            .step_resolved(&mut point, 4, &mut DocumentWork::frame(&cancel))
+            .unwrap()
+            .unwrap();
+        let mut actual = String::new();
+        let mut expected = String::new();
+        token
+            .visit_projected(&mut DocumentWork::frame(&cancel), |s| {
+                actual.push_str(s);
+                Ok(())
+            })
+            .unwrap();
+        index
+            .text
+            .visit_projected(
+                token.unit().projected.clone(),
+                &mut DocumentWork::frame(&cancel),
+                |s| {
+                    expected.push_str(s);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(actual, "é\u{301}");
+        assert_eq!(actual, expected);
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        token
+            .visit_coverage(&mut DocumentWork::frame(&cancel), |c| {
+                a.push(c);
+                Ok(())
+            })
+            .unwrap();
+        index
+            .text
+            .visit_coverage(
+                token.unit().projected.clone(),
+                &mut DocumentWork::frame(&cancel),
+                |c| {
+                    b.push(c);
+                    Ok(())
+                },
+            )
+            .unwrap();
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 2);
+        assert!(a.iter().all(|c| c.relation
+            == if decoded {
+                Relation::EnclosingToken
+            } else {
+                Relation::ExactSource
+            }));
+    }
+}
+#[test]
+fn ru05_controls_parts_crlf_tab_and_callback_cancel() {
+    let cancel = AtomicBool::new(false);
+    let (index, _budget) = ru_index(fixture(&[("A\u{85}\r\n\tZ", 0)], false), &cancel);
+    let mut point = index.start();
+    let mut output = String::new();
+    let mut seen = 0;
+    while let Some(token) = index
+        .step_resolved(&mut point, 4, &mut DocumentWork::frame(&cancel))
+        .unwrap()
+    {
+        token
+            .visit_projected(&mut DocumentWork::frame(&cancel), |s| {
+                output.push_str(s);
+                Ok(())
+            })
+            .unwrap();
+        token
+            .visit_coverage(&mut DocumentWork::frame(&cancel), |c| {
+                if c.control_projected {
+                    seen += 1;
+                    assert_eq!(c.source, Some(1..3));
+                    assert_eq!(c.local, 1..3);
+                }
+                Ok(())
+            })
+            .unwrap();
+    }
+    assert_eq!(output, "A\\u{0085}\r\n\tZ");
+    assert_eq!(seen, 8);
+    let mut point = index.start();
+    let token = index
+        .step_resolved(&mut point, 4, &mut DocumentWork::frame(&cancel))
+        .unwrap()
+        .unwrap();
+    assert!(matches!(
+        token.visit_projected(&mut DocumentWork::frame(&cancel), |_| {
+            cancel.store(true, std::sync::atomic::Ordering::Release);
+            Ok(())
+        }),
+        Err(Error::Cancelled)
+    ));
+}
+#[test]
+fn ru06_boundaries_widths_and_chunk_edges() {
+    use unicode_segmentation::UnicodeSegmentation;
+    for text in ["ée\u{301}👩🏽‍💻🇦🇧🇨x", "क्🇦🇧🇨x", "لا가\r\n", "\u{301}x"]
+    {
+        for prefix in [0, 4081, 4095] {
+            let source = format!("{}{}", "x".repeat(prefix), text);
+            let cancel = AtomicBool::new(false);
+            let (index, _budget) = ru_index(fixture(&[(&source, 0)], false), &cancel);
+            let mut point = index.start();
+            let mut actual = Vec::new();
+            // Fresh Work per unit here verifies mechanics only, not whole-frame admission.
+            while let Some(token) = index
+                .step_resolved(&mut point, 4, &mut DocumentWork::frame(&cancel))
+                .unwrap()
+            {
+                let mut symbol = String::new();
+                token
+                    .visit_projected(&mut DocumentWork::frame(&cancel), |s| {
+                        symbol.push_str(s);
+                        Ok(())
+                    })
+                    .unwrap();
+                let expected_width = if token.unit().newline {
+                    0
+                } else {
+                    unicode_width::UnicodeWidthStr::width(symbol.as_str())
+                };
+                assert_eq!(token.unit().width, expected_width);
+                actual.push((token.unit().projected.clone(), symbol));
+            }
+            let expected: Vec<_> = source
+                .grapheme_indices(true)
+                .map(|(n, g)| (n..n + g.len(), g.to_owned()))
+                .collect();
+            assert_eq!(actual, expected);
+        }
+    }
+}
+#[test]
+fn ru07_exception_and_ru09_preadmission_preserve_cursor() {
+    let giant = format!("a{}", "\u{301}".repeat(9000));
+    for text in ["abc", giant.as_str()] {
+        let cancel = AtomicBool::new(false);
+        let (index, _budget) = ru_index(fixture(&[(text, 0)], false), &cancel);
+        let mut p = index.start();
+        let original = p.clone();
+        let before = std::mem::size_of::<Position>();
+        let token_bytes = std::mem::size_of::<ResolvedUnit<'_>>();
+        let mut limited = DocumentWork::bounded(&cancel, before + token_bytes - 1).unwrap();
+        assert!(matches!(
+            index.step_resolved(&mut p, 4, &mut limited),
+            Err(Error::Work)
+        ));
+        ru_same_point(&p, &original);
+        assert_eq!(limited.0.counters.advanced, 0);
+        // An error in step after token admission still leaves caller Point intact.
+        let mut limited = DocumentWork::bounded(&cancel, before + token_bytes).unwrap();
+        assert!(matches!(
+            index.step_resolved(&mut p, 4, &mut limited),
+            Err(Error::Work)
+        ));
+        ru_same_point(&p, &original);
+        let mut work = DocumentWork::frame(&cancel);
+        let token = index.step_resolved(&mut p, 4, &mut work).unwrap().unwrap();
+        assert_eq!(token.unit().oversized, text.len() > SYMBOL_BYTES);
+        if token.unit().oversized {
+            assert_eq!(work.0.counters.advanced, 0);
+            assert_eq!(work.0.counters.supplied, 0);
+        }
+        let mut control = original.clone();
+        index
+            .step(&mut control, 4, &mut DocumentWork::frame(&cancel))
+            .unwrap();
+        ru_same_point(&p, &control);
+        cancel.store(true, std::sync::atomic::Ordering::Release);
+        let saved = p.clone();
+        assert!(matches!(
+            index.step_resolved(&mut p, 4, &mut DocumentWork::frame(&cancel)),
+            Err(Error::Cancelled)
+        ));
+        ru_same_point(&p, &saved);
+    }
+}
+
+#[test]
+fn ru09_exact_total_and_cancel_after_prepare_do_not_publish() {
+    for text in ["abc", &format!("a{}", "\u{301}".repeat(9000))] {
+        let cancel = Arc::new(AtomicBool::new(false));
+        let (index, _budget) = ru_index(fixture(&[(text, 0)], false), &cancel);
+        let mut at = index.start();
+        let saved = at.clone();
+        let mut work = DocumentWork::frame(&cancel);
+        index.step_resolved(&mut at, 4, &mut work).unwrap().unwrap();
+        let total = work.used();
+        assert!(total > std::mem::size_of::<ResolvedUnit<'_>>());
+        for cap in [total - 1, total, total + 1] {
+            let mut p = saved.clone();
+            let mut work = DocumentWork::bounded(&cancel, cap).unwrap();
+            let result = index.step_resolved(&mut p, 4, &mut work);
+            if cap < total {
+                assert!(matches!(result, Err(Error::Work)));
+                ru_same_point(&p, &saved);
+            } else {
+                assert!(result.unwrap().is_some());
+                ru_same_point(&p, &at);
+                assert_eq!(work.used(), total);
+            }
+        }
+        let signal = cancel.clone();
+        RESOLVED_PRECOMMIT.with(|h| {
+            *h.borrow_mut() = Some(Box::new(move || {
+                signal.store(true, std::sync::atomic::Ordering::Release)
+            }))
+        });
+        let mut p = saved.clone();
+        let mut work = DocumentWork::frame(&cancel);
+        assert!(matches!(
+            index.step_resolved(&mut p, 4, &mut work),
+            Err(Error::Cancelled)
+        ));
+        ru_same_point(&p, &saved);
+        assert_eq!(work.used(), total);
+        cancel.store(false, std::sync::atomic::Ordering::Release);
+        let next = index
+            .step_resolved(&mut p, 4, &mut DocumentWork::frame(&cancel))
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.unit().projected.start, 0);
+        ru_same_point(&p, &at);
+        eprintln!(
+            "RU09 core={} ref={} total={} exception={}",
+            std::mem::size_of::<ResolvedUnit<'_>>(),
+            std::mem::size_of::<ResolvedRefUnit<'_>>(),
+            total,
+            text.len() > SYMBOL_BYTES
+        );
+    }
+}
+
+#[test]
+fn ru12_empty_random_projected_range_preserves_legacy_result() {
+    let cancel = AtomicBool::new(false);
+    let (index, _budget) = ru_index(fixture(&[("é", 0)], false), &cancel);
+    let mut work = DocumentWork::frame(&cancel);
+    let mut called = false;
+    index
+        .text
+        .visit_projected(1..1, &mut work, |_| {
+            called = true;
+            Ok(())
+        })
+        .unwrap();
+    assert!(!called);
+    assert_eq!(work.used(), 0);
+    let mut at = index.start();
+    index
+        .step_resolved(&mut at, 4, &mut DocumentWork::frame(&cancel))
+        .unwrap()
+        .unwrap();
+    let saved = at.clone();
+    assert!(
+        index
+            .step_resolved(&mut at, 4, &mut DocumentWork::frame(&cancel))
+            .unwrap()
+            .is_none()
+    );
+    ru_same_point(&at, &saved);
+}

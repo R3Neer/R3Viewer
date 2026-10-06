@@ -157,7 +157,7 @@ struct Raw {
     run: usize,
     byte: usize,
 }
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct Position {
     raw: Raw,
     part: usize,
@@ -675,21 +675,38 @@ impl SegmentedText {
         &self,
         range: Range<usize>,
         work: &mut DocumentWork<'_>,
-        mut visit: impl FnMut(&str) -> Result<()>,
+        visit: impl FnMut(&str) -> Result<()>,
     ) -> Result<()> {
         if range.start > range.end || range.end > self.len {
             return Err(Error::Invalid);
         }
-        let mut at = range.start;
-        while at < range.end {
-            let chunk = self.chunk(at, at.saturating_add(CHUNK).min(range.end), work)?;
+        if range.is_empty() {
+            return work.admit(0);
+        }
+        let at = self.locate(range.start, work)?;
+        self.visit_projected_at(at, range.end, work, visit)
+            .map(|_| ())
+    }
+    fn visit_projected_at(
+        &self,
+        mut at: Position,
+        end: usize,
+        work: &mut DocumentWork<'_>,
+        mut visit: impl FnMut(&str) -> Result<()>,
+    ) -> Result<Position> {
+        if at.offset > end || end > self.len {
+            return Err(Error::Invalid);
+        }
+        while at.offset < end {
+            let chunk = self.chunk_at(at, at.offset.saturating_add(CHUNK).min(end), work)?;
             if chunk.len == 0 {
                 return Err(Error::Invalid);
             }
             visit(chunk.text())?;
-            at = chunk.end();
+            at = chunk.end_pos;
         }
-        work.admit(0)
+        work.admit(0)?;
+        Ok(at)
     }
     fn previous_character(
         &self,
@@ -791,7 +808,7 @@ impl SegmentedText {
         &self,
         range: Range<usize>,
         work: &mut DocumentWork<'_>,
-        mut visit: impl FnMut(Coverage) -> Result<()>,
+        visit: impl FnMut(Coverage) -> Result<()>,
     ) -> Result<()> {
         if !matches!(self.selection, PayloadSelection::Runs) {
             return Err(Error::Invalid);
@@ -799,7 +816,23 @@ impl SegmentedText {
         if range.start > range.end || range.end > self.len {
             return Err(Error::Invalid);
         }
-        let mut at = self.locate(range.start, work)?;
+        let at = self.locate(range.start, work)?;
+        self.visit_coverage_at(range, at, work, visit).map(|_| ())
+    }
+    fn visit_coverage_at(
+        &self,
+        range: Range<usize>,
+        mut at: Position,
+        work: &mut DocumentWork<'_>,
+        mut visit: impl FnMut(Coverage) -> Result<()>,
+    ) -> Result<Position> {
+        if !matches!(self.selection, PayloadSelection::Runs)
+            || at.offset != range.start
+            || range.start > range.end
+            || range.end > self.len
+        {
+            return Err(Error::Invalid);
+        }
         let mut pending: Option<Coverage> = None;
         while at.offset < range.end {
             let scalar = self.raw_scalar(at.raw, work)?.ok_or(Error::Invalid)?;
@@ -899,7 +932,8 @@ impl SegmentedText {
         if let Some(last) = pending {
             visit(last)?;
         }
-        work.admit(0)
+        work.admit(0)?;
+        Ok(at)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -956,6 +990,57 @@ struct Exception {
     unit: Unit,
     after: Point,
 }
+#[cfg(test)]
+thread_local! {
+    static RESOLVED_PRECOMMIT: std::cell::RefCell<Option<Box<dyn FnOnce()>>> =
+        const { std::cell::RefCell::new(None) };
+}
+struct PreparedStep {
+    next: Point,
+    unit: Unit,
+}
+pub(crate) struct ResolvedUnit<'i> {
+    index: &'i SegmentedIndex,
+    start: Position,
+    end: Position,
+    unit: Unit,
+}
+impl ResolvedUnit<'_> {
+    pub(crate) fn unit(&self) -> &Unit {
+        &self.unit
+    }
+    pub(crate) fn visit_projected(
+        &self,
+        work: &mut DocumentWork<'_>,
+        visit: impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        let end =
+            self.index
+                .text
+                .visit_projected_at(self.start, self.unit.projected.end, work, visit)?;
+        if end != self.end {
+            return Err(Error::Invalid);
+        }
+        work.admit(0)
+    }
+    pub(crate) fn visit_coverage(
+        &self,
+        work: &mut DocumentWork<'_>,
+        visit: impl FnMut(Coverage) -> Result<()>,
+    ) -> Result<()> {
+        let end = self.index.text.visit_coverage_at(
+            self.unit.projected.clone(),
+            self.start,
+            work,
+            visit,
+        )?;
+        if end != self.end {
+            return Err(Error::Invalid);
+        }
+        work.admit(0)
+    }
+}
+
 pub struct SegmentedIndex {
     text: SegmentedText,
     points: ChargedVec<Point>,
@@ -1110,13 +1195,13 @@ impl SegmentedIndex {
             },
         }
     }
-    fn compute(
+    fn prepare_compute(
         &self,
-        point: &mut Point,
+        point: &Point,
         hint: usize,
         adaptive: bool,
         w: &mut DocumentWork<'_>,
-    ) -> Result<Option<Unit>> {
+    ) -> Result<Option<PreparedStep>> {
         if !point.identity.same(&self.text.identity) {
             return Err(Error::Invalid);
         }
@@ -1164,15 +1249,28 @@ impl SegmentedIndex {
         } else {
             next.column = next.column.checked_add(width).ok_or(Error::Invalid)?;
         }
-        *point = next;
-        Ok(Some(unit))
+        Ok(Some(PreparedStep { next, unit }))
     }
-    pub fn step(
+    fn compute(
         &self,
         point: &mut Point,
         hint: usize,
+        adaptive: bool,
         w: &mut DocumentWork<'_>,
     ) -> Result<Option<Unit>> {
+        let prepared = self.prepare_compute(point, hint, adaptive, w)?;
+        w.admit(0)?;
+        Ok(prepared.map(|p| {
+            *point = p.next;
+            p.unit
+        }))
+    }
+    fn prepare_step(
+        &self,
+        point: &Point,
+        hint: usize,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<Option<PreparedStep>> {
         if !point.identity.same(&self.text.identity) {
             return Err(Error::Invalid);
         }
@@ -1182,10 +1280,85 @@ impl SegmentedIndex {
         })?;
         if let Some(e) = exceptions.get(i).filter(|e| e.before == point.offset) {
             w.admit(std::mem::size_of::<Exception>())?;
-            *point = e.after.clone();
-            return Ok(Some(e.unit.clone()));
+            return Ok(Some(PreparedStep {
+                next: e.after.clone(),
+                unit: e.unit.clone(),
+            }));
         }
-        self.compute(point, hint, false, w)
+        self.prepare_compute(point, hint, false, w)
+    }
+
+    pub fn step(
+        &self,
+        point: &mut Point,
+        hint: usize,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<Option<Unit>> {
+        let prepared = self.prepare_step(point, hint, w)?;
+        w.admit(0)?;
+        Ok(prepared.map(|p| {
+            *point = p.next;
+            p.unit
+        }))
+    }
+    fn prepare_resolved(
+        &self,
+        point: &Point,
+        hint: usize,
+        wrapper_bytes: usize,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<Option<PreparedStep>> {
+        w.admit_structure(std::mem::size_of::<Position>())?;
+        if !point.identity.same(&self.text.identity)
+            || point.offset != point.position.offset
+            || point.cursor.cur_cursor() != point.offset
+            || point.offset > self.text.len
+        {
+            return Err(Error::Invalid);
+        }
+        if point.offset == self.text.len {
+            w.admit(0)?;
+            return Ok(None);
+        }
+        w.admit_structure(std::mem::size_of::<ResolvedUnit<'_>>())?;
+        w.admit_structure(wrapper_bytes)?;
+        let p = self.prepare_step(point, hint, w)?.ok_or(Error::Invalid)?;
+        if p.unit.projected.start != point.offset
+            || p.unit.projected.end != p.next.offset
+            || p.next.position.offset != p.next.offset
+            || p.next.cursor.cur_cursor() != p.next.offset
+            || p.next.offset <= point.offset
+            || p.next.offset > self.text.len
+            || !p.next.identity.same(&self.text.identity)
+        {
+            return Err(Error::Invalid);
+        }
+        #[cfg(test)]
+        RESOLVED_PRECOMMIT.with(|hook| {
+            if let Some(hook) = hook.borrow_mut().take() {
+                hook();
+            }
+        });
+        w.admit(0)?;
+        Ok(Some(p))
+    }
+    pub(crate) fn step_resolved<'i>(
+        &'i self,
+        point: &mut Point,
+        hint: usize,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<Option<ResolvedUnit<'i>>> {
+        let Some(p) = self.prepare_resolved(point, hint, 0, w)? else {
+            return Ok(None);
+        };
+        let token = ResolvedUnit {
+            index: self,
+            start: point.position,
+            end: p.next.position,
+            unit: p.unit,
+        };
+        *point = p.next;
+        Ok(Some(token))
     }
 
     pub(crate) fn seek_before_with_work(
@@ -1390,13 +1563,30 @@ impl TextRefIndex {
         &self,
         range: Range<usize>,
         work: &mut DocumentWork<'_>,
-        mut visit: impl FnMut(RefCoverage) -> Result<()>,
+        visit: impl FnMut(RefCoverage) -> Result<()>,
     ) -> Result<()> {
         let text = &self.index.text;
         if range.start > range.end || range.end > text.len {
             return Err(Error::Invalid);
         }
-        let mut at = text.locate(range.start, work)?;
+        let at = text.locate(range.start, work)?;
+        self.visit_coverage_at(range, at, work, visit).map(|_| ())
+    }
+    fn visit_coverage_at(
+        &self,
+        range: Range<usize>,
+        mut at: Position,
+        work: &mut DocumentWork<'_>,
+        mut visit: impl FnMut(RefCoverage) -> Result<()>,
+    ) -> Result<Position> {
+        let text = &self.index.text;
+        if at.offset != range.start
+            || range.start > range.end
+            || range.end > text.len
+            || !matches!(text.selection, PayloadSelection::TextRef(id) if id == self.id)
+        {
+            return Err(Error::Invalid);
+        }
         work.admit_structure(std::mem::size_of::<crate::document_model::TextRef>())?;
         let record = &text.document.text_refs()[self.id as usize];
         while at.offset < range.end {
@@ -1448,10 +1638,76 @@ impl TextRefIndex {
                 offset: at.offset.checked_add(consumed).ok_or(Error::Invalid)?,
             };
         }
-        work.admit(0)
+        work.admit(0)?;
+        Ok(at)
+    }
+    pub(crate) fn step_resolved<'i>(
+        &'i self,
+        point: &mut Point,
+        hint: usize,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<Option<ResolvedRefUnit<'i>>> {
+        if !matches!(self.index.text.selection, PayloadSelection::TextRef(id) if id == self.id) {
+            return Err(Error::Invalid);
+        }
+        let extra = std::mem::size_of::<ResolvedRefUnit<'_>>()
+            .checked_sub(std::mem::size_of::<ResolvedUnit<'_>>())
+            .ok_or(Error::Invalid)?;
+        let Some(p) = self.index.prepare_resolved(point, hint, extra, work)? else {
+            return Ok(None);
+        };
+        let token = ResolvedRefUnit {
+            owner: self,
+            core: ResolvedUnit {
+                index: &self.index,
+                start: point.position,
+                end: p.next.position,
+                unit: p.unit,
+            },
+        };
+        *point = p.next;
+        Ok(Some(token))
     }
 }
 
 #[cfg(test)]
 #[path = "document_text_ref_tests.rs"]
 mod ref_tests;
+
+#[allow(dead_code)] // TextRef consumers are integrated in a separate accepted increment.
+pub(crate) struct ResolvedRefUnit<'i> {
+    owner: &'i TextRefIndex,
+    core: ResolvedUnit<'i>,
+}
+#[allow(dead_code)]
+impl ResolvedRefUnit<'_> {
+    pub(crate) fn unit(&self) -> &Unit {
+        self.core.unit()
+    }
+    pub(crate) fn visit_projected(
+        &self,
+        w: &mut DocumentWork<'_>,
+        visit: impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        self.core.visit_projected(w, visit)
+    }
+    pub(crate) fn visit_coverage(
+        &self,
+        w: &mut DocumentWork<'_>,
+        visit: impl FnMut(RefCoverage) -> Result<()>,
+    ) -> Result<()> {
+        if !std::ptr::eq(self.core.index, &self.owner.index) {
+            return Err(Error::Invalid);
+        }
+        let end = self.owner.visit_coverage_at(
+            self.core.unit.projected.clone(),
+            self.core.start,
+            w,
+            visit,
+        )?;
+        if end != self.core.end {
+            return Err(Error::Invalid);
+        }
+        w.admit(0)
+    }
+}
