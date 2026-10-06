@@ -169,6 +169,190 @@ impl RetainedSyntaxInput {
             _owner: Some(owner),
         }))
     }
+    /// One complete copy of validated CodeText, never an intermediate flat String.
+    /// Domain is validated again at this boundary; all allocations use the input's document budget.
+    pub(crate) fn copy_code_domain(
+        document: &Arc<Document>,
+        budget: &ConsumerBudget,
+        domain_id: u32,
+        context: &OperationContext,
+    ) -> Result<Option<CodeDomainCopy>, FallbackReason> {
+        use sha2::{Digest, Sha256};
+        context.check(Instant::now())?;
+        if !budget.belongs_to(document) || !matches!(context, OperationContext::Document { .. }) {
+            return Err(FallbackReason::InvalidIpc);
+        }
+        let domain = document
+            .domains()
+            .get(domain_id as usize)
+            .ok_or(FallbackReason::InvalidIpc)?;
+        let block = document
+            .blocks()
+            .get(domain.owner() as usize)
+            .ok_or(FallbackReason::InvalidIpc)?;
+        if domain.kind() != 0
+            || block.kind() != 10
+            || block.domain() != domain_id
+            || block.aux0() != 1
+        {
+            return Err(FallbackReason::InvalidIpc);
+        }
+        let end_run = (domain.first_run() as usize)
+            .checked_add(domain.run_count() as usize)
+            .ok_or(FallbackReason::InvalidIpc)?;
+        let runs = document
+            .runs()
+            .get(domain.first_run() as usize..end_run)
+            .ok_or(FallbackReason::InvalidIpc)?;
+        let mut segments = ChargedVec::new(budget, domain.run_count() as usize)
+            .map_err(|_| FallbackReason::SourceBudget)?;
+        let mut total = 0usize;
+        let mut count = 1usize;
+        let mut line_bytes = 0usize;
+        for (ordinal, run) in runs.iter().enumerate() {
+            context.check(Instant::now())?;
+            #[cfg(test)]
+            CODE_DOMAIN_STATS.with(|slot| {
+                let mut n = slot.get();
+                n[0] += 1;
+                slot.set(n);
+            });
+            if run.kind() != 6 || run.domain() != domain_id || run.ordinal() as usize != ordinal {
+                return Err(FallbackReason::InvalidIpc);
+            }
+            let part = document
+                .text(run.text())
+                .map_err(|_| FallbackReason::InvalidIpc)?;
+            let prefix = total;
+            total = total
+                .checked_add(part.len())
+                .filter(|&n| n <= crate::syntax_worker::MAX_SOURCE)
+                .ok_or(FallbackReason::SourceBudget)?;
+            segments
+                .push(crate::document_code::CodeSegment {
+                    run: run.id(),
+                    payload_start: prefix as u32,
+                    payload_end: total as u32,
+                })
+                .map_err(|_| FallbackReason::SourceBudget)?;
+            let mut at = 0;
+            while at < part.len() {
+                context.check(Instant::now())?;
+                let end = utf8_chunk_end(part, at);
+                for &b in &part.as_bytes()[at..end] {
+                    line_bytes = line_bytes.checked_add(1).ok_or(FallbackReason::LongLine)?;
+                    if line_bytes > crate::syntax_worker::MAX_LINE {
+                        return Err(FallbackReason::LongLine);
+                    }
+                    if b == b'\n' {
+                        count = count.checked_add(1).ok_or(FallbackReason::SourceBudget)?;
+                        line_bytes = 0;
+                    }
+                }
+                at = end;
+            }
+        }
+        context.check(Instant::now())?;
+        if total == 0 {
+            return Ok(None);
+        }
+        // Pre-admit eventual snapshot metadata only AFTER the first pass proves nonempty,
+        // and BEFORE allocating/filling its retained input. The exact concrete type closes the charge.
+        let snapshot_owner = budget
+            .reserve(size_of::<crate::document_code::CodeSnapshot>() + 2 * size_of::<usize>())
+            .map_err(|_| FallbackReason::SourceBudget)?;
+        let owner = budget
+            .reserve(size_of::<Self>() + 4 * size_of::<usize>() + size_of::<String>())
+            .map_err(|_| FallbackReason::SourceBudget)?;
+        let charge = budget
+            .reserve(total)
+            .map_err(|_| FallbackReason::SourceBudget)?;
+        let mut text = String::new();
+        text.try_reserve_exact(total)
+            .map_err(|_| FallbackReason::SourceBudget)?;
+        let overshoot = budget
+            .reserve(text.capacity().saturating_sub(total))
+            .map_err(|_| FallbackReason::SourceBudget)?;
+        let mut lines = ChargedVec::new(budget, count).map_err(|_| FallbackReason::SourceBudget)?;
+        lines.push(0).map_err(|_| FallbackReason::SourceBudget)?;
+        let mut hash = Sha256::new();
+        for run in runs {
+            context.check(Instant::now())?;
+            #[cfg(test)]
+            CODE_DOMAIN_STATS.with(|slot| {
+                let mut n = slot.get();
+                n[1] += 1;
+                slot.set(n);
+            });
+            let part = document
+                .text(run.text())
+                .map_err(|_| FallbackReason::InvalidIpc)?;
+            let mut at = 0;
+            while at < part.len() {
+                code_copy_checkpoint(context)?;
+                let end = utf8_chunk_end(part, at);
+                let base = text.len();
+                for (local, &b) in part.as_bytes()[at..end].iter().enumerate() {
+                    if b == b'\n' {
+                        lines
+                            .push(
+                                u32::try_from(base + local + 1)
+                                    .map_err(|_| FallbackReason::SourceBudget)?,
+                            )
+                            .map_err(|_| FallbackReason::SourceBudget)?;
+                    }
+                }
+                text.push_str(&part[at..end]);
+                #[cfg(test)]
+                CODE_COPY_BYTES.with(|slot| slot.set(slot.get() + end - at));
+                hash.update(&part.as_bytes()[at..end]);
+                at = end;
+            }
+        }
+        context.check(Instant::now())?;
+        if text.len() != total || lines.as_slice().len() != count {
+            return Err(FallbackReason::InvalidIpc);
+        }
+        let digest = hash.finalize().into();
+        #[cfg(test)]
+        CODE_DOMAIN_STATS.with(|slot| {
+            let mut n = slot.get();
+            n[2] += 1;
+            slot.set(n);
+        });
+        Ok(Some(CodeDomainCopy {
+            input: Arc::new(Self {
+                source: Arc::new(text),
+                budget: Some(budget.clone()),
+                lines: Some(lines),
+                _source: Some(charge),
+                _overshoot: Some(overshoot),
+                _owner: Some(owner),
+            }),
+            segments,
+            digest,
+            snapshot_owner,
+        }))
+    }
+    #[cfg(test)]
+    pub(crate) fn own_copy_cancel_after(chunks: Option<usize>) {
+        CODE_COPY_CANCEL_AFTER.with(|slot| slot.set(chunks));
+        CODE_COPY_BYTES.with(|slot| slot.set(0));
+    }
+    #[cfg(test)]
+    pub(crate) fn own_domain_stats(reset: bool) -> [usize; 3] {
+        CODE_DOMAIN_STATS.with(|slot| {
+            let n = slot.get();
+            if reset {
+                slot.set([0; 3]);
+            }
+            n
+        })
+    }
+    #[cfg(test)]
+    pub(crate) fn own_copy_bytes() -> usize {
+        CODE_COPY_BYTES.with(|slot| slot.get())
+    }
     pub(crate) fn text(&self) -> &str {
         &self.source
     }
@@ -198,6 +382,13 @@ impl std::ops::Deref for RetainedSyntaxInput {
     fn deref(&self) -> &str {
         self.text()
     }
+}
+
+pub(crate) struct CodeDomainCopy {
+    pub(crate) input: Arc<RetainedSyntaxInput>,
+    pub(crate) segments: ChargedVec<crate::document_code::CodeSegment>,
+    pub(crate) digest: [u8; 32],
+    pub(crate) snapshot_owner: Charge,
 }
 
 pub(crate) struct RetainedRoleSet {
@@ -573,4 +764,35 @@ mod tests {
         ));
         assert_eq!(budget.used(), base);
     }
+}
+
+/// Advance at most4096 bytes, preserving a complete UTF8 boundary without scanning the prefix.
+fn utf8_chunk_end(text: &str, at: usize) -> usize {
+    let mut end = at.saturating_add(4096).min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
+}
+
+#[cfg(test)]
+std::thread_local! {
+    static CODE_COPY_CANCEL_AFTER: std::cell::Cell<Option<usize>> = const { std::cell::Cell::new(None) };
+    static CODE_COPY_BYTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static CODE_DOMAIN_STATS: std::cell::Cell<[usize;3]> = const {std::cell::Cell::new([0;3])};
+}
+fn code_copy_checkpoint(context: &OperationContext) -> Result<(), FallbackReason> {
+    #[cfg(test)]
+    CODE_COPY_CANCEL_AFTER.with(|slot| {
+        if let Some(remaining) = slot.get() {
+            if remaining == 0 {
+                if let OperationContext::Document { cancel, .. } = context {
+                    cancel.store(true, Ordering::Release);
+                }
+            } else {
+                slot.set(Some(remaining - 1));
+            }
+        }
+    });
+    context.check(Instant::now())
 }

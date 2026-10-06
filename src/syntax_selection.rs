@@ -35,12 +35,12 @@ impl SyntaxSelection {
             }
         });
         if let Some(token) = token {
-            let explicit_alias = cli.language.is_some() && token.eq_ignore_ascii_case("pwsh");
-            if let Some(name) = if explicit_alias {
-                Some("PowerShell")
+            let selected = if cli.language.is_some() {
+                select_explicit_token(token)
             } else {
                 resolve(token)
-            } {
+            };
+            if let Some(name) = selected {
                 return if name == "Plain Text" {
                     Self::plain()
                 } else {
@@ -152,6 +152,15 @@ impl StructureSelection {
             Self::None { diagnostic } => diagnostic.as_deref(),
             Self::Toml | Self::Json | Self::Yaml | Self::Xml => None,
         }
+    }
+}
+/// Explicit built-in language token only: no origin or interpreter inference.
+pub(crate) fn select_explicit_token(token: &str) -> Option<&'static str> {
+    let token = token.trim();
+    if token.eq_ignore_ascii_case("pwsh") {
+        Some("PowerShell")
+    } else {
+        resolve(token)
     }
 }
 // Match the local worker: exact extension, then optional leading dot removed.

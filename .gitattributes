@@ -28,3 +28,6 @@ tests/fixtures/document-d2a/** -text whitespace=cr-at-eol
 
 # Reviewed syntax role fixtures retain exact source offsets, including CRLF.
 tests/fixtures/syntax-d4/** -text whitespace=cr-at-eol
+
+# Code semantic fixtures retain reviewed bytes and CRLF offsets.
+tests/fixtures/markdown-code/** -text whitespace=cr-at-eol
