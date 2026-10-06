@@ -771,6 +771,31 @@ mod platform {
                     }
                 },
             ));
+            // Observation barrier only: real writer/readers are owned. Existing
+            // fault16 acts on the writer receipt; no close semantics changed.
+            #[cfg(test)]
+            if take_fault(128, false) {
+                let child = p.child.as_mut().ok_or_else(issue)?;
+                if p.writer.is_none()
+                    || p.reader.is_none()
+                    || p.stderr.is_none()
+                    || child.try_wait().map_err(|_| issue())?.is_some()
+                {
+                    return Err(issue());
+                }
+                BLOCKED_PID.store(child.id(), Ordering::Release);
+                while take_fault(128, false)
+                    && !requested.load(Ordering::Acquire)
+                    && !cancel.load(Ordering::Acquire)
+                    && Instant::now() < deadline
+                {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                BLOCKED_PID.store(0, Ordering::Release);
+                if requested.load(Ordering::Acquire) || cancel.load(Ordering::Acquire) {
+                    return Err(Error::new(ErrorKind::Cancelled));
+                }
+            }
             p.collect();
             if p.sticky.is_some() {
                 return Err(p.sticky.ok_or_else(issue)?);
@@ -1158,5 +1183,168 @@ mod native_fault_tests {
         .unwrap();
         assert_eq!(error.kind, ErrorKind::Timeout);
         assert!(!PENDING.load(Ordering::Acquire));
+    }
+
+    // D3c caller controls: cfg-only suffix, original controller/oracles unchanged.
+    struct CallerFaultOwner;
+    impl CallerFaultOwner {
+        fn reap(&self) -> Option<Error> {
+            platform::FAULTS.store(0, Ordering::Release);
+            let mut owner = DocumentController::new();
+            if !owner.pending_cleanup() {
+                return None;
+            }
+            owner
+                .retry_cleanup()
+                .expect("owned harness retry, never caller retry");
+            let ControllerPoll::CleanupComplete { original_failure } = finish(&mut owner) else {
+                panic!("owned physical cleanup failed");
+            };
+            assert!(!owner.pending_cleanup());
+            original_failure
+        }
+    }
+    impl Drop for CallerFaultOwner {
+        fn drop(&mut self) {
+            platform::FAULTS.store(0, Ordering::Release);
+            let mut owner = DocumentController::new();
+            if owner.pending_cleanup() && owner.retry_cleanup().is_ok() {
+                let deadline = Instant::now() + Duration::from_secs(15);
+                while matches!(owner.poll(), ControllerPoll::Pending) && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(2));
+                }
+                if owner.pending_cleanup() {
+                    eprintln!("OWN D3c harness cleanup still Pending; not a passing receipt");
+                }
+            }
+        }
+    }
+    fn wait_own_blocked() {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while platform::BLOCKED_PID.load(Ordering::Acquire) == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "own verified job beforeSTART witness"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
+    }
+    #[test]
+    fn co09_caller_sticky_containment_pending_never_returns_source_or_retries() {
+        let owner = CallerFaultOwner;
+        let config = crate::document_output::tests::config();
+        platform::FAULTS.store(16, Ordering::Release);
+        let original = Arc::new("# original remains\n".to_owned());
+        let weak = Arc::downgrade(&original);
+        let error = crate::document_output::prepare(
+            executable(),
+            original,
+            SourceOrigin::Literal,
+            80,
+            &config,
+            Arc::new(AtomicBool::new(false)),
+            crate::document_output::OUTPUT_LIMIT,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, crate::document_output::ErrorKind::Preparation);
+        assert!(error.cleanup_pending);
+        assert_eq!(error.original_failure.unwrap().kind, ErrorKind::Containment);
+        assert!(PENDING.load(Ordering::Acquire));
+        assert!(weak.upgrade().is_some());
+        let error2 = crate::document_output::prepare(
+            executable(),
+            Arc::new("next".into()),
+            SourceOrigin::Literal,
+            80,
+            &config,
+            Arc::new(AtomicBool::new(false)),
+            crate::document_output::OUTPUT_LIMIT,
+        )
+        .unwrap_err();
+        assert!(error2.cleanup_pending);
+        assert!(PENDING.load(Ordering::Acquire));
+        assert_eq!(owner.reap().unwrap().kind, ErrorKind::Containment);
+        assert!(weak.upgrade().is_none());
+        eprintln!(
+            "CO09 caller noPrepared/Pending/stickyContainment; harness physicalReap then sourceLease dropped; no caller retry/spawn"
+        );
+    }
+    #[test]
+    fn co10_caller_cancel_live_before_start_with_close_pending_preserves_130() {
+        let owner = CallerFaultOwner;
+        let config = crate::document_output::tests::config();
+        let exe = executable();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let signal = cancel.clone();
+        let original = Arc::new("# cancel original\n".to_owned());
+        let weak = Arc::downgrade(&original);
+        platform::FAULTS.store(16 | 128, Ordering::Release);
+        let call = thread::spawn(move || {
+            crate::document_output::prepare(
+                exe,
+                original,
+                SourceOrigin::Literal,
+                80,
+                &config,
+                cancel,
+                crate::document_output::OUTPUT_LIMIT,
+            )
+        });
+        wait_own_blocked();
+        signal.store(true, Ordering::Release);
+        let error = call.join().unwrap().unwrap_err();
+        assert_eq!(error.kind, crate::document_output::ErrorKind::Cancelled);
+        assert_eq!(error.exit_code(), 130);
+        assert!(error.cleanup_pending);
+        assert_eq!(error.original_failure.unwrap().kind, ErrorKind::Cancelled);
+        assert!(PENDING.load(Ordering::Acquire));
+        assert!(weak.upgrade().is_some());
+        assert_eq!(owner.reap().unwrap().kind, ErrorKind::Cancelled);
+        assert!(weak.upgrade().is_none());
+        eprintln!(
+            "CO10 verifiedBeforeSTART cancel130/Pending/noPrepared; harness physicalReap preserves Cancelled cause"
+        );
+    }
+    #[test]
+    fn co11_caller_busy_without_pending_never_falls_back_or_cancels_other_owner() {
+        let _fault_owner = CallerFaultOwner;
+        let config = crate::document_output::tests::config();
+        platform::FAULTS.store(64, Ordering::Release);
+        let mut controller = DocumentController::new();
+        let weak = request(&mut controller);
+        wait_own_blocked();
+        assert!(!controller.pending_cleanup());
+        let error = crate::document_output::prepare(
+            executable(),
+            Arc::new("second request".into()),
+            SourceOrigin::Literal,
+            80,
+            &config,
+            Arc::new(AtomicBool::new(false)),
+            crate::document_output::OUTPUT_LIMIT,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind, crate::document_output::ErrorKind::Preparation);
+        assert!(!error.cleanup_pending);
+        assert_eq!(
+            error.original_failure.unwrap().kind,
+            ErrorKind::PendingCleanup
+        );
+        assert!(matches!(controller.poll(), ControllerPoll::Pending));
+        assert_ne!(platform::BLOCKED_PID.load(Ordering::Acquire), 0);
+        controller.cancel();
+        assert!(matches!(
+            finish(&mut controller),
+            ControllerPoll::Failed(Error {
+                kind: ErrorKind::Cancelled,
+                ..
+            })
+        ));
+        assert!(!controller.pending_cleanup());
+        assert!(weak.upgrade().is_none());
+        platform::FAULTS.store(0, Ordering::Release);
+        eprintln!(
+            "CO11 BUSY/noPending caller noPrepared; previous own request remained blocked until harness cancel"
+        );
     }
 }

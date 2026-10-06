@@ -88,3 +88,6 @@ mod document_view;
 mod document_inline;
 
 mod document_roles;
+
+pub mod document_output;
+pub mod document_selection;

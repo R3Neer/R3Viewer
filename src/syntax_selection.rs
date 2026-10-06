@@ -16,6 +16,9 @@ impl SyntaxSelection {
             return Self::plain();
         }
         let token = cli.language.as_deref().map(str::trim).or_else(|| {
+            if cli.format == Format::Markdown {
+                return Some("markdown");
+            }
             if cli.format == Format::Toml {
                 return Some("toml");
             }
@@ -91,6 +94,9 @@ impl StructureSelection {
         origin: &SourceOrigin,
         typed: Option<&r3viewer_wire::TypedInput>,
     ) -> Result<Self, crate::input::InputError> {
+        if crate::document_selection::DocumentSelection::select(cli, origin, typed)?.is_markdown() {
+            return Ok(Self::None { diagnostic: None });
+        }
         if matches!(
             cli.format,
             Format::Toml | Format::Json | Format::Yaml | Format::Xml

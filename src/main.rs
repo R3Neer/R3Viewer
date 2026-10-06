@@ -96,6 +96,73 @@ fn main() -> ExitCode {
     if cancelled.load(Ordering::Relaxed) {
         return ExitCode::from(130);
     }
+    let document_selection = match r3viewer::document_selection::DocumentSelection::select(
+        &cli,
+        &source.origin,
+        source.typed.as_ref(),
+    ) {
+        Ok(selection) => selection,
+        Err(error) => {
+            eprintln!("r3viewer: {}", text::safe_text(&error.message));
+            return ExitCode::from(error.code);
+        }
+    };
+    let stdout_tty = io::stdout().is_terminal();
+    let interactive = !cli.inline && stdout_tty && session::available();
+    // Complete noninteractive Markdown; interactive Markdown currently shows Source.
+    if document_selection.is_markdown() && !interactive {
+        let executable = match std::env::current_exe() {
+            Ok(path) => path,
+            Err(_) => {
+                eprintln!("r3viewer: no se puede localizar el worker de Documento");
+                return ExitCode::from(1);
+            }
+        };
+        let original = Arc::new(std::mem::take(&mut source.text));
+        let columns = if stdout_tty {
+            crossterm::terminal::size()
+                .map(|(width, _)| width)
+                .unwrap_or(80)
+        } else {
+            80
+        };
+        let prepared = match r3viewer::document_output::prepare(
+            executable,
+            original,
+            source.origin,
+            columns,
+            &presentation,
+            cancelled.clone(),
+            r3viewer::document_output::OUTPUT_LIMIT,
+        ) {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                if error.exit_code() != 130 {
+                    eprintln!("r3viewer: {}", error.diagnostic());
+                }
+                return ExitCode::from(error.exit_code());
+            }
+        };
+        if let Some(diagnostic) = prepared.diagnostic {
+            eprintln!("r3viewer: {diagnostic}");
+        }
+        return match output::write_cancelable(prepared.content, &cancelled) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(output::OutputError::Cancelled) => ExitCode::from(130),
+            Err(output::OutputError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe => {
+                ExitCode::SUCCESS
+            }
+            Err(output::OutputError::Io(error)) => {
+                eprintln!("r3viewer: salida fallida: {error}");
+                ExitCode::from(1)
+            }
+        };
+    }
+    if document_selection.is_markdown() && interactive {
+        eprintln!(
+            "r3viewer: Markdown interactivo pendiente; se muestra Fuente. Usa --inline/-i para la vista Markdown."
+        );
+    }
     let syntax = r3viewer::syntax_selection::SyntaxSelection::select(&cli, &source.origin);
     let structure = match r3viewer::syntax_selection::StructureSelection::select(
         &cli,
@@ -108,7 +175,7 @@ fn main() -> ExitCode {
             return ExitCode::from(error.code);
         }
     };
-    if !cli.inline && io::stdout().is_terminal() && session::available() {
+    if interactive {
         let model = match r3viewer::presentation::SafeTextModel::new(source.text, &cancelled) {
             Ok(model) => Arc::new(model),
             Err(r3viewer::presentation::PrepareError::Cancelled) => return ExitCode::from(130),

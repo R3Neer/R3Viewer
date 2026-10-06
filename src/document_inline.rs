@@ -71,7 +71,7 @@ pub(crate) fn render(
         }
     }
 }
-fn source_fallback(
+pub(crate) fn source_fallback(
     source: &str,
     numbers: bool,
     cancel: &AtomicBool,

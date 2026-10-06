@@ -49,6 +49,7 @@ pub enum Format {
     Auto,
     Text,
     Code,
+    Markdown,
     Toml,
     Json,
     Yaml,
