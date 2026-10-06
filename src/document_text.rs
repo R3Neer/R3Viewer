@@ -134,15 +134,18 @@ impl<'a> DocumentWork<'a> {
         self.0.admit(n).map_err(Into::into)
     }
     fn record(&mut self, identity: &Identity, run: usize) -> Result<bool> {
+        self.record_size(
+            identity,
+            run,
+            std::mem::size_of::<crate::document_model::Run>(),
+        )
+    }
+    fn record_size(&mut self, identity: &Identity, run: usize, bytes: usize) -> Result<bool> {
         let cached = self
             .1
             .as_ref()
             .is_some_and(|(id, r)| id.same(identity) && *r == run);
-        self.admit(if cached {
-            1
-        } else {
-            std::mem::size_of::<crate::document_model::Run>()
-        })?;
+        self.admit(if cached { 1 } else { bytes })?;
         if !cached {
             self.1 = Some((identity.clone(), run));
         }
@@ -191,7 +194,14 @@ impl Chunk {
             .expect("bounded chunk endpoint")
     }
 }
+#[derive(Clone, Copy)]
+#[allow(dead_code)] // TextRef consumer is wired in the subsequent renderer/inline cut.
+enum PayloadSelection {
+    Runs,
+    TextRef(u32),
+}
 pub struct SegmentedText {
+    selection: PayloadSelection,
     document: Arc<Document>,
     runs: Range<usize>,
     identity: Identity,
@@ -242,6 +252,26 @@ impl SegmentedText {
             .checked_add(run_ordinals.start)
             .ok_or(Error::Invalid)?
             ..first.checked_add(run_ordinals.end).ok_or(Error::Invalid)?;
+        Self::prepare_selection(
+            document,
+            runs,
+            PayloadSelection::Runs,
+            budget,
+            cancel,
+            profile,
+        )
+    }
+    fn prepare_selection(
+        document: Arc<Document>,
+        runs: Range<usize>,
+        selection: PayloadSelection,
+        budget: &ConsumerBudget,
+        cancel: &AtomicBool,
+        profile: IndexProfile,
+    ) -> Result<Self> {
+        if !budget.belongs_to(&document) {
+            return Err(Error::Invalid);
+        }
         let scratch = budget.reserve(
             2 * CHUNK
                 + 8 * std::mem::size_of::<Point>()
@@ -251,6 +281,7 @@ impl SegmentedText {
                 + 256,
         )?;
         let mut result = Self {
+            selection,
             document,
             runs: runs.clone(),
             identity: Identity::new(),
@@ -316,28 +347,46 @@ impl SegmentedText {
     pub fn document(&self) -> &Arc<Document> {
         &self.document
     }
+    fn payload<'s>(&'s self, ordinal: usize, w: &mut DocumentWork<'_>) -> Result<(&'s str, bool)> {
+        match self.selection {
+            PayloadSelection::TextRef(id) => {
+                if ordinal != 0 {
+                    return Err(Error::Invalid);
+                }
+                w.record_size(
+                    &self.identity,
+                    ordinal,
+                    std::mem::size_of::<crate::document_model::TextRef>(),
+                )?;
+                Ok((self.document.text(id).map_err(|_| Error::Invalid)?, false))
+            }
+            PayloadSelection::Runs => {
+                let run = self.document.runs().get(ordinal).ok_or(Error::Invalid)?;
+                let entering = w.record(&self.identity, ordinal)?;
+                match run.kind() {
+                    0 | 1 | 4 | 6 | 7 => {
+                        if entering {
+                            w.admit(std::mem::size_of::<crate::document_model::TextRef>())?;
+                        }
+                        Ok((
+                            self.document.text(run.text()).map_err(|_| Error::Invalid)?,
+                            false,
+                        ))
+                    }
+                    2 => Ok((" ", true)),
+                    3 => Ok(("\n", true)),
+                    kind => Err(Error::UnsupportedRun(kind)),
+                }
+            }
+        }
+    }
     fn raw_scalar(&self, mut at: Raw, w: &mut DocumentWork<'_>) -> Result<Option<Scalar>> {
         loop {
             w.admit(0)?;
             if at.run >= self.runs.end {
                 return Ok(None);
             }
-            let run = &self.document.runs()[at.run];
-            let entering = w.record(&self.identity, at.run)?;
-            let (text, synthetic) = match run.kind() {
-                0 | 1 | 4 | 6 | 7 => {
-                    if entering {
-                        w.admit(std::mem::size_of::<crate::document_model::TextRef>())?;
-                    }
-                    (
-                        self.document.text(run.text()).map_err(|_| Error::Invalid)?,
-                        false,
-                    )
-                }
-                2 => (" ", true),
-                3 => ("\n", true),
-                k => return Err(Error::UnsupportedRun(k)),
-            };
+            let (text, synthetic) = self.payload(at.run, w)?;
             if at.byte == text.len() {
                 at = Raw {
                     run: at.run.checked_add(1).ok_or(Error::Invalid)?,
@@ -549,6 +598,9 @@ impl SegmentedText {
             run: run as usize,
             byte,
         };
+        if !matches!(self.selection, PayloadSelection::Runs) {
+            return Err(Error::Invalid);
+        }
         if !self.runs.contains(&target.run) {
             return Err(Error::Invalid);
         }
@@ -658,30 +710,12 @@ impl SegmentedText {
                         return Err(Error::Invalid);
                     }
                     raw.run -= 1;
-                    let run = &self.document.runs()[raw.run];
-                    w.admit(std::mem::size_of_val(run))?;
-                    raw.byte = match run.kind() {
-                        0 | 1 | 4 | 6 | 7 => self
-                            .document
-                            .text(run.text())
-                            .map_err(|_| Error::Invalid)?
-                            .len(),
-                        2 | 3 => 1,
-                        k => return Err(Error::UnsupportedRun(k)),
-                    };
+                    raw.byte = self.payload(raw.run, w)?.0.len();
                     if raw.byte == 0 {
                         continue;
                     }
                 }
-                let run = &self.document.runs()[raw.run];
-                let text = match run.kind() {
-                    0 | 1 | 4 | 6 | 7 => {
-                        self.document.text(run.text()).map_err(|_| Error::Invalid)?
-                    }
-                    2 => " ",
-                    3 => "\n",
-                    k => return Err(Error::UnsupportedRun(k)),
-                };
+                let text = self.payload(raw.run, w)?.0;
                 let (byte, _) = text
                     .get(..raw.byte)
                     .ok_or(Error::Invalid)?
@@ -759,6 +793,9 @@ impl SegmentedText {
         work: &mut DocumentWork<'_>,
         mut visit: impl FnMut(Coverage) -> Result<()>,
     ) -> Result<()> {
+        if !matches!(self.selection, PayloadSelection::Runs) {
+            return Err(Error::Invalid);
+        }
         if range.start > range.end || range.end > self.len {
             return Err(Error::Invalid);
         }
@@ -934,6 +971,9 @@ impl SegmentedIndex {
         p: &Point,
         w: &mut DocumentWork<'_>,
     ) -> Result<(u32, usize)> {
+        if !matches!(self.text.selection, PayloadSelection::Runs) {
+            return Err(Error::Invalid);
+        }
         if !p.identity.same(&self.text.identity) {
             return Err(Error::Invalid);
         }
@@ -1215,8 +1255,6 @@ impl SegmentedIndex {
     }
 }
 
-/// Physical Run/local bytes remain Source coordinates. Only expanded C1 spelling
-/// has nonzero visual affinity; this never becomes a Source or Code offset.
 pub(crate) fn validate_visual_part(
     document: &Document,
     run: u32,
@@ -1269,3 +1307,151 @@ fn charged_upper(
 #[cfg(test)]
 #[path = "document_text_tests.rs"]
 mod tests;
+/// A real TextRef payload selection; internal ordinal zero is a piece cursor,
+/// never a fabricated Run, Domain, source range or Document.
+#[allow(dead_code)] // Closed crate-private library pending consumer wiring.
+pub(crate) struct TextRefIndex {
+    id: u32,
+    index: SegmentedIndex,
+    _metadata: Charge,
+}
+#[allow(dead_code)] // Closed crate-private library pending consumer wiring.
+pub(crate) struct RefCoverage {
+    pub text_ref: u32,
+    pub local: Range<usize>,
+    pub source: Range<u32>,
+    pub origin: u32,
+    pub relation: Relation,
+    pub control_projected: bool,
+}
+#[allow(dead_code)] // Closed crate-private library pending consumer wiring.
+impl TextRefIndex {
+    pub(crate) fn prepare(
+        document: Arc<Document>,
+        id: u32,
+        budget: &ConsumerBudget,
+        cancel: &AtomicBool,
+        profile: IndexProfile,
+    ) -> Result<Self> {
+        let profile = profile.checked()?;
+        if !budget.belongs_to(&document) {
+            return Err(Error::Invalid);
+        }
+        if cancel.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(Error::Cancelled);
+        }
+        document
+            .text_refs()
+            .get(id as usize)
+            .ok_or(Error::Invalid)?;
+        document.text(id).map_err(|_| Error::Invalid)?;
+        let metadata = budget.reserve(std::mem::size_of::<Self>())?;
+        let text = SegmentedText::prepare_selection(
+            document,
+            0..1,
+            PayloadSelection::TextRef(id),
+            budget,
+            cancel,
+            profile,
+        )?;
+        let index = SegmentedIndex::prepare_with_profile(text, budget, cancel, profile)?;
+        Ok(Self {
+            id,
+            index,
+            _metadata: metadata,
+        })
+    }
+    pub(crate) fn id(&self) -> u32 {
+        self.id
+    }
+    pub(crate) fn start(&self) -> Point {
+        self.index.start()
+    }
+    pub(crate) fn len(&self) -> usize {
+        self.index.text.len
+    }
+    pub(crate) fn step(
+        &self,
+        at: &mut Point,
+        hint: usize,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<Option<Unit>> {
+        self.index.step(at, hint, work)
+    }
+    pub(crate) fn visit_projected(
+        &self,
+        range: Range<usize>,
+        work: &mut DocumentWork<'_>,
+        visit: impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        self.index.text.visit_projected(range, work, visit)
+    }
+    pub(crate) fn visit_coverage(
+        &self,
+        range: Range<usize>,
+        work: &mut DocumentWork<'_>,
+        mut visit: impl FnMut(RefCoverage) -> Result<()>,
+    ) -> Result<()> {
+        let text = &self.index.text;
+        if range.start > range.end || range.end > text.len {
+            return Err(Error::Invalid);
+        }
+        let mut at = text.locate(range.start, work)?;
+        work.admit_structure(std::mem::size_of::<crate::document_model::TextRef>())?;
+        let record = &text.document.text_refs()[self.id as usize];
+        while at.offset < range.end {
+            let scalar = text.raw_scalar(at.raw, work)?.ok_or(Error::Invalid)?;
+            let mut bytes = [0; 8];
+            let len = text.projection(scalar, work, &mut bytes)?;
+            let projected = len != scalar.ch.len_utf8();
+            let relation = if record.kind() == 1 {
+                Relation::EnclosingToken
+            } else if projected {
+                Relation::ControlProjection
+            } else {
+                Relation::ExactSource
+            };
+            let source = if record.kind() == 0 {
+                let a = u32::try_from(scalar.raw.byte).map_err(|_| Error::Invalid)?;
+                let b = u32::try_from(scalar.raw_end).map_err(|_| Error::Invalid)?;
+                record.start().checked_add(a).ok_or(Error::Invalid)?
+                    ..record.start().checked_add(b).ok_or(Error::Invalid)?
+            } else {
+                work.admit_structure(std::mem::size_of::<crate::document_model::Origin>())?;
+                let origin = text
+                    .document
+                    .origins()
+                    .get(record.origin() as usize)
+                    .ok_or(Error::Invalid)?;
+                origin.start()..origin.end()
+            };
+            work.admit_structure(std::mem::size_of::<RefCoverage>())?;
+            visit(RefCoverage {
+                text_ref: self.id,
+                local: scalar.raw.byte..scalar.raw_end,
+                source,
+                origin: record.origin(),
+                relation,
+                control_projected: projected,
+            })?;
+            let consumed = (len - at.part).min(range.end - at.offset);
+            let part = at.part.checked_add(consumed).ok_or(Error::Invalid)?;
+            if !std::str::from_utf8(&bytes[..len])
+                .map_err(|_| Error::Invalid)?
+                .is_char_boundary(part)
+            {
+                return Err(Error::Invalid);
+            }
+            at = Position {
+                raw: if part == len { scalar.next } else { scalar.raw },
+                part: if part == len { 0 } else { part },
+                offset: at.offset.checked_add(consumed).ok_or(Error::Invalid)?,
+            };
+        }
+        work.admit(0)
+    }
+}
+
+#[cfg(test)]
+#[path = "document_text_ref_tests.rs"]
+mod ref_tests;

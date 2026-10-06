@@ -83,3 +83,8 @@ mod document_inline_source;
 
 mod document_layout;
 mod document_view;
+
+#[allow(dead_code)] // Awaiting the independently reviewed real Markdown caller.
+mod document_inline;
+
+mod document_roles;
