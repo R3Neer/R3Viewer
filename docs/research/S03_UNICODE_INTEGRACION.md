@@ -1,6 +1,6 @@
 # Integración Unicode: UIR-01 corregido en R2
 
-Estado actual: integración R2 **no aprobada** por S03-AE-NUKEY01; corrección R3 privada en revisión/aceptación. UIR-01 sigue cerrado en el delta ya revisado.
+Estado actual: R3 corrige S03-AE-NUKEY01 con revisión y aceptación independientes; integración completa pendiente de ConPTY/runtime y demás criterios. UIR-01 sigue cerrado en el delta ya revisado.
 
 
 ## Estado vigente R2
@@ -40,3 +40,10 @@ Aceptación independiente R2: clave de Record Nushell `a` +8192 U+0301 (16385B),
 Cancelación durante Source.prepare/provenance/inline, recuperación del viewport, YAMLprocedencia/historial y cuota semántica pasan en esa aceptación. El primer oráculo propio de dos planes ASCII3000 era infundado (reservas cabían); FAIL preservado y nueva expectativa previa exact262144/+1 y viewport262145 rechaza completo. No adaptar aceptación al output. YAML32M ArenaBudget más fallbackSource aislado5.948s no explica3695.62s ni WorkerExited históricos. ConPTY, runtime externo congelado, visual/Unix y aceptación general siguen pendientes.
 
 Corrección privada R3 por raíz: único brazo `None if pane.key => NuValue { key:true }` antes del NoneSource. Controles propios preparados antesoutputs: claveRecordK/Enter, claveTableK y Source literal. OriginalSourcePASS/keyFAIL, mismos dos tests despuésPASS (bucle recorre las tres acciones); fmt/Clippyalltargets/build privados0. ParentR2 MANIFEST56EA… + overlay explícito DELTA-MANIFEST2D524BDCC68B7AE59C461CB6151917FC970B2F1AF321E91A09D8C2A442FE40A7; PRODUCTviewersession09D3324D63775E6E844FFE23145F60A28E33190AF7C40702144CA77F0F848413. Oráculos/FAILR2 intactos, código compartido no adoptado. Revisor/AE repetirán casos originales sin cambio; no cierre por tests del autor.
+
+
+## R3 NuKey aceptado y adoptado en el trabajo compartido
+
+[Revisión y aceptación independientes](../reviews/S03-unicode-clave-nu-r3.md) sin críticas pendientes para el delta: dos casos NuKey originales con expectativas intactas y controlSourcekeyfalse,3PASS. S03-AE-NUKEY01 cerrado. Raíz verificó69 evidencias MANIFEST4B804A22… y reporteA8DB2F74…; parent528/delta10 intactos. Se adopta sólo PRODUCTviewersession09D3324D… tras comprobar igualdad byteexacta del archivo compartido con parentR2 antes de escribir. No solapamiento ni reemplazo de cambios ajenos. Código Unicode compartido continúa sin commit hasta aceptar el incremento completo; resto de módulos/índice intactos.
+
+Esto corrige dominio/rangos de referencia; no acredita ejecución del binario congelado externo ni ConPTY/restore/130, QAvisual/Unix o causa de3695.62s/WorkerExited históricos. La revisión de runtime continúa; no cierre S03-UNICODE01/RV por este delta.
