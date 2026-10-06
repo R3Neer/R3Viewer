@@ -17,6 +17,20 @@ pub enum PrepareError {
     Limit(&'static str),
 }
 
+#[derive(Clone, Copy, Debug)]
+#[allow(dead_code)] // b0 receipt remains internal until session adoption.
+pub(crate) struct SourceAllocationReceipt {
+    pub original_capacity: usize,
+    pub visible_capacity: usize,
+    pub checkpoint_bytes: usize,
+    pub line_bytes: usize,
+    pub index_bytes: usize,
+    pub index_growth_peak: usize,
+    pub model_bytes: usize,
+    pub known_heap_bytes: usize,
+    pub original_arc_bytes: usize,
+    pub identity_arc_bytes: usize,
+}
 #[derive(Debug)]
 pub struct SafeTextModel {
     original: std::sync::Arc<String>,
@@ -107,6 +121,40 @@ impl SafeTextModel {
             max_width,
             cell_index,
             identity,
+        })
+    }
+    /// Capacities of the actual completed model; shared original is listed once, not new RSS proof.
+    #[allow(dead_code)] // b0 library is not connected to the session yet.
+    pub(crate) fn allocation_receipt(&self) -> Option<SourceAllocationReceipt> {
+        let checkpoint_bytes = self
+            .checkpoints
+            .capacity()
+            .checked_mul(std::mem::size_of::<(usize, usize)>())?;
+        let line_bytes = self
+            .lines
+            .capacity()
+            .checked_mul(std::mem::size_of::<usize>())?;
+        let model_bytes = std::mem::size_of::<Self>();
+        let original_arc_bytes = std::mem::size_of::<String>() + 2 * std::mem::size_of::<usize>();
+        let identity_arc_bytes = 2 * std::mem::size_of::<usize>();
+        let known_heap_bytes = original_arc_bytes
+            .checked_add(identity_arc_bytes)?
+            .checked_add(self.original.capacity())?
+            .checked_add(self.visible.capacity())?
+            .checked_add(checkpoint_bytes)?
+            .checked_add(line_bytes)?
+            .checked_add(self.cell_index.allocated)?;
+        Some(SourceAllocationReceipt {
+            original_capacity: self.original.capacity(),
+            visible_capacity: self.visible.capacity(),
+            checkpoint_bytes,
+            line_bytes,
+            index_bytes: self.cell_index.allocated,
+            index_growth_peak: self.cell_index.growth_peak,
+            model_bytes,
+            known_heap_bytes,
+            original_arc_bytes,
+            identity_arc_bytes,
         })
     }
     /// Monotonic renderer cursor; one bounded checkpoint scan per visible row.

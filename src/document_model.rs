@@ -187,6 +187,10 @@ impl Document {
             inner: proof.into_inner(),
         }
     }
+    #[allow(dead_code)] // b0 Source preparation; no mutable access or new constructor.
+    pub(crate) fn source_handle(&self) -> Arc<DocumentSource> {
+        self.inner.source.clone()
+    }
     pub fn source(&self) -> &DocumentSource {
         &self.inner.source
     }
