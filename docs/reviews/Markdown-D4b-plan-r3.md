@@ -1,0 +1,13 @@
+# D4b R3: revisión adversaria final de diseño
+
+SIN_CRITICAS_PENDIENTES en este diseño de biblioteca. Propuesta A045407DA064DE31C0DB7F2E3F0C3481BBC5659AE4EA94B91B1101C6BE59B1F6, leída y contrastada con R1/R2, D4 R4, D2b R3 y APIs D4a. Root es revisor distinto del autor graphics_gate_experiment. No código ni runtime D4b.
+
+D4B-R01 cerrado: OriginalColorProof acredita aceptación original dentro del plazo; CachedCodeData conserva propietarios, cargos, mapa y SemanticCoverage; CodeActivation liga el dato a una demanda actual auténtica y su autoridad de frame/color. Una operación vieja vencida no se revive por redraw/resize. Nueva acción cubierta reutiliza datos sin falsificar otro receipt del worker. View conserva líneas vacías y no se convierte en All; cobertura parcial conserva Plain completo y exige request real.
+
+D4B-R02 cerrado: ConnectionIdentity incluye key, input exacto y OperationContext completo, además de generation/revision vigente. Hit completamente cubierto no requiere IO aunque el contexto de input antiguo haya vencido. Miss con contexto diferente, aun misma key, exige pause y cierre físico antes de nuevo input contextual, preparación de fondo, join/receipt y set/Init de generation nueva. Pending bloquea spawn. La nueva operación conserva su deadline a través de reap y preparación; si quota old+new no alcanza o vence, Plain íntegro sin renovar Instant, rebind mutable ni liberar aliases vivos. Supersede legítimo conserva contexto y usa request nueva checked.
+
+El diseño mantiene CodeText semántico multirun, identidad por bloque independiente del hash, consulta run/local al primer componente y un scheduler común Source/Code. Las allocations se admiten en el mismo ConsumerBudget y el overlay comparte Work con texto ya admitido. La retirada de leases de frame y la prioridad funcional dependen explícitamente de D2b2/D2c/D4c; no se finge que esta biblioteca las ha implementado.
+
+Preoutputs previos DC19/Source8/13 y B01–23 permanecen normativos; casos raíz CTX-MISS01–05 se fijaron antes de cualquier runtime D4b. No usar resultados del autor como goldens. Código requiere congelación, revisión y aceptación independientes sobre APIs reales. D4a R2 sigue provisional hasta su AE; b0/b1 comunes deben existir y ser aceptados antes de acreditar background/scheduler integrado. Ningún owner ficticio o tercer hilo sustituye esas dependencias.
+
+Autoriza implementar por cortes coherentes cuando se satisfagan sus dependencias; el constructor puro no cierra D4b. Sin adopción de código, renderer D4c, rutas CLI/Nu, TUI/ConPTY, Unix, QA visual, SLA, gráficos o cierre RV.
