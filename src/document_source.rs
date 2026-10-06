@@ -45,6 +45,10 @@ impl DocumentSource {
             hash: hash.finalize().into(),
         })
     }
+    /// Share the immutable original without reconstructing or reopening it.
+    pub fn original_handle(&self) -> Arc<String> {
+        self.original.clone()
+    }
     pub fn text(&self) -> &str {
         &self.original
     }

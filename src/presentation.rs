@@ -42,6 +42,16 @@ use crate::text_projection::{append as append_visible, len as replacement_len};
 
 impl SafeTextModel {
     pub fn new(original: String, cancelled: &AtomicBool) -> Result<Self, PrepareError> {
+        Self::from_shared(std::sync::Arc::new(original), cancelled)
+    }
+    /// Prepare the existing safe Source representation from the same snapshot.
+    pub fn from_shared(
+        original: std::sync::Arc<String>,
+        cancelled: &AtomicBool,
+    ) -> Result<Self, PrepareError> {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(PrepareError::Cancelled);
+        }
         let mut visible = String::with_capacity(original.len());
         let mut checkpoints = vec![(0, 0)];
         let mut lines = vec![0];
@@ -90,7 +100,7 @@ impl SafeTextModel {
         .map_err(engine_error)?;
         let max_width = cell_index.max_width;
         Ok(Self {
-            original: std::sync::Arc::new(original),
+            original,
             visible,
             checkpoints,
             lines,
