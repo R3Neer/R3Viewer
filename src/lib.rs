@@ -43,3 +43,26 @@ pub mod xml_view;
 
 mod text_engine;
 mod viewport_admission;
+
+pub mod document_budget;
+pub mod document_model;
+pub mod document_source;
+
+mod document_obsidian;
+
+mod document_validate;
+
+mod document_utf8;
+
+mod document_parser;
+
+mod document_protocol;
+
+pub mod document_worker;
+
+pub mod document_controller;
+
+pub mod document_text;
+mod text_projection;
+
+pub mod document_consumer_budget;

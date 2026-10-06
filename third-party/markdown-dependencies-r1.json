@@ -1,0 +1,167 @@
+{
+  "scope": "new registry packages relative to shared ef299e8 lock; exact Cargo checksums, original notices copied; not final bundle inventory",
+  "packages": [
+    {
+      "name": "block-buffer",
+      "version": "0.12.1",
+      "checksum": "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/RustCrypto/utils",
+      "licenses": [
+        {
+          "path": "third-party/licenses/block-buffer-0.12.1-LICENSE-APACHE",
+          "sha256": "A9040321C3712D8FD0B09CF52B17445DE04A23A10165049AE187CD39E5C86BE5"
+        },
+        {
+          "path": "third-party/licenses/block-buffer-0.12.1-LICENSE-MIT",
+          "sha256": "98181E7249D0C01737645EC982499CE99A0F07EB8F7D625B8840D799D10DBC01"
+        }
+      ],
+      "manifest_sha256": "F21191120AB1D04327657B7125F25B0E3F2BCE34AF5E921D3C66D24DE11D5E60"
+    },
+    {
+      "name": "const-oid",
+      "version": "0.10.2",
+      "checksum": "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/RustCrypto/formats",
+      "licenses": [
+        {
+          "path": "third-party/licenses/const-oid-0.10.2-LICENSE-APACHE",
+          "sha256": "A9040321C3712D8FD0B09CF52B17445DE04A23A10165049AE187CD39E5C86BE5"
+        },
+        {
+          "path": "third-party/licenses/const-oid-0.10.2-LICENSE-MIT",
+          "sha256": "73B9DC2E79C7308998DD30296E073AEFAEFB944A68FB89AA412C23C0EDCABCAA"
+        }
+      ],
+      "manifest_sha256": "591AC78FC8CD99D8A31110E8CB572534BB9D04AF23BC48DB855A34D4A6C78569"
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.3.1",
+      "checksum": "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/RustCrypto/utils",
+      "licenses": [
+        {
+          "path": "third-party/licenses/cpufeatures-0.3.1-LICENSE-APACHE",
+          "sha256": "A9040321C3712D8FD0B09CF52B17445DE04A23A10165049AE187CD39E5C86BE5"
+        },
+        {
+          "path": "third-party/licenses/cpufeatures-0.3.1-LICENSE-MIT",
+          "sha256": "73B9DC2E79C7308998DD30296E073AEFAEFB944A68FB89AA412C23C0EDCABCAA"
+        }
+      ],
+      "manifest_sha256": "2E82EE61A94E8EF99197CA59723E9794D0F08363F28BACAB680292AF6CCDDE61"
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.2.2",
+      "checksum": "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/RustCrypto/traits",
+      "licenses": [
+        {
+          "path": "third-party/licenses/crypto-common-0.2.2-LICENSE-APACHE",
+          "sha256": "A9040321C3712D8FD0B09CF52B17445DE04A23A10165049AE187CD39E5C86BE5"
+        },
+        {
+          "path": "third-party/licenses/crypto-common-0.2.2-LICENSE-MIT",
+          "sha256": "D2E7EC5355C96EEADE56B09187CEB48A6A30299DA3CE7531A66D3D11405AB963"
+        }
+      ],
+      "manifest_sha256": "1B47561054DD2FE13246F2F6E19C29EAC256269E02C96162FD6EFED28247E78A"
+    },
+    {
+      "name": "digest",
+      "version": "0.11.3",
+      "checksum": "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/RustCrypto/traits",
+      "licenses": [
+        {
+          "path": "third-party/licenses/digest-0.11.3-LICENSE-APACHE",
+          "sha256": "A9040321C3712D8FD0B09CF52B17445DE04A23A10165049AE187CD39E5C86BE5"
+        },
+        {
+          "path": "third-party/licenses/digest-0.11.3-LICENSE-MIT",
+          "sha256": "AF59CEA35D7F5E2777A713B8D155D65EFA2C339EB43F3C14E868C6AC8506EDAD"
+        }
+      ],
+      "manifest_sha256": "59C4F2CBA7E34831C87E8F4844718D91D0F276AF7BD192DE76FDA7D5A8978EB9"
+    },
+    {
+      "name": "hybrid-array",
+      "version": "0.4.15",
+      "checksum": "27f864f10dfb56725ce5ce5472bc52252c8f93a4ab86327122cebf62c5f59a17",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/RustCrypto/hybrid-array",
+      "licenses": [
+        {
+          "path": "third-party/licenses/hybrid-array-0.4.15-LICENSE-APACHE",
+          "sha256": "A9040321C3712D8FD0B09CF52B17445DE04A23A10165049AE187CD39E5C86BE5"
+        },
+        {
+          "path": "third-party/licenses/hybrid-array-0.4.15-LICENSE-MIT",
+          "sha256": "70C9D40F1F9545C3F133B8A67206E89DA850F6468EED072281BB3701514114A9"
+        }
+      ],
+      "manifest_sha256": "0F4CA21A2707A25425C1B7F8977A7534BD350C0C650CDEA4C49497397A5A8AA8"
+    },
+    {
+      "name": "pulldown-cmark",
+      "version": "0.13.4",
+      "checksum": "e9f068eba8e7071c5f9511831b44f32c740d5adf574e990f946ddb53db2f314e",
+      "license": "MIT",
+      "repository": "https://github.com/raphlinus/pulldown-cmark",
+      "licenses": [
+        {
+          "path": "third-party/licenses/pulldown-cmark-0.13.4-LICENSE",
+          "sha256": "C4F10F55904BDB9F27D3FBF94C354926D6CFE8B982276E556238C258941B243B"
+        }
+      ],
+      "manifest_sha256": "631421B4C7F58856CD6EC45A1E27DA28B70154F69B268A62D70587C2068927D0"
+    },
+    {
+      "name": "sha2",
+      "version": "0.11.0",
+      "checksum": "446ba717509524cb3f22f17ecc096f10f4822d76ab5c0b9822c5f9c284e825f4",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/RustCrypto/hashes",
+      "licenses": [
+        {
+          "path": "third-party/licenses/sha2-0.11.0-LICENSE-APACHE",
+          "sha256": "A9040321C3712D8FD0B09CF52B17445DE04A23A10165049AE187CD39E5C86BE5"
+        },
+        {
+          "path": "third-party/licenses/sha2-0.11.0-LICENSE-MIT",
+          "sha256": "831E0F43AD0BF014C1C4FEC5767AAE470434C1D66D6E671BE2D823E729063E25"
+        }
+      ],
+      "manifest_sha256": "BB187FE9B788B66DC91C717ACE2A41B5DA5518672A302696AB79BF4619D510A9"
+    },
+    {
+      "name": "typenum",
+      "version": "1.20.1",
+      "checksum": "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/paholg/typenum",
+      "licenses": [
+        {
+          "path": "third-party/licenses/typenum-1.20.1-LICENSE",
+          "sha256": "DB11FEC9946737DF39CA3898D9CD8C10EC6F6C3A884A6802B0AD0B81B4E8F23A"
+        },
+        {
+          "path": "third-party/licenses/typenum-1.20.1-LICENSE-APACHE",
+          "sha256": "516B24E051BF5630880EBBD55C40A25CE9552EBAF8970A53E8976EB70E522406"
+        },
+        {
+          "path": "third-party/licenses/typenum-1.20.1-LICENSE-MIT",
+          "sha256": "A825BD853AB71619A4923D7B4311221427848070FF44D990DA39B0B274C1683F"
+        }
+      ],
+      "manifest_sha256": "00785A81EAE34B3298DFDDE78A6BD96FE3EC000DE46EDD509BD13B7CAB7A9870"
+    }
+  ]
+}

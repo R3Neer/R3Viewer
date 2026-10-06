@@ -21,3 +21,7 @@ XML slice event reader, MIT (Johann Tuffe, 2016), registry package pinned in Car
 ## Unicode-width adapter 0.2.2
 
 Adaptación local mínima de unicode-width0.2.2 (MIT OR Apache-2.0), copiada del gate privado Unicode R2 aceptado. vendor/unicode-width-adapter conserva LICENSE-MIT/LICENSE-APACHE, fuentes upstream originales como prefijos byte-exactos y R3VIEWER-DERIVATION.json. Añade checks de cancel/preadmisión y estado inverso WidthInfo entre bloques, sin cambiar tablas/reglas/wrapping. Cargo usa nombre r3viewer-unicode-width-adapter para no sustituir unicode-width utilizado por terceros. Manifiesto privado normalizado elimina sólo dev/bench/rustc dependencias ajenas al perfil; originales conservados. La integración de UI sigue en desarrollo, no certifica distribución ni equivalencia Unicode universal.
+
+## Markdown document pipeline
+
+pulldown-cmark0.13.4 (MIT), default features disabled, is the pinned OffsetIter producer; no HTML emitter/SIMD/serde features enabled. sha2 0.11.0 (MIT OR Apache-2.0) supplies immutable source/body SHA-256 receipts. New locked transitive packages and unmodified notices are recorded in markdown-dependencies-r1.json and licenses/. Registry checksums and package manifest hashes identify the original source; no upstream patches. This incremental inventory does not certify final distribution. Upstreams: https://github.com/pulldown-cmark/pulldown-cmark and https://github.com/RustCrypto/hashes.

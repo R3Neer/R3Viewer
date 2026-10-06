@@ -11,6 +11,8 @@ name = "r3viewer"
 path = "src/main.rs"
 
 [dependencies]
+pulldown-cmark = { version = "=0.13.4", default-features = false }
+sha2 = "=0.11.0"
 quick-xml = { version = "=0.42.0", default-features = false }
 r3viewer-wire = { path = "crates/wire" }
 clap = { version = "4.5", features = ["derive"] }
@@ -32,7 +34,7 @@ syntect = { version = "=5.3.0", default-features = false, features = ["default-s
 
 [target.'cfg(windows)'.dependencies]
 syntect = { version = "=5.3.0", default-features = false, features = ["default-syntaxes", "regex-onig"] }
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Pipes"] }
 
 [workspace]
 members = [".", "crates/wire", "crates/nu-plugin", "vendor/unicode-width-adapter"]

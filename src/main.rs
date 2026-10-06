@@ -10,6 +10,38 @@ use std::{
 };
 
 fn main() -> ExitCode {
+    let document_args: Vec<_> = std::env::args_os().skip(1).take(5).collect();
+    if document_args
+        .first()
+        .is_some_and(|arg| arg == "--document-worker")
+    {
+        if document_args.len() != 4 {
+            return ExitCode::from(75);
+        }
+        let parsed = (
+            document_args[1]
+                .to_str()
+                .and_then(|s| s.parse::<u64>().ok()),
+            document_args[2]
+                .to_str()
+                .and_then(|s| s.parse::<u64>().ok()),
+            document_args[3]
+                .to_str()
+                .and_then(|s| s.parse::<usize>().ok()),
+        );
+        return match parsed {
+            (Some(generation), Some(request), Some(handle)) => {
+                if r3viewer::document_worker::run_private_stdio(generation, request, handle).is_ok()
+                {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::from(75)
+                }
+            }
+            _ => ExitCode::from(75),
+        };
+    }
+
     let mut private_args = std::env::args_os().skip(1);
     let private = private_args.next();
     if private_args.next().is_none() {

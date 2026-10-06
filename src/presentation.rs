@@ -38,28 +38,7 @@ pub(crate) fn engine_error(error: text_engine::Error) -> PrepareError {
         text_engine::Error::Invalid => PrepareError::Limit("identidad de texto no válida"),
     }
 }
-fn replacement_len(ch: char, next: Option<char>) -> usize {
-    match ch {
-        '\n' | '\t' => 1,
-        '\r' if next == Some('\n') => 1,
-        '\u{7f}' | '\u{0}'..='\u{1f}' => 3,
-        '\u{80}'..='\u{9f}' => 8,
-        _ => ch.len_utf8(),
-    }
-}
-fn append_visible(out: &mut String, ch: char, next: Option<char>) {
-    match ch {
-        '\n' | '\t' => out.push(ch),
-        '\r' if next == Some('\n') => out.push(ch),
-        '\u{7f}' => out.push('␡'),
-        '\u{0}'..='\u{1f}' => out.push(char::from_u32(0x2400 + ch as u32).unwrap()),
-        '\u{80}'..='\u{9f}' => {
-            use std::fmt::Write;
-            write!(out, "\\u{{{:04x}}}", ch as u32).unwrap();
-        }
-        _ => out.push(ch),
-    }
-}
+use crate::text_projection::{append as append_visible, len as replacement_len};
 
 impl SafeTextModel {
     pub fn new(original: String, cancelled: &AtomicBool) -> Result<Self, PrepareError> {

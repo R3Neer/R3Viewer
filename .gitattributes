@@ -19,3 +19,6 @@ resources/syntax/toml/*.patch -text
 vendor/jiter/** -text
 
 vendor/saphyr-parser/** -text
+
+# Synthetic origin-offset fixture requires byte-exact CRLF on every checkout.
+tests/fixtures/markdown/wiki-unc-crlf.md -text whitespace=cr-at-eol
