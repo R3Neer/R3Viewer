@@ -1,0 +1,333 @@
+{
+  "status": "PREOUTPUT; source-only and fixed graph relations, no D2 implementation/output inspected",
+  "baseD1Manifest": "2E74880C1349BCE161C76E7E1691C0391F541ABBF1BF75CFD614C20A297EF8D5",
+  "scope": "D2a Flow/profile/budget/endpoints/navigation pure; no D2b layout/search or D2c TUI PASS",
+  "eventContract": {
+    "kinds": [
+      "EnterBlock",
+      "Run",
+      "LeaveBlock"
+    ],
+    "rootIncluded": true,
+    "ordinalBase": 0,
+    "ordinalIncrement": 1,
+    "visibleEndpoint": "first/last emittable content target; structural empty events remain counted",
+    "runBreaks": "Resource is one typed descriptor event, not omitted; barriers define separate text sequences"
+  },
+  "limits": {
+    "ConsumerBytes": 1048576,
+    "checkpointCapacity": 4096,
+    "historyEntries": 128,
+    "cursorDepthCapacity": 65,
+    "frameWorkBytes": 262144,
+    "queryRecordMinimumBytes": 32,
+    "cancelPollMaximumRecords": 128,
+    "textChunkMaximumBytes": 4096
+  },
+  "cases": [
+    {
+      "id": "D2A01",
+      "fixture": "sources/empty.md",
+      "expect": {
+        "events": [
+          "EnterRoot",
+          "LeaveRoot"
+        ],
+        "eventCount": 2,
+        "firstVisible": null,
+        "terminalVisible": null,
+        "HomeEnd": "Empty preserves state; no fabricated Source byte; no panic"
+      }
+    },
+    {
+      "id": "D2A02",
+      "fixture": "sources/two-paragraphs.md",
+      "expect": {
+        "events": [
+          "EnterRoot",
+          "EnterParagraph(A)",
+          "Run(A)",
+          "LeaveParagraph(A)",
+          "EnterParagraph(B)",
+          "Run(B)",
+          "LeaveParagraph(B)",
+          "LeaveRoot"
+        ],
+        "eventCount": 8,
+        "firstVisible": {
+          "payload": "A",
+          "sourceBytes": [
+            0,
+            1
+          ]
+        },
+        "terminalVisible": {
+          "payload": "B",
+          "sourceBytes": [
+            3,
+            4
+          ],
+          "affinity": "Before"
+        },
+        "EndThenHomePayloads": [
+          "B",
+          "A"
+        ],
+        "rootVisitsInDraw": 0
+      }
+    },
+    {
+      "id": "D2A03",
+      "fixture": "sources/styles.md",
+      "expect": {
+        "bodyRunOrder": [
+          "a",
+          "́",
+          "TAIL"
+        ],
+        "sequenceBarrierBetweenFirstTwoRuns": false,
+        "endpointSourceBytes": {
+          "first": [
+            0,
+            1
+          ],
+          "terminal": [
+            7,
+            11
+          ]
+        },
+        "stylesDoNotBecomeFlowBlocks": true,
+        "EndPayload": "TAIL",
+        "HomeCluster": "á"
+      }
+    },
+    {
+      "id": "D2A04",
+      "fixture": "sources/resource.md",
+      "expect": {
+        "mainOrder": [
+          "A ",
+          "ResourceImage",
+          " B",
+          "TAIL"
+        ],
+        "resourceTarget": "image.png",
+        "altDomainPayload": "alt",
+        "mainDoesNotDuplicateAlt": true,
+        "firstVisible": "A ",
+        "terminalVisible": "TAIL",
+        "barriers": [
+          "beforeResource",
+          "afterResource"
+        ],
+        "noTargetIO": true
+      }
+    },
+    {
+      "id": "D2A05",
+      "fixture": "sources/roles.md",
+      "expect": {
+        "contentOrder": [
+          "H",
+          "Q",
+          "TAIL"
+        ],
+        "roleOrder": [
+          "Heading",
+          "Quote/Paragraph",
+          "Paragraph"
+        ],
+        "terminalVisible": "TAIL",
+        "roleAnchorNotSourceByte": true
+      }
+    },
+    {
+      "id": "D2A06",
+      "fixture": "validated graph below (not parser facade)",
+      "graph": {
+        "blocks": {
+          "0": {
+            "kind": "Root",
+            "parent": null,
+            "items": [
+              "Child4",
+              "Child2",
+              "Child1"
+            ]
+          },
+          "1": {
+            "kind": "Paragraph",
+            "parent": 0,
+            "items": [
+              "Run2(TAIL)"
+            ]
+          },
+          "2": {
+            "kind": "Quote",
+            "parent": 0,
+            "items": [
+              "Child3"
+            ]
+          },
+          "3": {
+            "kind": "Paragraph",
+            "parent": 2,
+            "items": [
+              "Run1(MIDDLE)"
+            ]
+          },
+          "4": {
+            "kind": "Paragraph",
+            "parent": 0,
+            "items": [
+              "Run0(FIRST)"
+            ]
+          }
+        },
+        "textSource": "FIRST MIDDLE TAIL",
+        "sourceRanges": {
+          "Run0": [
+            0,
+            5
+          ],
+          "Run1": [
+            6,
+            12
+          ],
+          "Run2": [
+            13,
+            17
+          ]
+        },
+        "constructor": "Candidate arrays/refs/parents/domains/origins encoded consistently and document_validate required before Document/Flow; malformed fixture is failure before consumer"
+      },
+      "expect": {
+        "events": [
+          "Enter0",
+          "Enter4",
+          "Run0",
+          "Leave4",
+          "Enter2",
+          "Enter3",
+          "Run1",
+          "Leave3",
+          "Leave2",
+          "Enter1",
+          "Run2",
+          "Leave1",
+          "Leave0"
+        ],
+        "eventCount": 13,
+        "runOrdinals": [
+          2,
+          6,
+          10
+        ],
+        "lastVisibleBlock": 1,
+        "locateRun2Ordinal": 10,
+        "noIDsPreorderAssumption": true
+      }
+    },
+    {
+      "id": "D2A07",
+      "fixtureDescriptor": {
+        "paragraphs": 8193,
+        "paragraphText": "p0 (generalized checked decimal ordinal)",
+        "firstParagraphText": "á repeated 16777216 times (33554433 UTF8 bytes)",
+        "lastParagraphText": "TAIL",
+        "separator": "\n\n",
+        "materialization": "source construction belongs Source ledger; never whole layout clone"
+      },
+      "expect": {
+        "terminalVisible": "TAIL",
+        "EndReplayRootRecords": 0,
+        "EndDoesNotPrepareFirstDomain": true,
+        "HomeGiant": "oversized target retained, D2b wholebodyReference deferred",
+        "drawRootRestarts": 0,
+        "preparationCancelPollMaximumRecords": 128,
+        "notTimingSLA": true
+      }
+    },
+    {
+      "id": "D2A08",
+      "fixture": "D2A06 graph; Flow slots 2,3,5 and IDs permuted",
+      "expect": {
+        "slotsUseActualCapacity": true,
+        "strideFormula": "ceil(totalEvents/(slots-1)) checked, endpoints explicit, no index entry per Block",
+        "queriesMatchD2A06Order": true,
+        "totalPointCapIncludesD1AndFlow": 4096,
+        "capacity4097": "Budget before publication",
+        "minimumEndpointsFail": "Budget/preserved current; no truncated complete index"
+      }
+    },
+    {
+      "id": "D2A09",
+      "fixtureDescriptor": {
+        "intervalRecords": 8193,
+        "eventMinimumCharge": 32,
+        "sameResolvedCheckpointBeforeInterval": true
+      },
+      "expect": {
+        "exact8192RecordCharge": 262144,
+        "record8193": "Work failure before transition/publication; pending selected Anchor retained",
+        "referencePreReserve": "8192 work already reduces remaining ordinary record allowance, use same Work not second counter",
+        "drawAfterFailureReplayCount": 0,
+        "explicitLocateOnlyMayResume": true
+      }
+    },
+    {
+      "id": "D2A10",
+      "fixture": "one validated Document; old slot+candidate+history+window placeholders with owned actual allocations",
+      "expect": {
+        "budgetInstanceCountPerSnapshot": 1,
+        "allBelongsToSameDocument": true,
+        "slotsMaximum": 2,
+        "effectiveUsedFormula": "owner+history+states+scratch+flow+slots+windows+symbolsCopies+otherOwned<=1048576",
+        "exactLimitAllowedIfWholeCandidateFits": true,
+        "plusOne": "Budget preserves old state/leases; no charge escape",
+        "allocatorOvershoot": "extra capacity charged or reject; no publish",
+        "dropCandidateRestoresCharges": true,
+        "checkpointsOldNewBothCharged": true
+      }
+    },
+    {
+      "id": "D2A11",
+      "fixture": "D2A06 graph; logical history128 then proposed129; folded/reloaded flow identity",
+      "expect": {
+        "entry128": "retained logical Anchor+FlowLocation",
+        "entry129": "reject navigation, current/history unchanged",
+        "noPointPerHistoryEntry": true,
+        "resizePreservesFlowIdentity": true,
+        "foldRejectsOldOrdinal": true,
+        "reloadRejectsSameNumericIDs": true,
+        "cancelOldPrepare": "no commit or history push",
+        "locateWithoutFlowLocation": "one explicit cancelable preparation, result cached; no automatic redraw locate"
+      }
+    },
+    {
+      "id": "D2A12",
+      "fixtureDescriptor": {
+        "sameActorArena": true,
+        "oldDocumentValidated": true,
+        "newDocumentCandidate": true,
+        "twoSourceArcsRetained": true
+      },
+      "expect": {
+        "controllerArenaArgument": "same existing ActorArena, not new arena per Document",
+        "oldNewDocumentLeases": "aggregate within actor64MiB until physical drop",
+        "SourceLedgerSeparate": true,
+        "D1ReserveConsumer": "within same model arena",
+        "newArenaForIndependentUnrelatedDocsIsNotAggregateProof": true,
+        "PendingOrStale": "no premature old Document release"
+      }
+    }
+  ],
+  "deferred": [
+    "D2b frame/window widgets and SourceActions",
+    "D2c functional TUI",
+    "D3 routing/inline",
+    "D4 Syntect",
+    "A-C UNC/callout R1 historical FAIL, no claim source-complete"
+  ],
+  "oracleDiscipline": "Do not regenerate expectations from Flow outputs. Fixture validation error stays failure; clarify contract before changing fixture semantics. Boundary formulas use measured Rust type sizes, no invented byte stride."
+}

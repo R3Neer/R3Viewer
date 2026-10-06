@@ -22,3 +22,6 @@ vendor/saphyr-parser/** -text
 
 # Synthetic origin-offset fixture requires byte-exact CRLF on every checkout.
 tests/fixtures/markdown/wiki-unc-crlf.md -text whitespace=cr-at-eol
+
+# Reviewed D2a preoutput manifests retain their exact bytes across platforms.
+tests/fixtures/document-d2a/** -text whitespace=cr-at-eol

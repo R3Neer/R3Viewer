@@ -14,6 +14,64 @@ use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 pub const SYMBOL_BYTES: usize = 16384;
 const CHUNK: usize = 4096;
 const SPARSE: usize = 1536;
+#[derive(Clone, Copy, Debug)]
+pub struct IndexProfile {
+    pub projection_points: usize,
+    pub unicode_points: usize,
+    pub exceptions: usize,
+}
+impl IndexProfile {
+    pub const DEFAULT: Self = Self {
+        projection_points: SPARSE,
+        unicode_points: SPARSE,
+        exceptions: 512,
+    };
+    pub fn checked(self) -> Result<Self> {
+        if !(2..=SPARSE).contains(&self.projection_points)
+            || !(2..=SPARSE).contains(&self.unicode_points)
+            || self.exceptions > 512
+        {
+            Err(Error::Budget)
+        } else {
+            Ok(self)
+        }
+    }
+    pub fn fixed_requested_bytes() -> usize {
+        2 * CHUNK
+            + 8 * std::mem::size_of::<Point>()
+            + std::mem::size_of::<SegmentedText>()
+            + std::mem::size_of::<SegmentedIndex>()
+            + std::mem::size_of::<unicode_width_adapter::WidthState>()
+            + 256
+    }
+    pub fn requested_bytes(self) -> Result<usize> {
+        self.checked()?;
+        self.projection_points
+            .checked_mul(std::mem::size_of::<Checkpoint>())
+            .and_then(|n| {
+                self.unicode_points
+                    .checked_mul(std::mem::size_of::<Point>())
+                    .and_then(|v| n.checked_add(v))
+            })
+            .and_then(|n| {
+                self.exceptions
+                    .checked_mul(std::mem::size_of::<Exception>())
+                    .and_then(|v| n.checked_add(v))
+            })
+            .ok_or(Error::Budget)
+    }
+    pub fn checkpoint_capacity(self) -> Result<usize> {
+        self.checked()?;
+        self.projection_points
+            .checked_add(self.unicode_points)
+            .and_then(|n| {
+                self.exceptions
+                    .checked_mul(2)
+                    .and_then(|e| n.checked_add(e))
+            })
+            .ok_or(Error::Budget)
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     Cancelled,
@@ -65,6 +123,12 @@ impl<'a> DocumentWork<'a> {
             c.width_reserved,
             c.projection,
         ]
+    }
+    pub(crate) fn preparation(cancel: &'a AtomicBool) -> Self {
+        Self(Work::preparation(cancel), None)
+    }
+    pub(crate) fn admit_structure(&mut self, n: usize) -> Result<()> {
+        self.admit(n)
     }
     fn admit(&mut self, n: usize) -> Result<()> {
         self.0.admit(n).map_err(Into::into)
@@ -145,6 +209,24 @@ impl SegmentedText {
         budget: &ConsumerBudget,
         cancel: &AtomicBool,
     ) -> Result<Self> {
+        Self::prepare_with_profile(
+            document,
+            domain,
+            run_ordinals,
+            budget,
+            cancel,
+            IndexProfile::DEFAULT,
+        )
+    }
+    pub fn prepare_with_profile(
+        document: Arc<Document>,
+        domain: u32,
+        run_ordinals: Range<usize>,
+        budget: &ConsumerBudget,
+        cancel: &AtomicBool,
+        profile: IndexProfile,
+    ) -> Result<Self> {
+        let profile = profile.checked()?;
         if !budget.belongs_to(&document) {
             return Err(Error::Invalid);
         }
@@ -191,10 +273,17 @@ impl SegmentedText {
             at = next;
         }
         result.len = at.offset;
-        let stride = result.len.div_ceil(SPARSE - 1).max(CHUNK);
+        let stride = result
+            .len
+            .div_ceil(profile.projection_points - 1)
+            .max(CHUNK);
         result.checkpoints = ChargedVec::new_points(
             budget,
-            result.len.div_ceil(stride).saturating_add(1).min(SPARSE),
+            result
+                .len
+                .div_ceil(stride)
+                .saturating_add(1)
+                .min(profile.projection_points),
             1,
         )?;
         result.checkpoints.push(Checkpoint { pos: start })?;
@@ -762,12 +851,25 @@ impl SegmentedIndex {
         budget: &ConsumerBudget,
         cancel: &AtomicBool,
     ) -> Result<Self> {
+        Self::prepare_with_profile(text, budget, cancel, IndexProfile::DEFAULT)
+    }
+    pub fn prepare_with_profile(
+        text: SegmentedText,
+        budget: &ConsumerBudget,
+        cancel: &AtomicBool,
+        profile: IndexProfile,
+    ) -> Result<Self> {
+        let profile = profile.checked()?;
         if !budget.belongs_to(&text.document) {
             return Err(Error::Invalid);
         }
-        let stride = text.len.div_ceil(SPARSE - 1).max(CHUNK);
-        let capacity = text.len.div_ceil(stride).saturating_add(1).min(SPARSE);
-        let exception_capacity = (text.len / (SYMBOL_BYTES + 1)).min(512);
+        let stride = text.len.div_ceil(profile.unicode_points - 1).max(CHUNK);
+        let capacity = text
+            .len
+            .div_ceil(stride)
+            .saturating_add(1)
+            .min(profile.unicode_points);
+        let exception_capacity = (text.len / (SYMBOL_BYTES + 1)).min(profile.exceptions);
         let mut result = Self {
             text,
             points: ChargedVec::new_points(budget, capacity, 1)?,
@@ -779,7 +881,11 @@ impl SegmentedIndex {
         };
         let mut point = result.start();
         result.points.push(point.clone())?;
-        let stride = result.text.len.div_ceil(SPARSE - 1).max(CHUNK);
+        let stride = result
+            .text
+            .len
+            .div_ceil(profile.unicode_points - 1)
+            .max(CHUNK);
         let mut threshold = stride;
         let mut work = DocumentWork(Work::preparation(cancel), None);
         while let Some(unit) = result.compute(&mut point, 4, true, &mut work)? {

@@ -39,7 +39,7 @@ impl ConsumerBudget {
     pub fn checkpoint_capacity(&self) -> usize {
         self.0.checkpoints.load(Ordering::Acquire)
     }
-    fn reserve_points(&self, bytes: usize, points: usize) -> Result<Charge> {
+    pub(crate) fn reserve_points(&self, bytes: usize, points: usize) -> Result<Charge> {
         let mut charge = self.reserve(bytes)?;
         let mut old = self.checkpoint_capacity();
         loop {
@@ -154,6 +154,9 @@ impl<T> ChargedVec<T> {
         }
         self.data.push(value);
         Ok(())
+    }
+    pub(crate) fn pop(&mut self) -> Option<T> {
+        self.data.pop()
     }
     pub fn as_slice(&self) -> &[T] {
         &self.data

@@ -66,3 +66,8 @@ pub mod document_text;
 mod text_projection;
 
 pub mod document_consumer_budget;
+
+pub mod document_flow;
+
+pub mod document_consumer_profile;
+pub mod document_navigation;

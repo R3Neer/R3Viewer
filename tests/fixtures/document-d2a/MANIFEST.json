@@ -1,0 +1,40 @@
+{
+  "scope": "preoutput D2a preparation only",
+  "records": [
+    {
+      "path": "EXPECTED-D2A.json",
+      "size": 9993,
+      "sha256": "767E1D36D6DE87A9DC129A3EC5C0C9AB8E4064C7DD7AE81CADD0F43EDFAD156D"
+    },
+    {
+      "path": "README.md",
+      "size": 1155,
+      "sha256": "A2809D589A1596733C93315CAAFFAB834D5D82FEC4415591011109E54B036B70"
+    },
+    {
+      "path": "sources/empty.md",
+      "size": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "sources/resource.md",
+      "size": 28,
+      "sha256": "EEF77CBA5DAA61C50D98542FFB474C4E188D50B40A455F4AE3A280D703757E53"
+    },
+    {
+      "path": "sources/roles.md",
+      "size": 15,
+      "sha256": "30E6FEC33720C78A4ACCB5B855513E40CB2116D056B83CF339F0F104F83753F6"
+    },
+    {
+      "path": "sources/styles.md",
+      "size": 12,
+      "sha256": "6311CA9C1CD971B12C73F53E0B4CB4ABDAEF526D6D7556FEEBF7093C50C0C26D"
+    },
+    {
+      "path": "sources/two-paragraphs.md",
+      "size": 5,
+      "sha256": "C410BFD99C846B9DC84431C34CA7044A1E3E4E33146A8FA105B25577E6188768"
+    }
+  ]
+}

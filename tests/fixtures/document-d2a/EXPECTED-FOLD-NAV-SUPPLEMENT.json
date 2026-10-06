@@ -1,0 +1,41 @@
+{
+  "status": "PREOUTPUT supplement; originals twelve unchanged",
+  "cases": [
+    {
+      "id": "D2-SUP-NAV",
+      "fixture": "original D2A06 validated graph",
+      "expect": {
+        "ordinaryHomeEndSeekPageArrow": "viewport moves, no history push",
+        "viewportMoves400": "history unchanged; no refusal at128",
+        "returnableJumps128": "two distinct known anchors alternate, history128",
+        "returnableJump129": "reject preserve current andhistory128",
+        "sameLogicalAnchorRepeatedJump": "no extra history; pending/ready update not new return entry"
+      }
+    },
+    {
+      "id": "D2-SUP-FOLD",
+      "source": "> [!note]- T\n> BODY\n\nTAIL\n",
+      "expect": {
+        "sourceFoldAux2": 2,
+        "defaultMainPayloads": [
+          "TAIL"
+        ],
+        "defaultCalloutRoleVisible": true,
+        "titlePayloadSeparate": "T",
+        "expandedMainPayloads": [
+          "BODY",
+          "TAIL"
+        ],
+        "reprepareIdentity": "old FlowLocation rejected even numeric IDs equal",
+        "sourceStillContains": "BODY",
+        "overrideSortedUnique": true,
+        "quotaOrCancel": "preserve old FlowIndex/leases; no publish or truncated overrides",
+        "countsExpected": {
+          "collapsed": 7,
+          "expanded": 10
+        },
+        "collapsedLocateBody": "not in visible flow; typed Invalid; Source model retains BODY"
+      }
+    }
+  ]
+}
