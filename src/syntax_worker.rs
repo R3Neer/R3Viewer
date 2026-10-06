@@ -1,6 +1,11 @@
 //! Private binary protocol and lexical worker. No terminal or inferred file I/O.
+use crate::document_consumer_budget::Charge;
+#[cfg(test)]
+use crate::document_consumer_budget::ConsumerBudget;
+use crate::syntax::RetainedSyntaxInput;
 use crate::syntax::{FallbackReason, RoleSpan, SyntaxRole, Viewport};
 use std::io::{self, Read, Write};
+use std::sync::Arc;
 
 pub(crate) const MAX_SOURCE: usize = 128 * 1024 * 1024;
 pub(crate) const MAX_LINE: usize = 65_536;
@@ -30,6 +35,11 @@ pub(crate) enum Message {
     Chunk {
         offset: u32,
         bytes: Vec<u8>,
+    },
+    ChunkSlice {
+        offset: u32,
+        input: Arc<crate::syntax::RetainedSyntaxInput>,
+        range: std::ops::Range<usize>,
     },
     SourceEnd,
     Ready,
@@ -97,32 +107,16 @@ impl<'a> Decoder<'a> {
         })
     }
 }
-fn append_view(out: &mut Vec<u8>, view: Viewport) {
-    out.extend(view.first_line.to_le_bytes());
-    out.extend(view.line_count.to_le_bytes());
-}
 
+fn write_bounded(out: &mut impl Write, bytes: &[u8]) -> io::Result<()> {
+    for chunk in bytes.chunks(4096) {
+        out.write_all(chunk)?;
+    }
+    Ok(())
+}
 pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()> {
-    let (kind, mut payload) = (
-        match &frame.message {
-            Message::Boot => 0,
-            Message::Init { .. } => 1,
-            Message::Ack { .. } => 2,
-            Message::Chunk { .. } => 3,
-            Message::SourceEnd => 4,
-            Message::Ready => 5,
-            Message::View(_) => 6,
-            Message::All => 7,
-            Message::Continue => 8,
-            Message::Supersede(_) => 9,
-            Message::Progress { .. } => 10,
-            Message::Styles(_) => 11,
-            Message::Fallback(_) => 12,
-            Message::Shutdown => 13,
-        },
-        Vec::new(),
-    );
-    match &frame.message {
+    let (kind, len) = match &frame.message {
+        Message::Boot => (0, 0),
         Message::Init {
             bytes,
             language,
@@ -132,85 +126,299 @@ pub(crate) fn write_frame(out: &mut impl Write, frame: &Frame) -> io::Result<()>
             if *bytes as usize > MAX_SOURCE
                 || language.is_empty()
                 || language.len() > 256
-                || *spans as usize > MAX_SPANS
                 || *spans == 0
+                || *spans as usize > MAX_SPANS
                 || *checkpoints as usize > MAX_CHECKPOINTS
             {
                 return Err(invalid());
             }
-            payload.extend(bytes.to_le_bytes());
-            payload.extend(spans.to_le_bytes());
-            payload.extend(checkpoints.to_le_bytes());
-            payload.extend((language.len() as u16).to_le_bytes());
-            payload.extend(language.as_bytes());
+            (1, 12 + language.len())
         }
-        Message::Ack { offset } => payload.extend(offset.to_le_bytes()),
-        Message::Chunk { offset, bytes } => {
+        Message::Ack { .. } => (2, 4),
+        Message::Chunk { bytes, .. } => {
             if bytes.is_empty() || bytes.len() > MAX_LINE {
                 return Err(invalid());
             }
-            payload.extend(offset.to_le_bytes());
-            payload.extend(bytes);
+            (3, 4 + bytes.len())
         }
-        Message::View(view) | Message::Supersede(view) => {
-            if view.line_count == 0 || view.line_count as usize > MAX_VIEW_LINES {
+        Message::ChunkSlice { input, range, .. } => {
+            if range.start >= range.end || range.end > input.len() || range.len() > 4096 {
                 return Err(invalid());
             }
-            append_view(&mut payload, *view);
+            (3, 4 + range.len())
         }
-        Message::Progress { line, offset } => {
-            payload.extend(line.to_le_bytes());
-            payload.extend(offset.to_le_bytes());
-        }
-        Message::Styles(spans) => {
-            if spans.len() > MAX_SPANS {
+        Message::SourceEnd => (4, 0),
+        Message::Ready => (5, 0),
+        Message::View(v) | Message::Supersede(v) => {
+            if v.line_count == 0 || v.line_count as usize > MAX_VIEW_LINES {
                 return Err(invalid());
             }
-            payload.extend((spans.len() as u32).to_le_bytes());
-            for span in spans {
-                payload.extend(span.start.to_le_bytes());
-                payload.extend(span.end.to_le_bytes());
-                payload.push(span.role as u8);
-            }
+            (
+                if matches!(frame.message, Message::View(_)) {
+                    6
+                } else {
+                    9
+                },
+                6,
+            )
         }
-        Message::Fallback(reason) => payload.push(*reason as u8),
-        _ => {}
-    }
-    if HEADER + payload.len() > MAX_FRAME {
+        Message::All => (7, 0),
+        Message::Continue => (8, 0),
+        Message::Progress { .. } => (10, 8),
+        Message::Styles(v) => {
+            if v.len() > MAX_SPANS {
+                return Err(invalid());
+            }
+            (11, 4 + 9 * v.len())
+        }
+        Message::Fallback(_) => (12, 1),
+        Message::Shutdown => (13, 0),
+    };
+    if HEADER + len > MAX_FRAME {
         return Err(invalid());
     }
-    out.write_all(&((HEADER + payload.len()) as u32).to_le_bytes())?;
-    out.write_all(MAGIC)?;
-    out.write_all(&1_u16.to_le_bytes())?;
-    out.write_all(&[kind, 0])?;
-    out.write_all(&frame.generation.to_le_bytes())?;
-    out.write_all(&frame.request.to_le_bytes())?;
-    out.write_all(&payload)?;
+    let mut header = [0u8; 28];
+    header[..4].copy_from_slice(&((HEADER + len) as u32).to_le_bytes());
+    header[4..8].copy_from_slice(MAGIC);
+    header[8..10].copy_from_slice(&1u16.to_le_bytes());
+    header[10] = kind;
+    header[12..20].copy_from_slice(&frame.generation.to_le_bytes());
+    header[20..28].copy_from_slice(&frame.request.to_le_bytes());
+    write_bounded(out, &header)?;
+    match &frame.message {
+        Message::Init {
+            bytes,
+            language,
+            spans,
+            checkpoints,
+        } => {
+            let mut meta = [0u8; 12];
+            meta[..4].copy_from_slice(&bytes.to_le_bytes());
+            meta[4..8].copy_from_slice(&spans.to_le_bytes());
+            meta[8..10].copy_from_slice(&checkpoints.to_le_bytes());
+            meta[10..12].copy_from_slice(&(language.len() as u16).to_le_bytes());
+            write_bounded(out, &meta)?;
+            write_bounded(out, language.as_bytes())?;
+        }
+        Message::Ack { offset } => write_bounded(out, &offset.to_le_bytes())?,
+        Message::Chunk { offset, bytes } => {
+            write_bounded(out, &offset.to_le_bytes())?;
+            write_bounded(out, bytes)?;
+        }
+        Message::ChunkSlice {
+            offset,
+            input,
+            range,
+        } => {
+            write_bounded(out, &offset.to_le_bytes())?;
+            write_bounded(out, &input.text().as_bytes()[range.clone()])?;
+        }
+        Message::View(v) | Message::Supersede(v) => {
+            write_bounded(out, &v.first_line.to_le_bytes())?;
+            write_bounded(out, &v.line_count.to_le_bytes())?;
+        }
+        Message::Progress { line, offset } => {
+            write_bounded(out, &line.to_le_bytes())?;
+            write_bounded(out, &offset.to_le_bytes())?;
+        }
+        Message::Styles(spans) => {
+            write_bounded(out, &(spans.len() as u32).to_le_bytes())?;
+            for span in spans {
+                let mut row = [0u8; 9];
+                row[..4].copy_from_slice(&span.start.to_le_bytes());
+                row[4..8].copy_from_slice(&span.end.to_le_bytes());
+                row[8] = span.role as u8;
+                write_bounded(out, &row)?;
+            }
+        }
+        Message::Fallback(reason) => write_bounded(out, &[*reason as u8])?,
+        _ => {}
+    }
     out.flush()
 }
-
+fn read_bounded(input: &mut impl Read, bytes: &mut [u8]) -> io::Result<()> {
+    for chunk in bytes.chunks_mut(4096) {
+        input.read_exact(chunk)?;
+    }
+    Ok(())
+}
+struct RoleCharge {
+    _base: Charge,
+    _extra: Option<Charge>,
+}
+/// Decoder-only ownership: allocation and its admission cannot be exchanged.
+pub(crate) struct OwnedRoleAllocation {
+    spans: Vec<RoleSpan>,
+    input: Arc<RetainedSyntaxInput>,
+    charge: Option<RoleCharge>,
+    capacity_bytes: usize,
+    generation: u64,
+    request: u64,
+}
+impl OwnedRoleAllocation {
+    pub(crate) fn spans(&self) -> &[RoleSpan] {
+        &self.spans
+    }
+    pub(crate) fn input(&self) -> &RetainedSyntaxInput {
+        &self.input
+    }
+    pub(crate) fn capacity_bytes(&self) -> usize {
+        self.capacity_bytes
+    }
+    pub(crate) fn verify_owner(
+        &self,
+        expected: &Arc<RetainedSyntaxInput>,
+        generation: u64,
+        request: u64,
+    ) -> io::Result<()> {
+        let actual = self
+            .spans
+            .capacity()
+            .checked_mul(std::mem::size_of::<RoleSpan>())
+            .ok_or_else(invalid)?;
+        if !Arc::ptr_eq(&self.input, expected)
+            || generation != self.generation
+            || request != self.request
+            || actual != self.capacity_bytes
+            || (actual != 0 && self.input.budget().is_some() && self.charge.is_none())
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+    /// Source compatibility only; never a Document admission escape.
+    #[cfg(test)]
+    pub(crate) fn legacy(
+        spans: Vec<RoleSpan>,
+        input: Arc<RetainedSyntaxInput>,
+    ) -> io::Result<Self> {
+        if input.budget().is_some() {
+            return Err(invalid());
+        }
+        let capacity_bytes = spans
+            .capacity()
+            .checked_mul(std::mem::size_of::<RoleSpan>())
+            .ok_or_else(invalid)?;
+        Ok(Self {
+            spans,
+            input,
+            charge: None,
+            capacity_bytes,
+            generation: 0,
+            request: 0,
+        })
+    }
+}
+pub(crate) struct FrameReceipt {
+    pub frame: Frame,
+    roles: Option<OwnedRoleAllocation>,
+}
+impl FrameReceipt {
+    pub(crate) fn take_roles(&mut self) -> Option<OwnedRoleAllocation> {
+        self.roles.take()
+    }
+}
 pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Frame> {
-    let mut prefix = [0; 4];
-    input.read_exact(&mut prefix)?;
+    Ok(read_frame_limited(input, None, MAX_SPANS)?.frame)
+}
+pub(crate) fn read_host_frame(
+    input: &mut impl Read,
+    owner: &Arc<RetainedSyntaxInput>,
+    span_limit: usize,
+) -> io::Result<FrameReceipt> {
+    read_frame_limited(input, Some(owner), span_limit)
+}
+fn read_frame_limited(
+    input: &mut impl Read,
+    owner: Option<&Arc<RetainedSyntaxInput>>,
+    span_limit: usize,
+) -> io::Result<FrameReceipt> {
+    let host = owner.is_some();
+    let budget = owner.and_then(|v| v.budget());
+    let mut prefix = [0u8; 4];
+    read_bounded(input, &mut prefix)?;
     let length = u32::from_le_bytes(prefix) as usize;
-    // Validate wire length before any allocation.
     if !(HEADER..=MAX_FRAME).contains(&length) {
         return Err(invalid());
     }
+    let mut header = [0u8; HEADER];
+    read_bounded(input, &mut header)?;
+    let mut h = Decoder(&header);
+    if h.take(4)? != MAGIC || h.u16()? != 1 {
+        return Err(invalid());
+    }
+    let kind = h.u8()?;
+    if h.u8()? != 0 {
+        return Err(invalid());
+    }
+    let generation = h.u64()?;
+    let request = h.u64()?;
+    if host && !matches!(kind, 0 | 2 | 5 | 10 | 11 | 12) {
+        return Err(invalid());
+    }
+    let payload = length - HEADER;
+    let legal = match kind {
+        0 | 4 | 5 | 7 | 8 | 13 => payload == 0,
+        1 => (13..=268).contains(&payload),
+        2 => payload == 4,
+        3 => (5..=4 + MAX_LINE).contains(&payload),
+        6 | 9 => payload == 6,
+        10 => payload == 8,
+        11 => payload >= 4 && payload <= 4 + 9 * span_limit.min(MAX_SPANS),
+        12 => payload == 1,
+        _ => false,
+    };
+    if !legal {
+        return Err(invalid());
+    }
+    let mut count_prefix = [0u8; 4];
+    let mut role_charge = None;
+    let mut role_requested = 0;
+    if kind == 11 {
+        read_bounded(input, &mut count_prefix)?;
+        let count = u32::from_le_bytes(count_prefix) as usize;
+        if count > span_limit.min(MAX_SPANS)
+            || count.checked_mul(9).and_then(|n| n.checked_add(4)) != Some(payload)
+        {
+            return Err(invalid());
+        }
+        role_requested = count
+            .checked_mul(std::mem::size_of::<RoleSpan>())
+            .ok_or_else(invalid)?;
+        role_charge = budget
+            .map(|b| {
+                b.reserve(role_requested)
+                    .map(|charge| RoleCharge {
+                        _base: charge,
+                        _extra: None,
+                    })
+                    .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e))
+            })
+            .transpose()?;
+    }
+    let _body_charge = budget
+        .map(|b| {
+            b.reserve(payload)
+                .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e))
+        })
+        .transpose()?;
     let mut bytes = Vec::new();
-    bytes.try_reserve_exact(length).map_err(io::Error::other)?;
-    bytes.resize(length, 0);
-    input.read_exact(&mut bytes)?;
+    bytes.try_reserve_exact(payload).map_err(io::Error::other)?;
+    let _body_extra = budget
+        .map(|b| {
+            b.reserve(bytes.capacity().saturating_sub(payload))
+                .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e))
+        })
+        .transpose()?;
+    bytes.resize(payload, 0);
+    if kind == 11 {
+        bytes[..4].copy_from_slice(&count_prefix);
+        read_bounded(input, &mut bytes[4..])?;
+    } else {
+        read_bounded(input, &mut bytes)?;
+    }
     let mut d = Decoder(&bytes);
-    if d.take(4)? != MAGIC || d.u16()? != 1 {
-        return Err(invalid());
-    }
-    let kind = d.u8()?;
-    if d.u8()? != 0 {
-        return Err(invalid());
-    }
-    let generation = d.u64()?;
-    let request = d.u64()?;
+    let mut owned_roles = None;
     let message = match kind {
         0 => Message::Boot,
         1 => {
@@ -263,6 +471,18 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Frame> {
             }
             let mut spans = Vec::new();
             spans.try_reserve_exact(count).map_err(io::Error::other)?;
+            let actual = spans
+                .capacity()
+                .checked_mul(std::mem::size_of::<RoleSpan>())
+                .ok_or_else(invalid)?;
+            if let Some(b) = budget {
+                let extra = b
+                    .reserve(actual.saturating_sub(role_requested))
+                    .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e))?;
+                if let Some(charge) = role_charge.as_mut() {
+                    charge._extra = Some(extra);
+                }
+            }
             for _ in 0..count {
                 let start = d.u32()?;
                 let end = d.u32()?;
@@ -272,7 +492,19 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Frame> {
                 }
                 spans.push(RoleSpan { start, end, role });
             }
-            Message::Styles(spans)
+            if let Some(owner) = owner {
+                owned_roles = Some(OwnedRoleAllocation {
+                    spans,
+                    input: owner.clone(),
+                    charge: role_charge,
+                    capacity_bytes: actual,
+                    generation,
+                    request,
+                });
+                Message::Styles(Vec::new()) // marker only; owned payload is private receipt above.
+            } else {
+                Message::Styles(spans)
+            }
         }
         12 => Message::Fallback(FallbackReason::from_wire(d.u8()?).ok_or_else(invalid)?),
         13 => Message::Shutdown,
@@ -281,10 +513,13 @@ pub(crate) fn read_frame(input: &mut impl Read) -> io::Result<Frame> {
     if !d.0.is_empty() {
         return Err(invalid());
     }
-    Ok(Frame {
-        generation,
-        request,
-        message,
+    Ok(FrameReceipt {
+        frame: Frame {
+            generation,
+            request,
+            message,
+        },
+        roles: owned_roles,
     })
 }
 
@@ -944,5 +1179,329 @@ mod tests {
         eprintln!(
             "real Engine: 84 documents, 269 exact intervals, 16 endStacks, replay/roles/limits PASS"
         );
+    }
+}
+
+#[cfg(test)]
+mod retained_codec_tests {
+    use super::*;
+    struct Probe {
+        bytes: std::io::Cursor<Vec<u8>>,
+        largest: usize,
+        read: usize,
+    }
+    impl Read for Probe {
+        fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
+            self.largest = self.largest.max(b.len());
+            let n = self.bytes.read(b)?;
+            self.read += n;
+            Ok(n)
+        }
+    }
+    #[test]
+    fn bounded_reads_and_scatter_write_keep_wire_identical() {
+        let mut wire = Vec::new();
+        let frame = Frame::new(
+            19,
+            23,
+            Message::Chunk {
+                offset: 7,
+                bytes: vec![b'x'; MAX_LINE],
+            },
+        );
+        write_frame(&mut wire, &frame).unwrap();
+        assert_eq!(&wire[..4], &((HEADER + 4 + MAX_LINE) as u32).to_le_bytes());
+        assert_eq!(&wire[4..8], b"R3SY");
+        assert_eq!(wire[10], 3);
+        assert_eq!(&wire[28..32], &7u32.to_le_bytes());
+        let mut reader = Probe {
+            bytes: std::io::Cursor::new(wire),
+            largest: 0,
+            read: 0,
+        };
+        let f = read_frame(&mut reader).unwrap();
+        assert!(matches!(f.message,Message::Chunk{bytes,..}if bytes.len()==MAX_LINE));
+        assert!(reader.largest <= 4096);
+        struct Writer {
+            largest: usize,
+            total: usize,
+        }
+        impl Write for Writer {
+            fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+                self.largest = self.largest.max(b.len());
+                self.total += b.len();
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut writer = Writer {
+            largest: 0,
+            total: 0,
+        };
+        write_frame(&mut writer, &frame).unwrap();
+        assert!(writer.largest <= 4096);
+        assert_eq!(writer.total, 28 + 4 + MAX_LINE);
+    }
+    #[test]
+    fn host_wrong_direction_and_dynamic_styles_reject_before_body() {
+        for frame in [
+            Frame::new(
+                1,
+                1,
+                Message::Chunk {
+                    offset: 0,
+                    bytes: vec![0; 4096],
+                },
+            ),
+            Frame::new(
+                1,
+                1,
+                Message::Styles(vec![
+                    RoleSpan {
+                        start: 0,
+                        end: 1,
+                        role: SyntaxRole::Value
+                    };
+                    2
+                ]),
+            ),
+        ] {
+            let mut wire = Vec::new();
+            write_frame(&mut wire, &frame).unwrap();
+            let mut reader = Probe {
+                bytes: std::io::Cursor::new(wire),
+                largest: 0,
+                read: 0,
+            };
+            assert!(
+                read_host_frame(
+                    &mut reader,
+                    &RetainedSyntaxInput::legacy(Arc::new(String::new())),
+                    1
+                )
+                .is_err()
+            );
+            assert_eq!(reader.read, 28);
+        }
+        let frame = Frame::new(
+            1,
+            1,
+            Message::Styles(vec![RoleSpan {
+                start: 0,
+                end: 1,
+                role: SyntaxRole::Value,
+            }]),
+        );
+        let mut wire = Vec::new();
+        write_frame(&mut wire, &frame).unwrap();
+        wire[28..32].copy_from_slice(&2u32.to_le_bytes());
+        let mut reader = Probe {
+            bytes: std::io::Cursor::new(wire),
+            largest: 0,
+            read: 0,
+        };
+        assert!(
+            read_host_frame(
+                &mut reader,
+                &RetainedSyntaxInput::legacy(Arc::new(String::new())),
+                1
+            )
+            .is_err()
+        );
+        assert_eq!(reader.read, 32);
+    }
+    #[test]
+    fn raw_body_and_decoded_role_peak_are_both_admitted() {
+        let doc = crate::syntax::fixture_document();
+        let budget = ConsumerBudget::new(&doc).unwrap();
+        let context = crate::syntax::OperationContext::document(
+            1,
+            std::time::Instant::now() + std::time::Duration::from_secs(5),
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        );
+        let owner = RetainedSyntaxInput::copy_document("x", &doc, &budget, &context).unwrap();
+        let base = budget.used();
+        let role_bytes = std::mem::size_of::<RoleSpan>();
+        let body_bytes = 13;
+        let block = budget
+            .reserve(
+                crate::document_consumer_budget::CONSUMER_LIMIT - base - role_bytes - body_bytes
+                    + 1,
+            )
+            .unwrap();
+        let mut wire = Vec::new();
+        write_frame(
+            &mut wire,
+            &Frame::new(
+                1,
+                1,
+                Message::Styles(vec![RoleSpan {
+                    start: 0,
+                    end: 1,
+                    role: SyntaxRole::Value,
+                }]),
+            ),
+        )
+        .unwrap();
+        let mut reader = Probe {
+            bytes: std::io::Cursor::new(wire.clone()),
+            largest: 0,
+            read: 0,
+        };
+        let err = read_host_frame(&mut reader, &owner, 1).err().unwrap();
+        assert_eq!(err.kind(), io::ErrorKind::OutOfMemory);
+        assert_eq!(reader.read, 32);
+        drop(block);
+        assert_eq!(budget.used(), base);
+        let receipt = read_host_frame(&mut wire.as_slice(), &owner, 1).unwrap();
+        assert!(budget.peak() >= base + role_bytes + body_bytes);
+        assert_eq!(budget.used(), base + role_bytes);
+        drop(receipt);
+        assert_eq!(budget.used(), base);
+    }
+}
+
+#[cfg(all(test, windows))]
+mod d4_primary_roles {
+    use super::*;
+    #[test]
+    fn dc_primary_roles_beforeoutput_fixtures_preserve_bytes_and_isolate_blocks() {
+        let fixtures = [
+            (
+                "NU-COMMENT",
+                "Nushell",
+                include_str!("../tests/fixtures/syntax-d4/NU-COMMENT.txt"),
+                2,
+                8,
+                SyntaxRole::Secondary,
+            ),
+            (
+                "NU-STRING",
+                "Nushell",
+                include_str!("../tests/fixtures/syntax-d4/NU-STRING.txt"),
+                9,
+                11,
+                SyntaxRole::Success,
+            ),
+            (
+                "NU-NUMBER",
+                "Nushell",
+                include_str!("../tests/fixtures/syntax-d4/NU-NUMBER.txt"),
+                8,
+                10,
+                SyntaxRole::Process,
+            ),
+            (
+                "PS-COMMENT",
+                "PowerShell",
+                include_str!("../tests/fixtures/syntax-d4/PS-COMMENT.txt"),
+                2,
+                8,
+                SyntaxRole::Secondary,
+            ),
+            (
+                "PS-STRING",
+                "PowerShell",
+                include_str!("../tests/fixtures/syntax-d4/PS-STRING.txt"),
+                1,
+                3,
+                SyntaxRole::Success,
+            ),
+            (
+                "PS-NUMBER",
+                "PowerShell",
+                include_str!("../tests/fixtures/syntax-d4/PS-NUMBER.txt"),
+                0,
+                2,
+                SyntaxRole::Process,
+            ),
+            (
+                "PS-BLOCK-COMMENT",
+                "PowerShell",
+                include_str!("../tests/fixtures/syntax-d4/PS-BLOCK-COMMENT.txt"),
+                8,
+                14,
+                SyntaxRole::Secondary,
+            ),
+            (
+                "PS-NEXT-BLOCK",
+                "PowerShell",
+                include_str!("../tests/fixtures/syntax-d4/PS-NEXT-BLOCK.txt"),
+                1,
+                3,
+                SyntaxRole::Success,
+            ),
+            (
+                "RUST-COMMENT",
+                "Rust",
+                include_str!("../tests/fixtures/syntax-d4/RUST-COMMENT.txt"),
+                3,
+                9,
+                SyntaxRole::Secondary,
+            ),
+            (
+                "RUST-STRING",
+                "Rust",
+                include_str!("../tests/fixtures/syntax-d4/RUST-STRING.txt"),
+                9,
+                11,
+                SyntaxRole::Success,
+            ),
+            (
+                "RUST-NUMBER",
+                "Rust",
+                include_str!("../tests/fixtures/syntax-d4/RUST-NUMBER.txt"),
+                8,
+                10,
+                SyntaxRole::Process,
+            ),
+            (
+                "RUST-BLOCK-COMMENT",
+                "Rust",
+                include_str!("../tests/fixtures/syntax-d4/RUST-BLOCK-COMMENT.txt"),
+                8,
+                14,
+                SyntaxRole::Secondary,
+            ),
+            (
+                "RUST-NEXT-BLOCK",
+                "Rust",
+                include_str!("../tests/fixtures/syntax-d4/RUST-NEXT-BLOCK.txt"),
+                9,
+                11,
+                SyntaxRole::Success,
+            ),
+        ];
+        for (id, language, text, start, end, expected) in fixtures {
+            let syntaxes = bundled_syntaxes().unwrap();
+            let parser =
+                syntect::parsing::ParseState::new(syntaxes.find_syntax_by_name(language).unwrap());
+            let mut engine = Engine::new(text.to_owned(), syntaxes, parser, MAX_SPANS, 32).unwrap();
+            let mut spans = Vec::new();
+            while engine.offset < engine.source.len() {
+                engine.step(true, &mut spans).unwrap();
+            }
+            assert_eq!(spans.first().map(|s| s.start), Some(0), "{id}");
+            assert_eq!(
+                spans.last().map(|s| s.end as usize),
+                Some(text.len()),
+                "{id}"
+            );
+            assert!(
+                spans.windows(2).all(|pair| pair[0].end == pair[1].start),
+                "{id}"
+            );
+            let covered = spans
+                .iter()
+                .filter(|span| (span.end as usize) > start && (span.start as usize) < end)
+                .collect::<Vec<_>>();
+            assert!(!covered.is_empty(), "{id}");
+            assert!(
+                covered.iter().all(|span| span.role == expected),
+                "{id}: {covered:?}, expected {expected:?}"
+            );
+        }
     }
 }

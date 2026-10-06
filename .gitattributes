@@ -25,3 +25,6 @@ tests/fixtures/markdown/wiki-unc-crlf.md -text whitespace=cr-at-eol
 
 # Reviewed D2a preoutput manifests retain their exact bytes across platforms.
 tests/fixtures/document-d2a/** -text whitespace=cr-at-eol
+
+# Reviewed syntax role fixtures retain exact source offsets, including CRLF.
+tests/fixtures/syntax-d4/** -text whitespace=cr-at-eol
