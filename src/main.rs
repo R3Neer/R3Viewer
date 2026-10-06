@@ -85,10 +85,13 @@ fn main() -> ExitCode {
                 return ExitCode::from(1);
             }
         };
+        let Some(title) = text::safe_text_cancelable(&source.title, &cancelled) else {
+            return ExitCode::from(130);
+        };
         match r3viewer::viewer_session::run(
             model,
             source.typed.map(Arc::new),
-            &text::safe_text(&source.title),
+            &title,
             &presentation,
             &syntax,
             &structure,

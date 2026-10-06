@@ -13,12 +13,10 @@ use std::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
 };
-use unicode_segmentation::{GraphemeCursor, GraphemeIncomplete};
 pub const HISTORY_LIMIT: usize = 128;
 pub const SESSION_BYTES: usize = 1024 * 1024;
 pub const WINDOW_BYTES: usize = 128 * 1024;
 const CHECKPOINTS: usize = 4096;
-const CLUSTER_BYTES: usize = 16 * 1024;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     Cancelled,
@@ -26,6 +24,14 @@ pub enum Error {
     History,
     Invalid,
     Window,
+    FrameSymbols,
+    Work,
+    Reference {
+        start: usize,
+        end: usize,
+        visible_start: usize,
+        visible_end: usize,
+    },
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -34,6 +40,9 @@ impl fmt::Display for Error {
             Self::Budget => "reserva YAML de sesión agotada",
             Self::History => "historial YAML: máximo 128 entradas previas; vuelve antes de navegar",
             Self::Invalid => "dirección YAML no válida",
+            Self::FrameSymbols => "referencia de viewport: símbolos/metadata exceden 256KiB",
+            Self::Work => "referencia de viewport: trabajo excede 256KiB",
+            Self::Reference { .. } => "referencia de viewport: símbolo supera 16KiB",
             Self::Window => "ventana YAML supera su límite; el texto completo sigue en Fuente",
         })
     }
@@ -121,6 +130,7 @@ pub struct State {
     pub cursor: Cursor,
     pub domain: Domain,
     pub hit: Option<HitRange>,
+    pub position_pending: bool,
     pub last_hit: Option<crate::search::YamlSearchHit>,
 }
 pub struct Navigator {
@@ -143,6 +153,7 @@ impl Navigator {
                 cursor: Cursor::default(),
                 domain: Domain::Decoded,
                 hit: None,
+                position_pending: false,
                 last_hit: None,
             },
             previous: [None; HISTORY_LIMIT],
@@ -566,78 +577,63 @@ impl SafeChars<'_> {
         }
     }
 }
-#[derive(Clone, Copy, Default)]
+#[derive(Clone)]
 struct Point {
     piece: usize,
-    byte: usize,
+    cursor: crate::text_engine::Point,
+}
+struct IndexedPiece {
+    index: crate::text_engine::Index,
+    identity: crate::text_engine::Identity,
+    raw: usize,
     visible: usize,
     line: usize,
-    cell: usize,
+    end_line: usize,
+    last_column: usize,
+    signature: usize,
+    len: usize,
 }
 pub struct Pane {
     pub node: NodeId,
     pub domain: Domain,
-    points: Vec<Point>,
+    pieces: Vec<IndexedPiece>,
+    structure_address: usize,
+    source: Arc<String>,
+    generation: u64,
     lines: usize,
     width: usize,
+    last_column: usize,
+    position_reference: Option<HitRange>,
     _charge: Charge,
 }
-fn boundary(
-    s: &str,
-    start: usize,
-    cursor: &mut GraphemeCursor,
-    cancel: &AtomicBool,
-) -> Result<usize, Error> {
-    let mut chunk = start;
-    loop {
-        check(cancel)?;
-        let mut end = (chunk + 1024).min(s.len());
-        while !s.is_char_boundary(end) {
-            end -= 1
-        }
-        match cursor.next_boundary(&s[chunk..end], chunk) {
-            Ok(Some(n)) => {
-                return if n - start > CLUSTER_BYTES {
-                    Err(Error::Window)
-                } else {
-                    Ok(n)
-                };
+fn engine_error(error: crate::text_engine::Error) -> Error {
+    match error {
+        crate::text_engine::Error::Cancelled => Error::Cancelled,
+        crate::text_engine::Error::Work => Error::Work,
+        crate::text_engine::Error::Invalid => Error::Invalid,
+    }
+}
+fn signature(piece: &Piece<'_>) -> usize {
+    match piece {
+        Piece::Text(s) => s.as_ptr() as usize,
+        Piece::Small(s) => {
+            let mut hash = 0usize;
+            for b in s.as_str().bytes() {
+                hash = hash.wrapping_mul(16777619) ^ usize::from(b);
             }
-            Ok(None) => return Ok(s.len()),
-            Err(GraphemeIncomplete::NextChunk) => {
-                chunk = end;
-                if chunk - start > CLUSTER_BYTES {
-                    return Err(Error::Window);
-                }
-            }
-            Err(GraphemeIncomplete::PreContext(n)) => {
-                let mut left = n.saturating_sub(1024);
-                while !s.is_char_boundary(left) {
-                    left += 1
-                }
-                cursor.provide_context(&s[left..n], left);
-            }
-            _ => return Err(Error::Invalid),
+            hash
         }
     }
 }
-fn safe_cluster(raw: &str) -> Result<Small, Error> {
-    let mut out = Small::new();
-    if raw.len() > out.bytes.len() {
-        return Err(Error::Window);
-    }
-    let cancel = AtomicBool::new(false);
-    let mut text = Text::empty();
-    text.add(Piece::Text(raw));
-    let mut chars = text.chars();
-    while let Some((_, b)) = chars.next_byte(&cancel)? {
-        if out.len == out.bytes.len() {
-            return Err(Error::Window);
+impl Charge {
+    fn shrink(&mut self, bytes: usize) -> Result<(), Error> {
+        if bytes > self.bytes {
+            return Err(Error::Budget);
         }
-        out.bytes[out.len] = b;
-        out.len += 1;
+        self.used.fetch_sub(self.bytes - bytes, Ordering::AcqRel);
+        self.bytes = bytes;
+        Ok(())
     }
-    Ok(out)
 }
 impl Pane {
     pub fn prepare(
@@ -647,73 +643,160 @@ impl Pane {
         cancel: &AtomicBool,
     ) -> Result<Self, Error> {
         let text = Text::new(structure, state.node, state.domain)?;
-        let charge = budget.charge(CHECKPOINTS * size_of::<Point>() + 16384)?;
-        let mut points = Vec::new();
-        points
-            .try_reserve_exact(CHECKPOINTS)
-            .map_err(|_| Error::Budget)?;
-        if points.capacity() > CHECKPOINTS {
+        let available = SESSION_BYTES.saturating_sub(budget.used());
+        let mut charge = budget.charge(available)?;
+        let fixed = text
+            .count
+            .checked_mul(size_of::<IndexedPiece>() + 2 * size_of::<usize>())
+            .ok_or(Error::Budget)?;
+        if fixed > available {
             return Err(Error::Budget);
         }
-        let stride = (text.raw_len() / 2048).max(4096);
-        let mut at = Point::default();
-        points.push(at);
-        let mut raw_total = 0;
-        let mut next = stride;
-        let mut width = 0;
-        for piece in 0..text.count {
-            let s = text.pieces[piece].text();
-            at.piece = piece;
-            at.byte = 0;
-            let mut graphemes = GraphemeCursor::new(0, s.len(), true);
-            while at.byte < s.len() {
-                check(cancel)?;
-                if raw_total >= next {
-                    if points.len() == CHECKPOINTS {
-                        return Err(Error::Window);
-                    }
-                    points.push(at);
-                    next = raw_total.saturating_add(stride);
-                }
-                let end = boundary(s, at.byte, &mut graphemes, cancel)?;
-                let raw = &s[at.byte..end];
-                let (len, cells, newline) = if raw == "\n" || raw == "\r\n" {
-                    (raw.len(), 0, true)
-                } else if raw.chars().any(char::is_control) {
-                    let safe = safe_cluster(raw)?;
-                    (
-                        safe.len,
-                        crate::presentation::cell_width(safe.as_str(), at.cell),
-                        false,
-                    )
-                } else {
-                    (
-                        raw.len(),
-                        crate::presentation::cell_width(raw, at.cell),
-                        false,
-                    )
-                };
-                at.visible += len;
-                if newline {
-                    width = width.max(at.cell);
-                    at.line += 1;
-                    at.cell = 0
-                } else {
-                    at.cell += cells
-                }
-                raw_total += end - at.byte;
-                at.byte = end;
-            }
+        let mut pieces = Vec::new();
+        pieces
+            .try_reserve_exact(text.count)
+            .map_err(|_| Error::Budget)?;
+        if pieces.capacity() > text.count {
+            return Err(Error::Budget);
         }
-        width = width.max(at.cell);
+        let mut allocated = fixed;
+        let mut raw = 0usize;
+        let mut visible = 0usize;
+        let mut line = 0usize;
+        let mut column = 0usize;
+        let mut width = 0;
+        let mut snapshots = 0;
+        let stride = text.raw_len().div_ceil(CHECKPOINTS - 1).max(4096);
+        let mut work = crate::text_engine::Work::preparation(cancel);
+        for piece in &text.pieces[..text.count] {
+            let value = piece.text();
+            let identity = crate::text_engine::Identity::new();
+            let index = crate::text_engine::Index::prepare_projected(
+                value,
+                identity.clone(),
+                &mut work,
+                stride,
+                available.saturating_sub(allocated),
+                column,
+            )
+            .map_err(engine_error)?;
+            snapshots += index.snapshot_capacity();
+            if snapshots > CHECKPOINTS {
+                return Err(Error::Budget);
+            }
+            allocated = allocated
+                .checked_add(index.allocated)
+                .ok_or(Error::Budget)?;
+            width = width.max(index.max_width);
+            let (extra_lines, last_column, visible_len) = index.end_metrics();
+            pieces.push(IndexedPiece {
+                index,
+                identity,
+                raw,
+                visible,
+                line,
+                end_line: line + extra_lines,
+                last_column,
+                signature: signature(piece),
+                len: value.len(),
+            });
+            raw += value.len();
+            visible += visible_len;
+            line += extra_lines;
+            column = last_column;
+        }
+        check(cancel)?;
+        charge.shrink(allocated)?;
         Ok(Self {
             node: state.node,
             domain: state.domain,
-            points,
-            lines: at.line + 1,
+            pieces,
+            structure_address: structure as *const Structure as usize,
+            source: structure.source_handle(),
+            generation: structure.generation(),
+            lines: line + 1,
             width,
+            last_column: column,
+            position_reference: state.hit.filter(|_| state.position_pending),
             _charge: charge,
         })
+    }
+    pub(crate) fn reference(
+        &self,
+        structure: &Structure,
+        error: Error,
+    ) -> Option<crate::viewport_admission::Reference> {
+        let (range, visible, reason) = match error {
+            Error::Reference {
+                start,
+                end,
+                visible_start,
+                visible_end,
+            } => (
+                start..end,
+                visible_start..visible_end,
+                crate::viewport_admission::Reason::Symbol,
+            ),
+            Error::Work | Error::FrameSymbols => {
+                let last = self.pieces.last()?;
+                (
+                    0..last.raw + last.len,
+                    0..last.visible + last.index.end_metrics().2,
+                    if error == Error::Work {
+                        crate::viewport_admission::Reason::Work
+                    } else {
+                        crate::viewport_admission::Reason::FrameSymbols
+                    },
+                )
+            }
+            _ => return None,
+        };
+        let source = structure
+            .node(self.node)
+            .and_then(|node| node.source_location())
+            .map_or(crate::viewport_admission::SourceRelation::None, |span| {
+                crate::viewport_admission::SourceRelation::EnclosingNodeSpan(span.range())
+            });
+        Some(crate::viewport_admission::Reference {
+            domain: crate::viewport_admission::Domain::Yaml {
+                node: self.node.0,
+                metadata: self.domain == Domain::Metadata,
+            },
+            range,
+            range_exact: true,
+            visible,
+            source,
+            reason,
+            identity: self.pieces.first()?.identity.clone(),
+            generation: Some(self.generation),
+            unpositioned_hit: self.position_reference.map(|hit| hit.start..hit.end),
+        })
+    }
+    #[cfg(test)]
+    pub(crate) fn maximum_profile_seek_gap_fixture(
+        &mut self,
+        structure: &Structure,
+        cancel: &AtomicBool,
+    ) {
+        let text = Text::new(structure, self.node, self.domain).unwrap();
+        self.validate(structure, &text).unwrap();
+        for (ordinal, piece) in self.pieces.iter_mut().enumerate() {
+            piece.index = crate::text_engine::Index::prepare_projected(
+                text.pieces[ordinal].text(),
+                piece.identity.clone(),
+                &mut crate::text_engine::Work::preparation(cancel),
+                (128usize * 1024 * 1024).div_ceil(CHECKPOINTS - 1),
+                1024 * 1024,
+                0,
+            )
+            .unwrap();
+        }
+    }
+    pub(crate) fn retain_unpositioned_hit(&mut self, hit: HitRange) {
+        self.position_reference = Some(hit);
+    }
+    pub(crate) fn resume_manual_position(&mut self) {
+        self.position_reference = None;
     }
     pub fn line_count(&self) -> usize {
         self.lines
@@ -721,11 +804,40 @@ impl Pane {
     pub fn max_width(&self) -> usize {
         self.width
     }
-    fn start(&self, line: usize, left: usize) -> Point {
-        let i = self
-            .points
-            .partition_point(|p| p.line < line || (p.line == line && p.cell <= left));
-        self.points[i.saturating_sub(1)]
+    fn validate(&self, structure: &Structure, text: &Text<'_>) -> Result<(), Error> {
+        if self.structure_address != structure as *const Structure as usize
+            || self.generation != structure.generation()
+            || !Arc::ptr_eq(&self.source, &structure.source_handle())
+            || text.count != self.pieces.len()
+        {
+            return Err(Error::Invalid);
+        }
+        for (piece, index) in text.pieces[..text.count].iter().zip(&self.pieces) {
+            if piece.text().len() != index.len || signature(piece) != index.signature {
+                return Err(Error::Invalid);
+            }
+        }
+        Ok(())
+    }
+    fn start(&self, text: &Text<'_>, line: usize, left: usize) -> Result<Point, Error> {
+        let piece = self
+            .pieces
+            .iter()
+            .position(|p| {
+                p.line <= line && p.end_line >= line && (p.end_line > line || p.last_column >= left)
+            })
+            .unwrap_or_else(|| self.pieces.len().saturating_sub(1));
+        let p = self.pieces.get(piece).ok_or(Error::Invalid)?;
+        let cursor = p
+            .index
+            .start_cell(
+                text.pieces[piece].text(),
+                &p.identity,
+                line.saturating_sub(p.line),
+                left,
+            )
+            .map_err(engine_error)?;
+        Ok(Point { piece, cursor })
     }
     pub fn position(
         &self,
@@ -734,72 +846,317 @@ impl Pane {
         cancel: &AtomicBool,
     ) -> Result<(usize, usize), Error> {
         let text = Text::new(structure, self.node, self.domain)?;
-        let i = self.points.partition_point(|p| p.visible <= offset);
-        let mut at = self.points[i.saturating_sub(1)];
+        self.validate(structure, &text)?;
+        let n = self.pieces.partition_point(|p| p.visible <= offset);
+        let piece = n.saturating_sub(1);
+        let p = self.pieces.get(piece).ok_or(Error::Invalid)?;
+        let cursor = p
+            .index
+            .start_visible(
+                text.pieces[piece].text(),
+                &p.identity,
+                offset.saturating_sub(p.visible),
+            )
+            .map_err(engine_error)?;
+        let mut at = Point { piece, cursor };
+        let mut work = crate::text_engine::Work::frame(cancel);
         let mut found = None;
-        self.walk(&text, &mut at, cancel, |value, p, _, _| {
-            if offset < p.visible + value.len() {
+        self.walk(&text, &mut at, &mut work, |value, unit| {
+            if offset < unit.visible.end {
                 found = Some((
-                    p.line,
-                    p.cell
-                        + if value.is_ascii() {
-                            offset.saturating_sub(p.visible)
+                    unit.line,
+                    unit.column
+                        + if unit.ascii {
+                            offset.saturating_sub(unit.visible.start)
                         } else {
                             0
                         },
                 ));
                 true
             } else {
+                let _ = value;
                 false
             }
         })?;
-        Ok(found.unwrap_or((at.line, at.cell)))
+        Ok(found.unwrap_or((self.lines - 1, self.last_column)))
     }
     fn walk(
         &self,
         text: &Text<'_>,
         at: &mut Point,
-        cancel: &AtomicBool,
-        mut visit: impl FnMut(&str, Point, usize, bool) -> bool,
+        work: &mut crate::text_engine::Work<'_>,
+        mut visit: impl FnMut(&str, crate::text_engine::Unit) -> bool,
     ) -> Result<(), Error> {
-        while at.piece < text.count {
-            let s = text.pieces[at.piece].text();
-            let mut graphemes = GraphemeCursor::new(at.byte, s.len(), true);
-            while at.byte < s.len() {
-                let end = boundary(s, at.byte, &mut graphemes, cancel)?;
-                let raw = &s[at.byte..end];
-                let newline = raw == "\n" || raw == "\r\n";
-                let safe;
-                let value = if raw.chars().any(char::is_control) && !newline {
-                    safe = safe_cluster(raw)?;
-                    safe.as_str()
+        while let Some(piece) = self.pieces.get(at.piece) {
+            let value = text.pieces[at.piece].text();
+            while let Some(mut unit) = piece
+                .index
+                .step(value, &piece.identity, &mut at.cursor, work)
+                .map_err(engine_error)?
+            {
+                let raw = &value[unit.range.clone()];
+                unit.range.start += piece.raw;
+                unit.range.end += piece.raw;
+                unit.visible.start += piece.visible;
+                unit.visible.end += piece.visible;
+                unit.line += piece.line;
+                let mut tiny = Small::new();
+                let shown = if unit.safe_control {
+                    let ch = raw.chars().next().ok_or(Error::Invalid)?;
+                    if ch == '\u{7f}' {
+                        write!(tiny, "␡").map_err(|_| Error::Invalid)?;
+                    } else if ch <= '\u{1f}' {
+                        write!(
+                            tiny,
+                            "{}",
+                            char::from_u32(0x2400 + ch as u32).ok_or(Error::Invalid)?
+                        )
+                        .map_err(|_| Error::Invalid)?;
+                    } else {
+                        write!(tiny, "\\u{{{:04x}}}", ch as u32).map_err(|_| Error::Invalid)?;
+                    }
+                    tiny.as_str()
                 } else {
                     raw
                 };
-                let cells = if newline {
-                    0
-                } else {
-                    crate::presentation::cell_width(value, at.cell)
-                };
-                if visit(value, *at, cells, newline) {
+                if visit(shown, unit) {
                     return Ok(());
                 }
-                at.visible += value.len();
-                if newline {
-                    at.line += 1;
-                    at.cell = 0
-                } else {
-                    at.cell += cells
-                }
-                at.byte = end;
             }
             at.piece += 1;
-            at.byte = 0;
+            if let Some(next) = self.pieces.get(at.piece) {
+                at.cursor = next
+                    .index
+                    .start_offset(text.pieces[at.piece].text(), &next.identity, 0)
+                    .map_err(engine_error)?;
+            }
         }
         Ok(())
     }
-    /// Lease includes cell/String capacities, temporary fragments, and the UI's
-    /// one matching Span vector. It lives until the widget finishes rendering.
+    /// All rows are admitted before any leaf String or widget is constructed.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn windows(
+        &self,
+        structure: &Structure,
+        top: usize,
+        rows: usize,
+        left: usize,
+        width: usize,
+        hit: Option<HitRange>,
+        budget: &Budget,
+        frame: &mut crate::viewport_admission::FrameBudget<'_>,
+    ) -> Result<Windows, Error> {
+        frame.reference_reserve().map_err(|reason| match reason {
+            crate::viewport_admission::Reason::Work => Error::Work,
+            _ => Error::FrameSymbols,
+        })?;
+        let text = Text::new(structure, self.node, self.domain)?;
+        self.validate(structure, &text)?;
+        if self.position_reference.is_some() {
+            return Err(Error::Work);
+        }
+        let count = rows.min(self.lines.saturating_sub(top));
+        let plan_bytes = count
+            .checked_mul(size_of::<RowPlan>() + size_of::<Window>())
+            .ok_or(Error::Budget)?;
+        frame.reserve(plan_bytes).map_err(|_| Error::FrameSymbols)?;
+        let plan_charge = budget.charge(plan_bytes)?;
+        let mut plans = Vec::new();
+        plans.try_reserve_exact(count).map_err(|_| Error::Budget)?;
+        if plans.capacity() > count {
+            return Err(Error::Budget);
+        }
+        let mut sequential = None;
+        for line in top..top + count {
+            let start = match sequential.take() {
+                Some(point) => point,
+                None => self.start(&text, line, left)?,
+            };
+            let mut at = start.clone();
+            let before = frame.work.used();
+            let right = left.saturating_add(width);
+            let mut bytes = 0usize;
+            let mut cells = 0usize;
+            let mut failure = None;
+            self.walk(&text, &mut at, &mut frame.work, |value, unit| {
+                // walk advances the resolved cursor before visit. Stop on this row's
+                // newline so sequential replay never consumes the next row's first unit.
+                if unit.line > line || unit.line == line && (unit.newline || unit.column >= right) {
+                    return true;
+                }
+                if unit.line == line
+                    && !unit.newline
+                    && (unit.column + unit.width > left || unit.width == 0 && unit.column >= left)
+                {
+                    if unit.visible.len() > crate::viewport_admission::SYMBOL_BYTES {
+                        failure = Some(Error::Reference {
+                            start: unit.range.start,
+                            end: unit.range.end,
+                            visible_start: unit.visible.start,
+                            visible_end: unit.visible.end,
+                        });
+                        return true;
+                    }
+                    if unit.width > 0 {
+                        let ascii = unit.ascii && value.len() > 1 && value != "\t";
+                        let n = if ascii {
+                            right.min(unit.column + unit.width) - left.max(unit.column)
+                        } else {
+                            1
+                        };
+                        let length = if value == "\t"
+                            || unit.column < left
+                            || unit.column + unit.width > right
+                        {
+                            right.min(unit.column + unit.width) - left.max(unit.column)
+                        } else {
+                            value.len()
+                        };
+                        cells += n;
+                        bytes += length;
+                        if cells > 2048 || bytes > WINDOW_BYTES {
+                            failure = Some(Error::Window);
+                            return true;
+                        }
+                    }
+                }
+                false
+            })?;
+            if let Some(error) = failure {
+                return Err(error);
+            }
+            sequential = Some(at);
+            let replay = frame.work.used() - before;
+            frame
+                .work
+                .admit(replay.checked_add(bytes).ok_or(Error::Work)?)
+                .map_err(engine_error)?;
+            let allocated = bytes
+                .checked_mul(2)
+                .and_then(|n| {
+                    cells
+                        .checked_mul(size_of::<Cell>() + size_of::<ratatui::text::Span<'static>>())
+                        .and_then(|meta| n.checked_add(meta))
+                })
+                .ok_or(Error::Budget)?;
+            frame.reserve(allocated).map_err(|_| Error::FrameSymbols)?;
+            plans.push(RowPlan {
+                line,
+                start,
+                bytes,
+                cells,
+                replay,
+                allocated,
+            });
+        }
+        // Lease the entire frame before allocating its Strings; keep it through render.
+        let total = plans
+            .iter()
+            .try_fold(0usize, |n, p| n.checked_add(p.allocated))
+            .ok_or(Error::Budget)?;
+        let charge = budget.charge(total)?;
+        let mut windows = Vec::new();
+        windows
+            .try_reserve_exact(count)
+            .map_err(|_| Error::Budget)?;
+        if windows.capacity() > count {
+            return Err(Error::Budget);
+        }
+        for plan in plans {
+            let mut cells = Vec::new();
+            cells
+                .try_reserve_exact(plan.cells)
+                .map_err(|_| Error::Budget)?;
+            if cells.capacity() > plan.cells {
+                return Err(Error::Budget);
+            }
+            let mut at = plan.start;
+            let right = left.saturating_add(width);
+            let mut copied = 0usize;
+            let mut failure = None;
+            let mut work =
+                crate::text_engine::Work::permit(frame.work.cancel, plan.replay + plan.bytes);
+            work.project(plan.bytes).map_err(engine_error)?;
+            self.walk(&text, &mut at, &mut work, |value, unit| {
+                // walk advances the resolved cursor before visit. Stop on this row's
+                // newline so sequential replay never consumes the next row's first unit.
+                if unit.line > plan.line
+                    || unit.line == plan.line && (unit.newline || unit.column >= right)
+                {
+                    return true;
+                }
+                if unit.line == plan.line
+                    && !unit.newline
+                    && unit.width > 0
+                    && unit.column + unit.width > left
+                {
+                    let ascii = unit.ascii && value.len() > 1 && value != "\t";
+                    let a = left.saturating_sub(unit.column);
+                    let b = right.saturating_sub(unit.column).min(unit.width);
+                    let mut push = |shown: &str, range: Range<usize>| -> bool {
+                        if frame.work.cancel.load(Ordering::Relaxed) {
+                            failure = Some(Error::Cancelled);
+                            return false;
+                        }
+                        if cells.len() >= plan.cells || copied + shown.len() > plan.bytes {
+                            failure = Some(Error::Invalid);
+                            return false;
+                        }
+                        let mut output = String::new();
+                        if output.try_reserve_exact(shown.len()).is_err()
+                            || output.capacity() > shown.len()
+                        {
+                            failure = Some(Error::Budget);
+                            return false;
+                        }
+                        output.push_str(shown);
+                        copied += output.capacity();
+                        cells.push(Cell {
+                            text: output,
+                            matched: hit
+                                .is_some_and(|h| h.start < range.end && h.end > range.start),
+                        });
+                        true
+                    };
+                    if ascii {
+                        for i in a..b {
+                            if !push(
+                                &value[i..i + 1],
+                                unit.visible.start + i..unit.visible.start + i + 1,
+                            ) {
+                                return true;
+                            }
+                        }
+                    } else if value == "\t" || a > 0 || b < unit.width {
+                        let length = b - a;
+                        let blanks = [b' '; 2048];
+                        let shown = std::str::from_utf8(&blanks[..length]).unwrap();
+                        if !push(shown, unit.visible) {
+                            return true;
+                        }
+                    } else if !push(value, unit.visible) {
+                        return true;
+                    }
+                }
+                false
+            })?;
+            if let Some(error) = failure {
+                return Err(error);
+            }
+            if copied != plan.bytes || cells.len() != plan.cells {
+                return Err(Error::Invalid);
+            }
+            windows.push(Window {
+                cells,
+                _charge: None,
+            });
+        }
+        check(frame.work.cancel)?;
+        Ok(Windows {
+            rows: windows,
+            _charges: Some((charge, plan_charge)),
+        })
+    }
     #[allow(clippy::too_many_arguments)]
     pub fn window(
         &self,
@@ -811,96 +1168,20 @@ impl Pane {
         budget: &Budget,
         cancel: &AtomicBool,
     ) -> Result<Window, Error> {
-        let charge = budget.charge(WINDOW_BYTES * 3)?;
-        let text = Text::new(structure, self.node, self.domain)?;
-        let mut at = self.start(line, left);
-        let mut cells = Vec::new();
-        cells.try_reserve_exact(2048).map_err(|_| Error::Budget)?;
-        if cells.capacity() > 2048 {
-            return Err(Error::Budget);
-        }
-        let right = left.saturating_add(width);
-        let mut bytes = 0usize;
-        let mut failed = false;
-        self.walk(&text, &mut at, cancel, |value, p, w, newline| {
-            if p.line > line || p.line == line && p.cell >= right {
-                return true;
-            }
-            if p.line == line && !newline && w > 0 && p.cell + w > left {
-                // C1 placeholders are ASCII fragments: keep their individual
-                // cells and byte ranges when scrolling/highlighting inside one.
-                if value.is_ascii() && value.len() > 1 && value != "\t" {
-                    for (index, byte) in value.bytes().enumerate() {
-                        let cell = p.cell + index;
-                        if cell < left || cell >= right {
-                            continue;
-                        }
-                        if cells.len() == 2048 || bytes == WINDOW_BYTES {
-                            failed = true;
-                            return true;
-                        }
-                        let mut shown = String::new();
-                        if shown.try_reserve_exact(1).is_err() || shown.capacity() > 1 {
-                            failed = true;
-                            return true;
-                        }
-                        shown.push(byte as char);
-                        bytes += shown.capacity();
-                        cells.push(Cell {
-                            text: shown,
-                            matched: hit.is_some_and(|h| {
-                                h.start < p.visible + index + 1 && h.end > p.visible + index
-                            }),
-                        });
-                    }
-                    return false;
-                }
-                let length = value.len().max(w);
-                if cells.len() == 2048 || bytes.saturating_add(length) > WINDOW_BYTES {
-                    failed = true;
-                    return true;
-                }
-                let mut shown = String::new();
-                if shown.try_reserve_exact(length).is_err() || shown.capacity() > length {
-                    failed = true;
-                    return true;
-                }
-                if value == "\t" {
-                    shown.extend(std::iter::repeat_n(
-                        ' ',
-                        right.min(p.cell + w) - p.cell.max(left),
-                    ));
-                } else if p.cell < left || p.cell + w > right {
-                    if value.is_ascii() {
-                        let a = left.saturating_sub(p.cell).min(value.len());
-                        let b = right.saturating_sub(p.cell).min(value.len());
-                        shown.push_str(&value[a..b]);
-                    } else {
-                        shown.extend(std::iter::repeat_n(
-                            ' ',
-                            right.min(p.cell + w) - p.cell.max(left),
-                        ));
-                    }
-                } else {
-                    shown.push_str(value)
-                }
-                bytes += shown.capacity();
-                cells.push(Cell {
-                    text: shown,
-                    matched: hit
-                        .is_some_and(|h| h.start < p.visible + value.len() && h.end > p.visible),
-                });
-            }
-            false
-        })?;
-        if failed {
-            return Err(Error::Window);
-        }
-        Ok(Window {
-            cells,
-            _charge: charge,
-        })
+        let mut frame = crate::viewport_admission::FrameBudget::new(cancel);
+        let mut windows = self.windows(structure, line, 1, left, width, hit, budget, &mut frame)?;
+        let mut window = windows.rows.pop().ok_or(Error::Invalid)?;
+        window._charge = windows._charges.take();
+        Ok(window)
     }
+}
+struct RowPlan {
+    line: usize,
+    start: Point,
+    bytes: usize,
+    cells: usize,
+    replay: usize,
+    allocated: usize,
 }
 pub struct Cell {
     pub text: String,
@@ -908,8 +1189,13 @@ pub struct Cell {
 }
 pub struct Window {
     pub cells: Vec<Cell>,
-    _charge: Charge,
+    _charge: Option<(Charge, Charge)>,
 }
+pub(crate) struct Windows {
+    pub rows: Vec<Window>,
+    _charges: Option<(Charge, Charge)>,
+}
+
 /// Key-first serialization DFS. Fixed frames; references are terminal leaves.
 pub struct Visits<'a> {
     structure: &'a Structure,
@@ -1024,12 +1310,19 @@ mod tests {
             cursor: Default::default(),
             domain: Domain::Decoded,
             hit: None,
+            position_pending: false,
             last_hit: None,
         };
         let cancel = AtomicBool::new(false);
         let baseline = nav.budget().used();
         let pane = Pane::prepare(&structure, state, nav.budget(), &cancel).unwrap();
-        assert!(pane.points.capacity() <= CHECKPOINTS);
+        assert!(
+            pane.pieces
+                .iter()
+                .map(|p| p.index.snapshot_capacity())
+                .sum::<usize>()
+                <= CHECKPOINTS
+        );
         let window = pane
             .window(&structure, 0, 0, 100, None, nav.budget(), &cancel)
             .unwrap();
@@ -1068,12 +1361,19 @@ mod tests {
             cursor: Default::default(),
             domain: Domain::Decoded,
             hit: None,
+            position_pending: false,
             last_hit: None,
         };
         let cancel = AtomicBool::new(false);
         let pane = Pane::prepare(&structure, state, nav.budget(), &cancel).unwrap();
         assert_eq!(pane.max_width(), 1_000_003);
-        assert!(pane.points.len() < 4096);
+        assert!(
+            pane.pieces
+                .iter()
+                .map(|p| p.index.snapshot_count())
+                .sum::<usize>()
+                < 4096
+        );
         let window = pane
             .window(&structure, 0, 999_999, 4, None, nav.budget(), &cancel)
             .unwrap();
@@ -1139,5 +1439,277 @@ mod tests {
                 }
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod unicode_borrowed_integration_tests {
+    use super::*;
+    fn project(raw: String) -> Arc<Structure> {
+        Arc::new(
+            crate::yaml_worker::project(Arc::new(raw), 9, &AtomicBool::new(false))
+                .unwrap()
+                .0,
+        )
+    }
+    fn decoded(s: &Structure, value: &str) -> NodeId {
+        Visits::new(s, &AtomicBool::new(false))
+            .filter_map(Result::ok)
+            .find(|id| s.node(*id).unwrap().decoded() == Some(value))
+            .unwrap()
+    }
+
+    fn row_fixture(value: &str) -> (Arc<Structure>, NodeId) {
+        let s = project(format!(
+            "\"{}\"",
+            value
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\r', "\\r")
+                .replace('\n', "\\n")
+        ));
+        let node = decoded(&s, value);
+        (s, node)
+    }
+    #[test]
+    fn sequential_short_empty_unicode_rows_preserve_every_first_unit() {
+        let cancel = AtomicBool::new(false);
+        let fixtures: &[(&str, &[&str])] = &[
+            ("ab\ncd\nef", &["ab", "cd", "ef"]),
+            ("\nx\ny", &["", "x", "y"]),
+            ("a\nc\u{301}d\n🐱x", &["a", "c\u{301}d", "🐱x"]),
+            ("ab\r\ncd\r\nef", &["ab", "cd", "ef"]),
+            ("ab\n\ncd\n", &["ab", "", "cd", ""]),
+        ];
+        for &(value, expected) in fixtures {
+            let (s, node) = row_fixture(value);
+            let nav = Navigator::new(s.clone()).unwrap();
+            let mut state = nav.current();
+            state.node = node;
+            state.domain = Domain::Decoded;
+            let pane = Pane::prepare(&s, state, nav.budget(), &cancel).unwrap();
+            for top in 0..expected.len() {
+                let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+                let windows = pane
+                    .windows(
+                        &s,
+                        top,
+                        expected.len() - top,
+                        0,
+                        80,
+                        None,
+                        nav.budget(),
+                        &mut frame,
+                    )
+                    .unwrap();
+                let actual: Vec<String> = windows
+                    .rows
+                    .iter()
+                    .map(|r| r.cells.iter().map(|c| c.text.as_str()).collect())
+                    .collect();
+                assert_eq!(actual, expected[top..], "fixture {value:?} top {top}");
+            }
+        }
+    }
+    #[test]
+    fn sequential_next_row_zero_width_giant_still_requires_reference() {
+        let cancel = AtomicBool::new(false);
+        let giant = "\u{301}".repeat(20_000);
+        let value = format!("ab\n{giant}\ncd");
+        let (s, node) = row_fixture(&value);
+        let nav = Navigator::new(s.clone()).unwrap();
+        let mut state = nav.current();
+        state.node = node;
+        state.domain = Domain::Decoded;
+        let pane = Pane::prepare(&s, state, nav.budget(), &cancel).unwrap();
+        let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+        let windows = pane
+            .windows(&s, 0, 1, 0, 80, None, nav.budget(), &mut frame)
+            .unwrap();
+        assert_eq!(
+            windows.rows[0]
+                .cells
+                .iter()
+                .map(|c| c.text.as_str())
+                .collect::<String>(),
+            "ab"
+        );
+        drop(windows);
+        let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+        assert!(matches!(
+            pane.windows(&s, 0, 2, 0, 80, None, nav.budget(), &mut frame),
+            Err(Error::Reference { start: 3, .. })
+        ));
+    }
+    #[test]
+    fn sequential_metadata_piece_boundaries_preserve_labels_and_value() {
+        let cancel = AtomicBool::new(false);
+        let (s, node) = row_fixture("abc");
+        let nav = Navigator::new(s.clone()).unwrap();
+        let mut state = nav.current();
+        state.node = node;
+        state.domain = Domain::Metadata;
+        let pane = Pane::prepare(&s, state, nav.budget(), &cancel).unwrap();
+        let expected = ["inspector de serialización YAML", "tipo: string"];
+        let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+        let windows = pane
+            .windows(&s, 0, expected.len(), 0, 80, None, nav.budget(), &mut frame)
+            .unwrap();
+        let actual: Vec<String> = windows
+            .rows
+            .iter()
+            .map(|r| r.cells.iter().map(|c| c.text.as_str()).collect())
+            .collect();
+        assert_eq!(actual, expected);
+    }
+    #[test]
+    fn sequential_clipping_does_not_consume_next_row_or_giant() {
+        let cancel = AtomicBool::new(false);
+        let (s, node) = row_fixture("abcdef\nxyzw\npqrs");
+        let nav = Navigator::new(s.clone()).unwrap();
+        let mut state = nav.current();
+        state.node = node;
+        state.domain = Domain::Decoded;
+        let pane = Pane::prepare(&s, state, nav.budget(), &cancel).unwrap();
+        for (left, width, expected) in [
+            (0, 2, vec!["ab", "xy", "pq"]),
+            (1, 2, vec!["bc", "yz", "qr"]),
+            (4, 2, vec!["ef", "", ""]),
+        ] {
+            let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+            let windows = pane
+                .windows(&s, 0, 3, left, width, None, nav.budget(), &mut frame)
+                .unwrap();
+            let actual: Vec<String> = windows
+                .rows
+                .iter()
+                .map(|r| r.cells.iter().map(|c| c.text.as_str()).collect())
+                .collect();
+            assert_eq!(actual, expected, "left {left} width {width}");
+        }
+        let giant = format!("a{}", "\u{301}".repeat(20_000));
+        let value = format!("ab\ncd\n{giant}");
+        let (s, node) = row_fixture(&value);
+        let nav = Navigator::new(s.clone()).unwrap();
+        let mut state = nav.current();
+        state.node = node;
+        state.domain = Domain::Decoded;
+        let pane = Pane::prepare(&s, state, nav.budget(), &cancel).unwrap();
+        let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+        let windows = pane
+            .windows(&s, 0, 2, 0, 80, None, nav.budget(), &mut frame)
+            .unwrap();
+        assert_eq!(
+            windows
+                .rows
+                .iter()
+                .map(|r| r.cells.iter().map(|c| c.text.as_str()).collect::<String>())
+                .collect::<Vec<_>>(),
+            ["ab", "cd"]
+        );
+        drop(windows);
+        let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+        assert!(matches!(
+            pane.windows(&s, 0, 3, 0, 80, None, nav.budget(), &mut frame),
+            Err(Error::Reference { start: 6, .. })
+        ));
+    }
+    #[test]
+    fn giant_decoded_piece_is_complete_and_reference_has_enclosing_provenance() {
+        let cancel = AtomicBool::new(false);
+        let giant = format!("a{}", "\u{301}".repeat(8_000_000));
+        let s = project(format!("\"{giant}\""));
+        let node = decoded(&s, &giant);
+        let nav = Navigator::new(s.clone()).unwrap();
+        let mut state = nav.current();
+        state.node = node;
+        state.domain = Domain::Decoded;
+        let baseline = nav.budget().used();
+        let pane = Pane::prepare(&s, state, nav.budget(), &cancel).unwrap();
+        assert_eq!(pane.position(&s, 16000, &cancel).unwrap(), (0, 0));
+        let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+        let error = match pane.windows(&s, 0, 1, 0, 80, None, nav.budget(), &mut frame) {
+            Err(error) => error,
+            Ok(_) => panic!("giant borrowed piece must never be copied to a symbol"),
+        };
+        let reference = pane.reference(&s, error).unwrap();
+        assert_eq!(reference.range, 0..giant.len());
+        assert!(matches!(
+            reference.source,
+            crate::viewport_admission::SourceRelation::EnclosingNodeSpan(_)
+        ));
+        assert_eq!(s.node(node).unwrap().decoded(), Some(giant.as_str()));
+        drop(pane);
+        assert_eq!(nav.budget().used(), baseline);
+    }
+    #[test]
+    fn normal_multirow_window_is_admitted_as_one_frame_and_rejects_foreign_model() {
+        let cancel = AtomicBool::new(false);
+        let normal = format!("{}\n", "a".repeat(80)).repeat(24);
+        let s = project(format!("\"{}\"", normal.replace('\n', "\\n")));
+        let node = decoded(&s, &normal);
+        let nav = Navigator::new(s.clone()).unwrap();
+        let mut state = nav.current();
+        state.node = node;
+        state.domain = Domain::Decoded;
+        let pane = Pane::prepare(&s, state, nav.budget(), &cancel).unwrap();
+        let baseline = nav.budget().used();
+        assert!(pane.reference(&s, Error::Window).is_none());
+        assert!(pane.reference(&s, Error::Budget).is_none());
+        assert!(matches!(
+            pane.reference(&s, Error::FrameSymbols).unwrap().reason,
+            crate::viewport_admission::Reason::FrameSymbols
+        ));
+        let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+        let windows = pane
+            .windows(&s, 0, 24, 0, 80, None, nav.budget(), &mut frame)
+            .unwrap();
+        assert_eq!(windows.rows.len(), 24);
+        for row in &windows.rows {
+            assert_eq!(
+                row.cells
+                    .iter()
+                    .map(|cell| cell.text.as_str())
+                    .collect::<String>(),
+                "a".repeat(80)
+            );
+        }
+        drop(windows);
+        assert_eq!(nav.budget().used(), baseline);
+        let foreign = crate::yaml_worker::project(s.source_handle(), 9, &cancel)
+            .unwrap()
+            .0;
+        assert!(matches!(
+            pane.position(&foreign, 0, &cancel),
+            Err(Error::Invalid)
+        ));
+    }
+}
+
+#[cfg(test)]
+mod unicode_yaml_arena_boundary {
+    #[test]
+    fn quoted_32mb_has_preexisting_arena_failure_and_complete_source_reference() {
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        let text = format!("\"a{}\"", "\u{301}".repeat(16_000_000));
+        let source = std::sync::Arc::new(text);
+        assert!(matches!(
+            crate::yaml_worker::project(source.clone(), 9, &cancel),
+            Err(crate::structure::StructureFailure::ArenaBudget)
+        ));
+        let safe = crate::presentation::SafeTextModel::new((*source).clone(), &cancel).unwrap();
+        let mut frame = crate::viewport_admission::FrameBudget::new(&cancel);
+        assert!(matches!(
+            crate::viewport_admission::TextPlan::prepare(
+                &safe,
+                crate::viewport_admission::Domain::Source,
+                0,
+                1,
+                0..80,
+                &mut frame
+            ),
+            Err(crate::viewport_admission::TextError::Reference(_))
+        ));
+        assert_eq!(safe.original(), source.as_str());
     }
 }

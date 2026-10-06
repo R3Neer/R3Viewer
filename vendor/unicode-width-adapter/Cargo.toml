@@ -1,0 +1,20 @@
+[package]
+name = "r3viewer-unicode-width-adapter"
+version = "0.2.2"
+edition = "2021"
+autobenches = false
+autoexamples = false
+autotests = false
+license = "MIT OR Apache-2.0"
+[lib]
+name = "unicode_width"
+path = "src/lib.rs"
+[features]
+default = ["cjk"]
+cjk = []
+no_std = []
+
+
+# Preserve the byte-exact licensed/generated prefix; the adapter is appended.
+[lints.clippy]
+items_after_test_module = "allow"

@@ -591,7 +591,19 @@ pub fn find_structure(
             };
             let mut range = 0..safe.original().len();
             if let Some(last) = previous.filter(|last| index == last.visit_index) {
-                let original = safe.source_range(last.range.clone());
+                let original = match safe.source_range_with(
+                    last.range.clone(),
+                    &mut crate::text_engine::Work::preparation(cancel),
+                ) {
+                    Ok(range) => range,
+                    Err(error) => {
+                        return if cancel.load(Ordering::Relaxed) {
+                            SearchOutcome::Cancelled
+                        } else {
+                            SearchOutcome::Error(format!("proyección de búsqueda: {error:?}"))
+                        };
+                    }
+                };
                 match (direction, pass) {
                     (Direction::Forward, 0) => range.start = original.end.min(range.end),
                     (Direction::Backward, 0) => range.end = original.start.min(range.end),
@@ -608,7 +620,21 @@ pub fn find_structure(
                     let hit = FileSearchHit {
                         visit_index: index,
                         path: visit.path,
-                        range: safe.visible_range(range),
+                        range: match safe.visible_range_with(
+                            range,
+                            &mut crate::text_engine::Work::preparation(cancel),
+                        ) {
+                            Ok(range) => range,
+                            Err(error) => {
+                                return if cancel.load(Ordering::Relaxed) {
+                                    SearchOutcome::Cancelled
+                                } else {
+                                    SearchOutcome::Error(format!(
+                                        "proyección de búsqueda: {error:?}"
+                                    ))
+                                };
+                            }
+                        },
                     };
                     if direction == Direction::Forward {
                         return SearchOutcome::FileFound(hit);
@@ -1408,9 +1434,13 @@ pub fn find_source(
         },
     );
     match find_visible(text, query, offset, direction, cancel) {
-        Ok(Some(original)) => SearchOutcome::SourceFound {
-            visible: source.visible_range(original.clone()),
-            original,
+        Ok(Some(original)) => match source.visible_range_with(
+            original.clone(),
+            &mut crate::text_engine::Work::preparation(cancel),
+        ) {
+            Ok(visible) => SearchOutcome::SourceFound { visible, original },
+            Err(crate::presentation::PrepareError::Cancelled) => SearchOutcome::Cancelled,
+            Err(error) => SearchOutcome::Error(format!("{error:?}")),
         },
         Ok(None) => SearchOutcome::NotFound,
         Err(_) if cancel.load(Ordering::Relaxed) => SearchOutcome::Cancelled,

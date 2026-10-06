@@ -1983,6 +1983,7 @@ dependencies = [
  "ctrlc",
  "jiter",
  "quick-xml",
+ "r3viewer-unicode-width-adapter",
  "r3viewer-wire",
  "ratatui",
  "saphyr-parser",
@@ -2004,6 +2005,10 @@ dependencies = [
  "nu-protocol",
  "r3viewer-wire",
 ]
+
+[[package]]
+name = "r3viewer-unicode-width-adapter"
+version = "0.2.2"
 
 [[package]]
 name = "r3viewer-wire"

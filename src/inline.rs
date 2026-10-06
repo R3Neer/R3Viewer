@@ -1,4 +1,5 @@
 //! Prepare complete TTY inline output before the caller writes any bytes.
+use crate::text_engine::{self, Work};
 use crate::{
     config::{PresentationConfig, Role},
     presentation::{PrepareError, SafeTextModel},
@@ -10,7 +11,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use unicode_segmentation::UnicodeSegmentation;
+use unicode_segmentation::GraphemeCursor;
 
 const MAX_OUTPUT: usize = 256 * 1024 * 1024;
 const COPY_CHUNK: usize = 64 * 1024;
@@ -191,12 +192,18 @@ fn assemble(
                 out.push(&format!("{:>digits$} ", row + 1))?;
             }
             if let Some(spans) = spans {
-                // Successful syntax bounds original lines to64KiB; segmentation
-                // cannot scan an unbounded source prefix before cancellation.
-                for (byte, grapheme) in line.grapheme_indices(true) {
+                let mut cursor = GraphemeCursor::new(0, line.len(), true);
+                let mut work = Work::preparation(cancelled);
+                let mut byte = 0;
+                while let Some(end) = text_engine::next(line, &mut cursor, &mut work)
+                    .map_err(crate::presentation::engine_error)?
+                {
+                    let grapheme = &line[byte..end];
                     check_cancelled(cancelled)?;
-                    let source =
-                        provenance.source_range(start + byte..start + byte + grapheme.len());
+                    let source = provenance.source_range_with(
+                        start + byte..start + byte + grapheme.len(),
+                        &mut work,
+                    )?;
                     while spans
                         .get(span_index)
                         .is_some_and(|span| span.end as usize <= source.start)
@@ -211,6 +218,7 @@ fn assemble(
                         .map_or(SyntaxRole::Value, |span| span.role);
                     set_colour(&mut out, &mut current, colour(config, role))?;
                     out.push(grapheme)?;
+                    byte = end;
                 }
             } else {
                 out.push(line)?;
@@ -224,6 +232,22 @@ fn assemble(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn giant_cluster_inline_preserves_every_byte_and_first_scalar_role() {
+        let cancel = AtomicBool::new(false);
+        let text = format!("a{}END", "\u{301}".repeat(16_000_000));
+        let model = model(&text);
+        let config = config(true, false);
+        let spans = [RoleSpan {
+            start: 0,
+            end: 1,
+            role: SyntaxRole::Accent,
+        }];
+        let output = assemble(&model, &config, &cancel, Some(&spans), 256 * 1024 * 1024).unwrap();
+        assert_eq!(no_sgr(&output), text);
+        assert!(output.starts_with("\x1b[38;2;1;2;3m"));
+    }
+
     use super::*;
     use crate::cli::Cli;
     use clap::Parser;

@@ -1,10 +1,11 @@
 //! Safe visible text with sparse provenance checkpoints. Source bytes stay intact.
+use crate::text_engine::{self, Identity, Index, Work};
 use std::{
     ops::Range,
     sync::atomic::{AtomicBool, Ordering},
 };
+#[cfg(test)]
 use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
 const CHECKPOINT_BYTES: usize = 4096;
 const MAX_LINES: usize = 1_000_000;
@@ -24,16 +25,19 @@ pub struct SafeTextModel {
     checkpoints: Vec<(usize, usize)>,
     lines: Vec<usize>,
     max_width: usize,
-    cell_checkpoints: Vec<CellCheckpoint>,
+    cell_index: Index,
+    identity: Identity,
 }
 
-#[derive(Debug)]
-struct CellCheckpoint {
-    line: usize,
-    visible: usize,
-    column: usize,
+pub(crate) fn engine_error(error: text_engine::Error) -> PrepareError {
+    match error {
+        text_engine::Error::Cancelled => PrepareError::Cancelled,
+        text_engine::Error::Work => {
+            PrepareError::Limit("trabajo de viewport excede256KiB; referencia requerida")
+        }
+        text_engine::Error::Invalid => PrepareError::Limit("identidad de texto no válida"),
+    }
 }
-
 fn replacement_len(ch: char, next: Option<char>) -> usize {
     match ch {
         '\n' | '\t' => 1,
@@ -95,46 +99,31 @@ impl SafeTextModel {
             return Err(PrepareError::Cancelled);
         }
         checkpoints.push((original.len(), visible.len()));
-        let mut max_width = 0;
-        let mut cell_checkpoints = Vec::new();
-        let mut visited = 0usize;
-        for (line_index, line) in visible.split('\n').enumerate() {
-            if cancelled.load(Ordering::Relaxed) {
-                return Err(PrepareError::Cancelled);
-            }
-            let line = line.strip_suffix('\r').unwrap_or(line);
-            let mut column = 0usize;
-            let mut next = CHECKPOINT_BYTES;
-            for (byte, grapheme) in line.grapheme_indices(true) {
-                if visited.is_multiple_of(4096) && cancelled.load(Ordering::Relaxed) {
-                    return Err(PrepareError::Cancelled);
-                }
-                visited += 1;
-                if byte >= next {
-                    cell_checkpoints.push(CellCheckpoint {
-                        line: line_index,
-                        visible: lines[line_index] + byte,
-                        column,
-                    });
-                    next = byte.saturating_add(CHECKPOINT_BYTES);
-                }
-                column = column.saturating_add(cell_width(grapheme, column));
-            }
-            max_width = max_width.max(column);
-        }
-        if cancelled.load(Ordering::Relaxed) {
-            return Err(PrepareError::Cancelled);
-        }
+        let identity = Identity::new();
+        let mut work = Work::preparation(cancelled);
+        let cell_index = Index::prepare(
+            &visible,
+            identity.clone(),
+            &mut work,
+            CHECKPOINT_BYTES,
+            usize::MAX,
+        )
+        .map_err(engine_error)?;
+        let max_width = cell_index.max_width;
         Ok(Self {
             original: std::sync::Arc::new(original),
             visible,
             checkpoints,
             lines,
             max_width,
-            cell_checkpoints,
+            cell_index,
+            identity,
         })
     }
     /// Monotonic renderer cursor; one bounded checkpoint scan per visible row.
+    pub(crate) fn identity(&self) -> Identity {
+        self.identity.clone()
+    }
     pub fn provenance_cursor(&self, visible_offset: usize) -> ProvenanceCursor<'_> {
         let target = visible_offset.min(self.visible.len());
         let index = self
@@ -165,19 +154,51 @@ impl SafeTextModel {
     /// First checkpoint at/before the horizontal viewport. Long lines need not
     /// be scanned from byte zero on every draw; checkpoints are grapheme-aligned.
     pub fn viewport_start(&self, line: usize, left: usize) -> Option<(usize, usize)> {
-        let start = *self.lines.get(line)?;
-        let index = self
-            .cell_checkpoints
-            .partition_point(|cp| cp.line < line || cp.line == line && cp.column <= left);
-        if let Some(cp) = index
-            .checked_sub(1)
-            .and_then(|i| self.cell_checkpoints.get(i))
-            .filter(|cp| cp.line == line)
-        {
-            Some((cp.visible, cp.column))
+        let cancel = AtomicBool::new(false);
+        let mut work = Work::preparation(&cancel);
+        self.viewport_start_with(line, left, &mut work).ok()
+    }
+    pub(crate) fn viewport_cursor(
+        &self,
+        line: usize,
+        left: usize,
+        work: &mut Work<'_>,
+    ) -> Result<text_engine::Point, PrepareError> {
+        let range = self
+            .line_range(line)
+            .ok_or(PrepareError::Limit("línea inválida"))?;
+        let at = self
+            .cell_index
+            .start_cell(&self.visible, &self.identity, line, left)
+            .map_err(engine_error)?;
+        let at = if at.line() == line {
+            at
         } else {
-            Some((start, 0))
-        }
+            self.cell_index
+                .line_entry(&self.visible, &self.identity, range.clone(), line)
+                .map_err(engine_error)?
+        };
+        work.admit(0).map_err(engine_error)?;
+        Ok(at)
+    }
+    pub(crate) fn viewport_start_with(
+        &self,
+        line: usize,
+        left: usize,
+        work: &mut Work<'_>,
+    ) -> Result<(usize, usize), PrepareError> {
+        self.viewport_cursor(line, left, work)
+            .map(|p| (p.offset(), p.column()))
+    }
+
+    pub(crate) fn next_unit(
+        &self,
+        at: &mut text_engine::Point,
+        work: &mut Work<'_>,
+    ) -> Result<Option<text_engine::Unit>, PrepareError> {
+        self.cell_index
+            .step(&self.visible, &self.identity, at, work)
+            .map_err(engine_error)
     }
     pub fn line_count(&self) -> usize {
         self.lines.len()
@@ -205,7 +226,12 @@ impl SafeTextModel {
             .partition_point(|start| *start <= offset.min(self.visible.len()))
             .saturating_sub(1)
     }
-    fn source_boundary(&self, visible_offset: usize, end: bool) -> usize {
+    fn source_boundary_with(
+        &self,
+        visible_offset: usize,
+        end: bool,
+        work: &mut Work<'_>,
+    ) -> Result<usize, PrepareError> {
         let target = visible_offset.min(self.visible.len());
         let checkpoint = self
             .checkpoints
@@ -214,23 +240,40 @@ impl SafeTextModel {
         let (raw, mut safe) = self.checkpoints[checkpoint];
         let mut chars = self.original[raw..].char_indices().peekable();
         while let Some((relative, ch)) = chars.next() {
+            work.project(ch.len_utf8()).map_err(engine_error)?;
             let offset = raw + relative;
             if safe == target {
-                return offset;
+                return Ok(offset);
             }
             let len = replacement_len(ch, chars.peek().map(|(_, ch)| *ch));
             if safe + len > target {
-                return if end { offset + ch.len_utf8() } else { offset };
+                return Ok(if end { offset + ch.len_utf8() } else { offset });
             }
             safe += len;
         }
-        self.original.len()
+        Ok(self.original.len())
     }
     /// A partial match in a control placeholder maps to its complete source char.
     pub fn source_range(&self, visible: Range<usize>) -> Range<usize> {
-        self.source_boundary(visible.start, false)..self.source_boundary(visible.end, true)
+        let cancel = AtomicBool::new(false);
+        let mut work = Work::preparation(&cancel);
+        self.source_range_with(visible, &mut work)
+            .expect("valid source mapping")
     }
-    fn visible_boundary(&self, source_offset: usize, end: bool) -> usize {
+    pub(crate) fn source_range_with(
+        &self,
+        visible: Range<usize>,
+        work: &mut Work<'_>,
+    ) -> Result<Range<usize>, PrepareError> {
+        Ok(self.source_boundary_with(visible.start, false, work)?
+            ..self.source_boundary_with(visible.end, true, work)?)
+    }
+    fn visible_boundary_with(
+        &self,
+        source_offset: usize,
+        end: bool,
+        work: &mut Work<'_>,
+    ) -> Result<usize, PrepareError> {
         let target = source_offset.min(self.original.len());
         let checkpoint = self
             .checkpoints
@@ -239,40 +282,47 @@ impl SafeTextModel {
         let (raw, mut safe) = self.checkpoints[checkpoint];
         let mut chars = self.original[raw..].char_indices().peekable();
         while let Some((relative, ch)) = chars.next() {
+            work.project(ch.len_utf8()).map_err(engine_error)?;
             let offset = raw + relative;
             if offset == target {
-                return safe;
+                return Ok(safe);
             }
             let len = replacement_len(ch, chars.peek().map(|(_, ch)| *ch));
             if offset + ch.len_utf8() > target {
-                return if end { safe + len } else { safe };
+                return Ok(if end { safe + len } else { safe });
             }
             safe += len;
         }
-        self.visible.len()
+        Ok(self.visible.len())
     }
     pub fn visible_range(&self, source: Range<usize>) -> Range<usize> {
-        self.visible_boundary(source.start, false)..self.visible_boundary(source.end, true)
+        let cancel = AtomicBool::new(false);
+        let mut work = Work::preparation(&cancel);
+        self.visible_range_with(source, &mut work)
+            .expect("valid visible mapping")
+    }
+    pub(crate) fn visible_range_with(
+        &self,
+        source: Range<usize>,
+        work: &mut Work<'_>,
+    ) -> Result<Range<usize>, PrepareError> {
+        Ok(self.visible_boundary_with(source.start, false, work)?
+            ..self.visible_boundary_with(source.end, true, work)?)
     }
     pub fn cell_for_offset(&self, offset: usize) -> usize {
-        let line = self.line_for_offset(offset);
-        let range = self.line_range(line).unwrap();
-        let target = offset.min(range.end);
-        let index = self
-            .cell_checkpoints
-            .partition_point(|cp| cp.visible <= target);
-        let (start, mut col) = index
-            .checked_sub(1)
-            .and_then(|i| self.cell_checkpoints.get(i))
-            .filter(|cp| cp.line == line)
-            .map_or((range.start, 0), |cp| (cp.visible, cp.column));
-        for (byte, grapheme) in self.visible[start..range.end].grapheme_indices(true) {
-            if target < start + byte + grapheme.len() {
-                break;
-            }
-            col += cell_width(grapheme, col);
-        }
-        col
+        let cancel = AtomicBool::new(false);
+        let mut work = Work::preparation(&cancel);
+        self.cell_for_offset_with(offset, &mut work).unwrap_or(0)
+    }
+    pub(crate) fn cell_for_offset_with(
+        &self,
+        offset: usize,
+        work: &mut Work<'_>,
+    ) -> Result<usize, PrepareError> {
+        self.cell_index
+            .position(&self.visible, &self.identity, offset, work)
+            .map(|(_, column)| column)
+            .map_err(engine_error)
     }
 }
 
@@ -285,34 +335,50 @@ pub struct ProvenanceCursor<'a> {
     previous_end: usize,
 }
 impl ProvenanceCursor<'_> {
-    fn boundary(&mut self, target: usize, end: bool) -> usize {
+    pub fn source_range(&mut self, visible: Range<usize>) -> Range<usize> {
+        let cancel = AtomicBool::new(false);
+        let mut work = Work::preparation(&cancel);
+        self.source_range_with(visible, &mut work)
+            .expect("valid monotonic mapping")
+    }
+    fn boundary(
+        &mut self,
+        target: usize,
+        end: bool,
+        work: &mut Work<'_>,
+    ) -> Result<usize, PrepareError> {
         loop {
             let Some(&(relative, ch)) = self.chars.peek() else {
-                return self.source_end;
+                return Ok(self.source_end);
             };
+            work.project(ch.len_utf8()).map_err(engine_error)?;
             let raw = self.base + relative;
             if self.safe == target {
-                return raw;
+                return Ok(raw);
             }
             let mut lookahead = self.chars.clone();
             lookahead.next();
             let length = replacement_len(ch, lookahead.peek().map(|(_, ch)| *ch));
             if self.safe + length > target {
-                return if end { raw + ch.len_utf8() } else { raw };
+                return Ok(if end { raw + ch.len_utf8() } else { raw });
             }
             self.safe += length;
             self.chars.next();
         }
     }
-    pub fn source_range(&mut self, visible: Range<usize>) -> Range<usize> {
+    pub(crate) fn source_range_with(
+        &mut self,
+        visible: Range<usize>,
+        work: &mut Work<'_>,
+    ) -> Result<Range<usize>, PrepareError> {
         assert!(
             visible.start >= self.previous_end && visible.end >= visible.start,
             "provenance intervals must be monotonic"
         );
-        let start = self.boundary(visible.start, false);
-        let end = self.boundary(visible.end, true);
+        let start = self.boundary(visible.start, false, work)?;
+        let end = self.boundary(visible.end, true, work)?;
         self.previous_end = visible.end;
-        start..end
+        Ok(start..end)
     }
 }
 
@@ -320,7 +386,12 @@ pub fn cell_width(grapheme: &str, column: usize) -> usize {
     if grapheme == "\t" {
         8 - column % 8
     } else {
-        UnicodeWidthStr::width(grapheme)
+        text_engine::width(
+            grapheme,
+            column,
+            &mut Work::preparation(&AtomicBool::new(false)),
+        )
+        .expect("immutable width without cancellation or quota")
     }
 }
 
@@ -329,11 +400,28 @@ pub fn slice_cells(line: &str, left: usize, width: usize) -> String {
     let right = left.saturating_add(width);
     let mut column: usize = 0;
     let mut result = String::new();
-    for grapheme in line.graphemes(true) {
+    let cancel = AtomicBool::new(false);
+    let mut work = Work::frame(&cancel);
+    let mut cursor = unicode_segmentation::GraphemeCursor::new(0, line.len(), true);
+    let mut byte = 0;
+    loop {
+        let end_byte = match text_engine::next(line, &mut cursor, &mut work) {
+            Ok(Some(end)) => end,
+            Ok(None) => break,
+            Err(_) => return "referencia de viewport".into(),
+        };
+        let grapheme = &line[byte..end_byte];
+        byte = end_byte;
+        if grapheme.len() > crate::viewport_admission::SYMBOL_BYTES {
+            return "referencia de viewport".into();
+        }
         if column >= right {
             break;
         }
-        let end = column.saturating_add(cell_width(grapheme, column));
+        let Ok(cells) = text_engine::width(grapheme, column, &mut work) else {
+            return "referencia de viewport".into();
+        };
+        let end = column.saturating_add(cells);
         if end > column && end > left {
             if grapheme == "\t" || column < left || end > right {
                 result.extend(std::iter::repeat_n(

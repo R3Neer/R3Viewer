@@ -1,0 +1,21 @@
+{
+  "upstream": "unicode-width0.2.2",
+  "license": "MIT OR Apache-2.0",
+  "source": "accepted private gate R2, MANIFEST69EA6361593E41C7389565476889C5D94DE0A7FC2257301D1A6DB842E6239E96",
+  "delta": "cancelable reverse fold plus opaque carried WidthState; tables/rules unchanged; package renamed and irrelevant dev/bench manifests removed",
+  "records": [
+    {
+      "path": "src/lib.rs",
+      "upstream_sha256": "BE8917E1A821806C0CE7A392564C72731A5F7D02155429A37B08571AD246A0BF",
+      "adapted_sha256": "72898A521996CD650F68C96D83D274606399D5D512356151B7D65F06D0D92120",
+      "original_byte_prefix": true
+    },
+    {
+      "path": "src/tables.rs",
+      "upstream_sha256": "4C3E673DA24634C269562CA4D3652B494542C78CAFE56DA69D23DF9178ADFFD4",
+      "adapted_sha256": "47DEAAEF5EA096E888551A5F7D8752D6398FA10CFE070680496994D52B144DBA",
+      "original_byte_prefix": true
+    }
+  ],
+  "manifest_delta": "Explicit workspace member because Cargo enrolls in-tree path dependencies. Renamed package. Exact version0.2.2/default CJK retained. autobenches/autoexamples/autotests=false; original upstream bench/test/example files preserved, no criterion dependency in product graph. Internal cfg(test) tests remain active. Narrow upstream append-only items_after_test_module lint allowance; product -D warnings unchanged."
+}

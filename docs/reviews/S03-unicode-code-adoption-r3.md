@@ -1,0 +1,13 @@
+# Integración de fuentes Unicode R2 con corrección NuKey R3
+
+2026-10-06. Registro del incremento de código; no cierre global de S03, RV, QA visual, Unix ni distribución.
+
+Las fuentes compartidas incorporan el motor Unicode cancelable, navegación sin copias por escalar y admisión del viewport antes de construir widgets. YAML/XML conservan unidades iniciales y filas vacías entre ventanas; una unidad que excede la admisión conserva su referencia y el origen completo. Las claves de valores Nushell mantienen el dominio NuValue y no inventan un span literal de Fuente.
+
+Root verificó 31 archivos de Cargo, fuentes, avisos y dependencia adaptada contra el padre Unicode R2 (MANIFEST56EA09960104D701CB906E752CD403A7BA400FA80481EA8B75EFEBDBD8886F95) y la única sustitución productiva NuKey R3 (PRODUCT09D3324D63775E6E844FFE23145F60A28E33190AF7C40702144CA77F0F848413). Cero diferencias antes de añadir tests. ROOT-UNICODE-SHARED-COMMIT-IDENTITY.json conserva esa identificación previa. Después se incorporó la copia root R3 con dos tests de regresión ya ejecutados: viewer_session.rs queda byteexacto a ese archivo congelado, 195513B/SHA42A0D4302D273E0898D8B47244FBA1353E4E4BDF1D9BA3D0F290241CC9AFBD11. El prefijo productivo coincide con PRODUCT normalizando únicamente CRLF a LF; el sufijo añadido pertenece al módulo cfg(test). Los otros 30 archivos siguen byteexactos al padre. La identificación posterior se conserva separada sin sobrescribir la previa.
+
+Comprobación fresca del repositorio compartido: cargo fmt --all -- --check; cargo test --locked -p r3viewer root_nukey -- --test-threads=1 (dos PASS); sequential_short_empty_unicode_rows (dos PASS); complete_source_references_whole_cluster (un PASS); cargo clippy --locked --workspace --all-targets -- -D warnings (salida 0). Sesión51659, resultados en chunks8489ff y26fb13; arranque c631f9. El aviso de incompatibilidad futura de proc-macro-error2 upstream no es un fallo actual de Clippy ni una certificación de versiones Rust futuras.
+
+Aceptaciones independientes previas: S03-unicode-integracion-r2.md cubre la corrección de filas y ventanas; S03-unicode-clave-nu-r3.md cubre el dominio de claves; S03-unicode-conpty-r3.md cubre seis controles funcionales Windows sobre el ejecutable congelado. Los resultados de ese binario no se atribuyen a un nuevo ejecutable reconstruido desde este checkout. El nuevo sufijo de tests no cambia producción.
+
+Pendientes conservados: causa del tiempo histórico3695.62s y WorkerExited en la prueba XML, SLA, cancelación ConPTY dentro de prepare, QA visual y ejecución nativa Unix. Una prueba TestBackend o ConPTY no certifica apariencia. La integración Markdown permanece aislada y no forma parte de este incremento.

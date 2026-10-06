@@ -9,10 +9,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::style::Print;
 use crossterm::terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen};
 use crossterm::{execute, queue};
-use unicode_segmentation::UnicodeSegmentation;
-use unicode_width::UnicodeWidthStr;
 
-const TAB_STOP: usize = 8;
 const HELP: &[&str] = &[
     "R3Viewer - texto",
     "",
@@ -210,101 +207,195 @@ impl Position {
         }
     }
 }
-fn grapheme_width(grapheme: &str, column: usize) -> usize {
-    if grapheme == "\t" {
-        TAB_STOP - column % TAB_STOP
-    } else {
-        UnicodeWidthStr::width(grapheme)
-    }
-}
-
-/// Produces a viewport in display cells, never slicing UTF-8 or a grapheme.
-/// Partial wide glyphs become spaces so subsequent glyphs stay in their cells.
+#[cfg(test)]
 fn slice_cells(line: &str, left: usize, columns: usize) -> String {
-    let right = left.saturating_add(columns);
-    let mut column = 0usize;
-    let mut output = String::new();
-    for grapheme in line.graphemes(true) {
-        if column >= right {
-            break;
-        }
-        let width = grapheme_width(grapheme, column);
-        let end = column.saturating_add(width);
-        if width > 0 && end > left {
-            let visible = end.min(right).saturating_sub(column.max(left));
-            if grapheme == "\t" || column < left || end > right {
-                output.extend(std::iter::repeat_n(' ', visible));
-            } else {
-                output.push_str(grapheme);
-            }
-        }
-        // Standalone zero-width clusters are omitted rather than allowing a
-        // combining mark to alter a cell preceding this viewport.
-        column = end;
-    }
-    output
+    crate::presentation::slice_cells(line, left, columns)
 }
-
+#[cfg(test)]
 fn document<'a>(text: &'a str, cancelled: &AtomicBool) -> Option<(Vec<&'a str>, usize)> {
-    let mut lines = Vec::new();
-    let mut max_width = 0;
-    for line in text.split('\n') {
-        let line = line.strip_suffix('\r').unwrap_or(line);
-        let mut width = 0;
-        for (index, grapheme) in line.graphemes(true).enumerate() {
-            if index % 4096 == 0 && cancelled.load(Ordering::Relaxed) {
-                return None;
-            }
-            width += grapheme_width(grapheme, width);
-        }
-        if cancelled.load(Ordering::Relaxed) {
-            return None;
-        }
-        max_width = max_width.max(width);
-        lines.push(line);
-    }
-    Some((lines, max_width))
+    let mut work = crate::text_engine::Work::preparation(cancelled);
+    let index = crate::text_engine::Index::prepare(
+        text,
+        crate::text_engine::Identity::new(),
+        &mut work,
+        4096,
+        usize::MAX,
+    )
+    .ok()?;
+    Some((
+        text.split('\n')
+            .map(|line| line.strip_suffix('\r').unwrap_or(line))
+            .collect(),
+        index.max_width,
+    ))
 }
-
+fn prepared(text: &str, cancel: &AtomicBool) -> io::Result<crate::presentation::SafeTextModel> {
+    if text.len() > 128 * 1024 * 1024 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "fuente supera 128MiB",
+        ));
+    }
+    let mut copy = String::new();
+    copy.try_reserve_exact(text.len())
+        .map_err(|_| io::Error::other("memoria de fuente"))?;
+    if copy.capacity() > 128 * 1024 * 1024 {
+        return Err(io::Error::other("capacidad de fuente"));
+    }
+    let mut at = 0;
+    while at < text.len() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+        }
+        let mut end = (at + 4096).min(text.len());
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        copy.push_str(&text[at..end]);
+        at = end;
+    }
+    crate::presentation::SafeTextModel::new(copy, cancel).map_err(|error| match error {
+        crate::presentation::PrepareError::Cancelled => {
+            io::Error::new(io::ErrorKind::Interrupted, "cancelado")
+        }
+        _ => io::Error::other(format!("{error:?}")),
+    })
+}
+fn admitted_lines(
+    model: &crate::presentation::SafeTextModel,
+    domain: crate::viewport_admission::Domain,
+    top: usize,
+    rows: usize,
+    left: usize,
+    columns: usize,
+    frame: &mut crate::viewport_admission::FrameBudget<'_>,
+) -> io::Result<Vec<ratatui::text::Line<'static>>> {
+    if let Some(reference) = &frame.failed {
+        return Ok(vec![ratatui::text::Line::raw(
+            crate::presentation::slice_cells(&reference.message(), 0, columns),
+        )]);
+    }
+    let result = crate::viewport_admission::TextPlan::prepare(
+        model,
+        domain,
+        top,
+        rows,
+        left..left.saturating_add(columns),
+        frame,
+    )
+    .and_then(|plan| {
+        plan.materialize(model, frame.work.cancel, |_, _| {
+            ratatui::style::Style::default()
+        })
+    });
+    match result {
+        Ok(lines) => Ok(lines),
+        Err(crate::viewport_admission::TextError::Reference(reference)) => {
+            let line = ratatui::text::Line::raw(crate::presentation::slice_cells(
+                &reference.message(),
+                0,
+                columns,
+            ));
+            frame.failed = Some(*reference);
+            Ok(vec![line])
+        }
+        Err(crate::viewport_admission::TextError::Prepare(
+            crate::presentation::PrepareError::Cancelled,
+        )) => Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado")),
+        Err(error) => Err(io::Error::other(format!("{error:?}"))),
+    }
+}
+struct LegacyDocuments<'a> {
+    model: &'a crate::presentation::SafeTextModel,
+    title: &'a str,
+    help_model: &'a crate::presentation::SafeTextModel,
+}
 fn draw(
     output: &mut impl Write,
-    lines: &[&str],
-    title: &str,
+    documents: LegacyDocuments<'_>,
     position: &Position,
     size: (u16, u16),
     help: bool,
+    cancel: &AtomicBool,
 ) -> io::Result<()> {
-    // Reserve the last column: printing in the bottom-right cell can scroll
-    // terminals with autowrap. Do not change the user's autowrap setting.
+    let LegacyDocuments {
+        model,
+        title,
+        help_model,
+    } = documents;
     let columns = usize::from(size.0.saturating_sub(1));
     let rows = usize::from(size.1.saturating_sub(1));
-    queue!(output, MoveTo(0, 0), Clear(ClearType::All))?;
-    let source = if help { HELP } else { lines };
+    let mut frame = crate::viewport_admission::FrameBudget::new(cancel);
+    // Prepare every body/status symbol before the first Print.
+    let source = if help { help_model } else { model };
     let top = if help { 0 } else { position.top };
     let left = if help { 0 } else { position.left };
-    for (row, line) in source.iter().skip(top).take(rows).enumerate() {
-        queue!(
-            output,
-            MoveTo(0, row as u16),
-            Print(slice_cells(line, left, columns))
-        )?;
+    let body = admitted_lines(
+        source,
+        crate::viewport_admission::Domain::Source,
+        top,
+        rows,
+        left,
+        columns,
+        &mut frame,
+    )?;
+    // Descriptor preview uses the same frame reservation; control spelling
+    // matches the legacy filename sanitizer, before copying or Print.
+    let title_text = frame.label(title, columns);
+    let temporary = title_text.len() * 6 + 8192;
+    if frame.failed.is_none() && frame.reserve(temporary).is_err() {
+        frame.preview_failure(
+            0..title_text.len(),
+            crate::viewport_admission::Reason::FrameSymbols,
+        );
+    }
+    let status = prepared(
+        &format!(
+            "{title_text} | linea {}/{} col {} | ? ayuda | q salir",
+            position.top + 1,
+            model.line_count(),
+            position.left + 1
+        ),
+        cancel,
+    )?;
+    let status = admitted_lines(
+        &status,
+        crate::viewport_admission::Domain::Preview,
+        0,
+        1,
+        0,
+        columns,
+        &mut frame,
+    )?;
+    if cancel.load(Ordering::Relaxed) {
+        return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
+    }
+    queue!(output, MoveTo(0, 0), Clear(ClearType::All))?;
+    let body = if let Some(reference) = &frame.failed {
+        vec![ratatui::text::Line::raw(crate::presentation::slice_cells(
+            &reference.message(),
+            0,
+            columns,
+        ))]
+    } else {
+        body
+    };
+    for (row, line) in body.into_iter().enumerate() {
+        queue!(output, MoveTo(0, row as u16))?;
+        for span in line.spans {
+            queue!(output, Print(span.content))?;
+        }
     }
     if size.1 > 0 {
-        let status = format!(
-            "{title} | linea {}/{} col {} | ? ayuda | q salir",
-            position.top + 1,
-            lines.len(),
-            position.left + 1
-        );
-        queue!(
-            output,
-            MoveTo(0, size.1 - 1),
-            Print(slice_cells(&status, 0, columns))
-        )?;
+        queue!(output, MoveTo(0, size.1 - 1))?;
+        for line in status {
+            for span in line.spans {
+                queue!(output, Print(span.content))?;
+            }
+        }
     }
     output.flush()
 }
-
 /// Runs on stdout only. `true` denotes cancellation; q/Escape return `false`.
 /// Failures and unwinding restore terminal state through the owning guard.
 pub fn run(text: &str, title: &str, cancelled: &AtomicBool) -> io::Result<bool> {
@@ -319,15 +410,13 @@ pub fn run(text: &str, title: &str, cancelled: &AtomicBool) -> io::Result<bool> 
         ));
     }
     let control = control_terminal()?;
-    let Some((lines, width)) = document(text, cancelled) else {
-        return Ok(true);
+    let model = match prepared(text, cancelled) {
+        Ok(model) => model,
+        Err(error) if error.kind() == io::ErrorKind::Interrupted => return Ok(true),
+        Err(error) => return Err(error),
     };
-    // Titles may originate in filenames; the document sanitizer does not cover
-    // them. Prevent even filenames containing terminal controls from executing.
-    let title: String = title
-        .chars()
-        .map(|c| if c.is_control() { '\u{fffd}' } else { c })
-        .collect();
+    let width = model.max_width();
+    let help_model = prepared(&HELP.join("\n"), cancelled)?;
     let mut guard = TerminalGuard::enter(&stdout, control)?;
     let mut size = terminal::size()?;
     let mut position = Position::default();
@@ -338,7 +427,22 @@ pub fn run(text: &str, title: &str, cancelled: &AtomicBool) -> io::Result<bool> 
             break true;
         }
         if redraw {
-            draw(&mut guard.output, &lines, &title, &position, size, help)?;
+            match draw(
+                &mut guard.output,
+                LegacyDocuments {
+                    model: &model,
+                    title,
+                    help_model: &help_model,
+                },
+                &position,
+                size,
+                help,
+                cancelled,
+            ) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => break true,
+                Err(error) => return Err(error),
+            };
             redraw = false;
         }
         if !event::poll(Duration::from_millis(50))? {
@@ -362,7 +466,7 @@ pub fn run(text: &str, title: &str, cancelled: &AtomicBool) -> io::Result<bool> 
                     KeyCode::Char('?') => help = !help,
                     _ => position.navigate(
                         key.code,
-                        lines.len(),
+                        model.line_count(),
                         width,
                         usize::from(size.1.saturating_sub(1)),
                         usize::from(size.0.saturating_sub(1)),
@@ -437,5 +541,33 @@ mod tests {
         assert_eq!(document("", &cancelled), Some((vec![""], 0)));
         cancelled.store(true, Ordering::Relaxed);
         assert_eq!(document("", &cancelled), None);
+    }
+
+    #[test]
+    fn unicode_legacy_draw_preflights_complete_32mb_cluster_before_print() {
+        let cancel = AtomicBool::new(false);
+        let text = format!("ordinary\na{}\nafter", "\u{301}".repeat(16_000_000));
+        let model = prepared(&text, &cancel).unwrap();
+        let title = "fixture";
+        let help_model = prepared("help", &cancel).unwrap();
+        for (top, expected) in [(0, "ordinary"), (1, "referencia de viewport"), (2, "after")] {
+            let mut output = Vec::new();
+            draw(
+                &mut output,
+                LegacyDocuments {
+                    model: &model,
+                    title,
+                    help_model: &help_model,
+                },
+                &Position { top, left: 0 },
+                (120, 2),
+                false,
+                &cancel,
+            )
+            .unwrap();
+            assert!(output.len() < 16384);
+            assert!(String::from_utf8(output).unwrap().contains(expected));
+        }
+        assert_eq!(model.original(), text);
     }
 }

@@ -17,3 +17,7 @@ ArrayDeque0.5.1, dependencia del parser: Cargo declara MIT/Apache-2.0; LICENSE c
 ## quick-xml 0.42.0
 
 XML slice event reader, MIT (Johann Tuffe, 2016), registry package pinned in Cargo.lock. Default features disabled; memchr dependency shared. Published crate SHA256 41B1177FDF999D2321D3FB46FF47159D9C1FB9AD66A4879F8C50A0B504615E9B, VCS 36a2c52a4f6c90878c3f60c3c3b5c62efaef28a9 as recorded in XML research. Original license retained verbatim under licenses. No upstream patches, serde DOM, external resource resolver or NsReader semantic authority. Upstream: https://github.com/tafia/quick-xml. This entry is not a complete distribution inventory.
+
+## Unicode-width adapter 0.2.2
+
+Adaptación local mínima de unicode-width0.2.2 (MIT OR Apache-2.0), copiada del gate privado Unicode R2 aceptado. vendor/unicode-width-adapter conserva LICENSE-MIT/LICENSE-APACHE, fuentes upstream originales como prefijos byte-exactos y R3VIEWER-DERIVATION.json. Añade checks de cancel/preadmisión y estado inverso WidthInfo entre bloques, sin cambiar tablas/reglas/wrapping. Cargo usa nombre r3viewer-unicode-width-adapter para no sustituir unicode-width utilizado por terceros. Manifiesto privado normalizado elimina sólo dev/bench/rustc dependencias ajenas al perfil; originales conservados. La integración de UI sigue en desarrollo, no certifica distribución ni equivalencia Unicode universal.

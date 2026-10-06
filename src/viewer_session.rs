@@ -3,7 +3,7 @@ use crate::{
     config::{PresentationConfig, Role},
     data::{Cell, DataRef, FileNavigator, FilePart, InspectionRef, Navigator, PathMember},
     inspect_text::{file_leaf_text, primitive_text},
-    presentation::{SafeTextModel, cell_width, slice_cells},
+    presentation::SafeTextModel,
     search::{
         Direction, FileSearchHit, QUERY_LIMIT, SearchHit, SearchOutcome, SearchWorker, find_data,
         find_source, find_structure, find_xml, find_yaml,
@@ -34,7 +34,7 @@ use ratatui::{
     layout::Rect,
     style::Modifier,
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Paragraph, Wrap},
 };
 use std::{
     io::{self, IsTerminal},
@@ -47,7 +47,6 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
-use unicode_segmentation::UnicodeSegmentation;
 const TICK: Duration = Duration::from_millis(25);
 const EVENT_CAPACITY: usize = 256;
 const HELP: &str = "Flechas / h j k l: mover\nPageUp / PageDown: página; Home / End: extremos\nEnter: abrir celda; columna key: clave completa; r: abrir fila completa\nBackspace: cerrar clave / volver al padre\n/: búsqueda literal; Enter: confirmar; Esc: cancelar editor\nn / N: siguiente / anterior (vuelta al principio/final)\nK: clave completa de columna/campo; L: números de línea; ?: ayuda\nTab / Shift-Tab: Fuente/Estructura; o: span original completo\nFuente: busca texto original; controles se muestran seguros\nXML: K QName; m inspector; dominios de búsqueda separados\nYAML: inspector de serialización; m: metadatos; Enter alias: seguir target\nYAML: máximo 128 retornos previos (current aparte); Backspace conserva retorno\nq / Esc: salir; Ctrl-C: cancelar (130)";
@@ -474,6 +473,8 @@ struct App<'a> {
     file: Option<FileWorkspace>,
     file_hit: Option<FileSearchHit>,
     structure_message: String,
+    #[cfg(test)]
+    maximum_profile_seek_gap: bool,
 }
 fn prepare_error(error: impl std::fmt::Debug) -> io::Error {
     io::Error::other(format!("no se puede preparar vista: {error:?}"))
@@ -507,6 +508,8 @@ impl<'a> App<'a> {
             .transpose()
             .map_err(prepare_error)?;
         let mut app = Self {
+            #[cfg(test)]
+            maximum_profile_seek_gap: false,
             source,
             typed,
             navigator,
@@ -659,7 +662,7 @@ impl<'a> App<'a> {
         } else {
             YamlPane::prepare(nav.structure(), next, nav.budget(), cancel).map(Some)
         };
-        let pane = match prepared {
+        let mut pane = match prepared {
             Ok(p) => p,
             Err(yaml_view::Error::Cancelled) => {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
@@ -669,11 +672,22 @@ impl<'a> App<'a> {
                 return Ok(false);
             }
         };
-        if !back && let (Some(hit), Some(pane)) = (next.hit, &pane) {
+        #[cfg(test)]
+        if self.maximum_profile_seek_gap
+            && let Some(pane) = &mut pane
+        {
+            pane.maximum_profile_seek_gap_fixture(nav.structure(), cancel);
+        }
+        if !back && let (Some(hit), Some(pane)) = (next.hit, &mut pane) {
             match pane.position(nav.structure(), hit.start, cancel) {
                 Ok((top, left)) => {
                     next.cursor.top = top;
+                    next.position_pending = false;
                     next.cursor.left = left
+                }
+                Err(yaml_view::Error::Work) => {
+                    pane.retain_unpositioned_hit(hit);
+                    next.position_pending = true;
                 }
                 Err(error) => {
                     self.message = error.to_string();
@@ -713,7 +727,13 @@ impl<'a> App<'a> {
                 self.message = "el nodo YAML no tiene un span original contiguo".into();
                 return Ok(true);
             };
-            let range = self.source.visible_range(span.range());
+            let range = self
+                .source
+                .visible_range_with(
+                    span.range(),
+                    &mut crate::text_engine::Work::preparation(cancel),
+                )
+                .map_err(prepare_error)?;
             self.swap_file_domain(cancel)?;
             if let Some(pane) = &mut self.pane {
                 pane.position.top = pane.model.line_for_offset(range.start);
@@ -769,6 +789,7 @@ impl<'a> App<'a> {
                 cursor: Default::default(),
                 domain,
                 hit: None,
+                position_pending: false,
                 last_hit: current.last_hit,
             };
             self.navigate_yaml(next, false, cancel)?;
@@ -791,7 +812,9 @@ impl<'a> App<'a> {
         let file = self.file.as_mut().unwrap();
         let nav = file.yaml.as_mut().unwrap();
         let before = nav.current();
-        if let Some(pane) = &file.borrowed {
+        if let Some(pane) = &mut file.borrowed {
+            pane.resume_manual_position();
+            nav.current_mut().position_pending = false;
             let mut position = Position {
                 top: before.cursor.top,
                 left: before.cursor.left,
@@ -888,7 +911,7 @@ impl<'a> App<'a> {
         } else {
             XmlPane::prepare(nav.structure(), next, nav.budget(), cancel).map(Some)
         };
-        let pane = match prepared {
+        let mut pane = match prepared {
             Ok(p) => p,
             Err(xml_view::Error::Cancelled) => {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
@@ -898,11 +921,22 @@ impl<'a> App<'a> {
                 return Ok(false);
             }
         };
-        if !back && let (Some(hit), Some(pane)) = (next.hit, &pane) {
+        #[cfg(test)]
+        if self.maximum_profile_seek_gap
+            && let Some(pane) = &mut pane
+        {
+            pane.maximum_profile_seek_gap_fixture(nav.structure(), cancel);
+        }
+        if !back && let (Some(hit), Some(pane)) = (next.hit, &mut pane) {
             match pane.position(nav.structure(), hit.start, cancel) {
                 Ok((top, left)) => {
                     next.cursor.top = top;
+                    next.position_pending = false;
                     next.cursor.left = left
+                }
+                Err(xml_view::Error::Work) => {
+                    pane.retain_unpositioned_hit(hit);
+                    next.position_pending = true;
                 }
                 Err(error) => {
                     self.message = error.to_string();
@@ -942,7 +976,13 @@ impl<'a> App<'a> {
                 self.message = "el nodo XML no tiene un span original contiguo".into();
                 return Ok(true);
             };
-            let range = self.source.visible_range(span.range());
+            let range = self
+                .source
+                .visible_range_with(
+                    span.range(),
+                    &mut crate::text_engine::Work::preparation(cancel),
+                )
+                .map_err(prepare_error)?;
             self.swap_file_domain(cancel)?;
             if let Some(pane) = &mut self.pane {
                 pane.position.top = pane.model.line_for_offset(range.start);
@@ -1011,6 +1051,7 @@ impl<'a> App<'a> {
                 cursor: Default::default(),
                 domain,
                 hit: None,
+                position_pending: false,
                 last_hit: current.last_hit,
             };
             self.navigate_xml(next, false, cancel)?;
@@ -1033,7 +1074,9 @@ impl<'a> App<'a> {
         let file = self.file.as_mut().unwrap();
         let nav = file.xml.as_mut().unwrap();
         let before = nav.current();
-        if let Some(pane) = &file.xml_borrowed {
+        if let Some(pane) = &mut file.xml_borrowed {
+            pane.resume_manual_position();
+            nav.current_mut().position_pending = false;
             let mut position = Position {
                 top: before.cursor.top,
                 left: before.cursor.left,
@@ -1106,7 +1149,13 @@ impl<'a> App<'a> {
                 self.message = "el nodo no tiene un span original contiguo".into();
                 return Ok(true);
             }
-            let range = self.source.visible_range(span.unwrap().range());
+            let range = self
+                .source
+                .visible_range_with(
+                    span.unwrap().range(),
+                    &mut crate::text_engine::Work::preparation(cancel),
+                )
+                .map_err(prepare_error)?;
             self.swap_file_domain(cancel)?;
             if let Some(pane) = &mut self.pane {
                 pane.position.top = pane.model.line_for_offset(range.start);
@@ -1517,6 +1566,7 @@ impl<'a> App<'a> {
                     cursor: Default::default(),
                     domain: hit.domain,
                     hit: Some(hit.range),
+                    position_pending: false,
                     last_hit: Some(hit),
                 };
                 if self.navigate_xml(next, false, cancel)? {
@@ -1536,6 +1586,7 @@ impl<'a> App<'a> {
                     cursor: Default::default(),
                     domain: hit.domain,
                     hit: Some(hit.range),
+                    position_pending: false,
                     last_hit: Some(hit),
                 };
                 if self.navigate_yaml(next, false, cancel)? {
@@ -1820,21 +1871,15 @@ impl<'a> App<'a> {
     }
 }
 fn offset_cell(model: &SafeTextModel, offset: usize, cancel: &AtomicBool) -> io::Result<usize> {
-    let range = model.line_range(model.line_for_offset(offset)).unwrap();
-    let mut column = 0;
-    for (index, (byte, grapheme)) in model.visible()[range.clone()]
-        .grapheme_indices(true)
-        .enumerate()
-    {
-        if index.is_multiple_of(4096) && cancel.load(Ordering::Relaxed) {
-            return Err(io::Error::new(io::ErrorKind::Interrupted, "cancelado"));
-        }
-        if range.start + byte + grapheme.len() > offset {
-            break;
-        }
-        column += cell_width(grapheme, column);
-    }
-    Ok(column)
+    let mut work = crate::text_engine::Work::frame(cancel);
+    model
+        .cell_for_offset_with(offset, &mut work)
+        .map_err(|error| match error {
+            crate::presentation::PrepareError::Cancelled => {
+                io::Error::new(io::ErrorKind::Interrupted, "cancelado")
+            }
+            _ => prepare_error(error),
+        })
 }
 fn move_text(
     pos: &mut Position,
@@ -1935,14 +1980,6 @@ struct RenderStats {
     cells: usize,
     graphemes: usize,
 }
-fn label(text: &str, width: usize) -> String {
-    let head: String = text
-        .chars()
-        .take(width.saturating_mul(4))
-        .map(|ch| if ch.is_control() { '�' } else { ch })
-        .collect();
-    slice_cells(&head, 0, width)
-}
 struct TextDecoration<'a> {
     hit: Option<&'a Range<usize>>,
     syntax: &'a [RoleSpan],
@@ -1957,6 +1994,50 @@ fn syntax_role(role: SyntaxRole) -> Role {
         SyntaxRole::Heading => Role::Heading,
     }
 }
+struct TextViewport {
+    domain: crate::viewport_admission::Domain,
+    top: usize,
+    rows: usize,
+    window: Range<usize>,
+}
+fn text_lines(
+    model: &SafeTextModel,
+    viewport: TextViewport,
+    decoration: TextDecoration<'_>,
+    config: &PresentationConfig,
+    admission: &mut crate::viewport_admission::FrameBudget<'_>,
+    stats: &mut RenderStats,
+) -> Result<Vec<Line<'static>>, crate::viewport_admission::TextError> {
+    let TextViewport {
+        domain,
+        top,
+        rows,
+        window,
+    } = viewport;
+    let plan =
+        crate::viewport_admission::TextPlan::prepare(model, domain, top, rows, window, admission)?;
+    plan.materialize(model, admission.work.cancel, |raw, visible| {
+        stats.graphemes += 1;
+        let matched = decoration
+            .hit
+            .is_some_and(|hit| hit.start < visible.end && hit.end > visible.start);
+        let index = decoration
+            .syntax
+            .partition_point(|span| span.end as usize <= raw.start);
+        let role = decoration
+            .syntax
+            .get(index)
+            .filter(|span| span.start as usize <= raw.start)
+            .map_or(Role::Value, |span| syntax_role(span.role));
+        let style = config.style(role);
+        if matched {
+            style.add_modifier(Modifier::REVERSED | Modifier::BOLD)
+        } else {
+            style
+        }
+    })
+}
+#[cfg(test)]
 fn text_line(
     model: &SafeTextModel,
     line: usize,
@@ -1966,61 +2047,39 @@ fn text_line(
     cancel: &AtomicBool,
     stats: &mut RenderStats,
 ) -> Line<'static> {
-    let Some(range) = model.line_range(line) else {
-        return Line::default();
-    };
-    let left = window.start;
-    let right = window.end;
-    let (start, mut column) = model.viewport_start(line, left).unwrap();
-    let mut spans = Vec::new();
-    let mut provenance = model.provenance_cursor(start);
-    let mut role_index = None;
-    for (index, (byte, grapheme)) in model.visible()[start..range.end]
-        .grapheme_indices(true)
-        .enumerate()
-    {
-        if column >= right || index.is_multiple_of(4096) && cancel.load(Ordering::Relaxed) {
-            break;
+    let mut budget = crate::viewport_admission::FrameBudget::new(cancel);
+    match text_lines(
+        model,
+        TextViewport {
+            domain: crate::viewport_admission::Domain::Source,
+            top: line,
+            rows: 1,
+            window,
+        },
+        decoration,
+        config,
+        &mut budget,
+        stats,
+    ) {
+        Ok(mut lines) => lines.pop().unwrap_or_default(),
+        Err(crate::viewport_admission::TextError::Reference(reference)) => {
+            Line::raw(reference.message())
         }
-        stats.graphemes += 1;
-        let end = column.saturating_add(cell_width(grapheme, column));
-        if end > column && end > left {
-            let source_range = start + byte..start + byte + grapheme.len();
-            let matched = decoration
-                .hit
-                .is_some_and(|hit| hit.start < source_range.end && hit.end > source_range.start);
-            let raw = provenance.source_range(source_range);
-            let index = role_index.get_or_insert_with(|| {
-                decoration
-                    .syntax
-                    .partition_point(|span| span.end as usize <= raw.start)
-            });
-            while *index < decoration.syntax.len()
-                && decoration.syntax[*index].end as usize <= raw.start
-            {
-                *index += 1;
-            }
-            // The first original scalar determines the whole visible cluster.
-            // Later combining/ZWJ scalars never supply a missing initial role.
-            let role = decoration
-                .syntax
-                .get(*index)
-                .filter(|span| span.start as usize <= raw.start)
-                .map_or(Role::Value, |span| syntax_role(span.role));
-            let mut style = config.style(role);
-            if matched {
-                style = style.add_modifier(Modifier::REVERSED | Modifier::BOLD);
-            }
-            let piece = if grapheme == "\t" || column < left || end > right {
-                " ".repeat(end.min(right) - column.max(left))
-            } else {
-                grapheme.to_owned()
-            };
-            spans.push(Span::styled(piece, style));
-        }
-        column = end;
+        Err(_) => Line::default(),
     }
-    Line::from(spans)
+}
+fn render_reference(
+    frame: &mut Frame<'_>,
+    body: Rect,
+    reference: &crate::viewport_admission::Reference,
+    config: &PresentationConfig,
+) {
+    frame.render_widget(
+        Paragraph::new(reference.message())
+            .style(config.style(Role::Secondary))
+            .wrap(Wrap { trim: false }),
+        body,
+    );
 }
 fn render_yaml(
     frame: &mut Frame<'_>,
@@ -2029,6 +2088,7 @@ fn render_yaml(
     config: &PresentationConfig,
     cancel: &AtomicBool,
     stats: &mut RenderStats,
+    admission: &mut crate::viewport_admission::FrameBudget<'_>,
 ) {
     let file = app.file.as_ref().unwrap();
     let nav = file.yaml.as_ref().unwrap();
@@ -2039,34 +2099,48 @@ fn render_yaml(
         } else {
             0
         };
-        for row in 0..usize::from(body.height) {
-            let line = state.cursor.top + row;
-            if line >= pane.line_count() {
-                break;
-            }
-            let window = match pane.window(
-                nav.structure(),
-                line,
-                state.cursor.left,
-                usize::from(body.width).saturating_sub(numbers),
-                state.hit,
-                nav.budget(),
-                cancel,
-            ) {
-                Ok(w) => w,
-                Err(error) => {
+        let row_count =
+            usize::from(body.height).min(pane.line_count().saturating_sub(state.cursor.top));
+        if admission
+            .reserve(
+                row_count
+                    * (numbers * 3
+                        + std::mem::size_of::<Span<'static>>()
+                        + std::mem::size_of::<Line<'static>>()),
+            )
+            .is_err()
+        {
+            admission.preview_failure(
+                0..row_count,
+                crate::viewport_admission::Reason::FrameSymbols,
+            );
+            return;
+        }
+        let mut windows = match pane.windows(
+            nav.structure(),
+            state.cursor.top,
+            usize::from(body.height),
+            state.cursor.left,
+            usize::from(body.width).saturating_sub(numbers),
+            state.hit,
+            nav.budget(),
+            admission,
+        ) {
+            Ok(windows) => windows,
+            Err(error) => {
+                if let Some(reference) = pane.reference(nav.structure(), error) {
+                    render_reference(frame, body, &reference, config);
+                } else if error != yaml_view::Error::Cancelled {
                     frame.render_widget(
                         Paragraph::new(error.to_string()).style(config.style(Role::Secondary)),
-                        Rect::new(
-                            body.x + numbers as u16,
-                            body.y + row as u16,
-                            body.width.saturating_sub(numbers as u16),
-                            1,
-                        ),
+                        body,
                     );
-                    break;
                 }
-            };
+                return;
+            }
+        };
+        for (row, window) in windows.rows.iter_mut().enumerate() {
+            let line = state.cursor.top + row;
             let mut spans = Vec::new();
             if spans.try_reserve_exact(window.cells.len()).is_err() {
                 break;
@@ -2074,7 +2148,6 @@ fn render_yaml(
             if spans.capacity() > window.cells.len() {
                 break;
             }
-            let mut window = window;
             for cell in window.cells.drain(..) {
                 stats.graphemes += 1;
                 let mut style = config.style(Role::Value);
@@ -2127,7 +2200,8 @@ fn render_yaml(
                 "value"
             };
             frame.render_widget(
-                Paragraph::new(heading).style(config.style(Role::Secondary)),
+                Paragraph::new(admission.label(heading, cwidth))
+                    .style(config.style(Role::Secondary)),
                 Rect::new(body.x + x as u16, body.y, cwidth as u16, 1),
             );
         }
@@ -2150,21 +2224,23 @@ fn render_yaml(
                 } else {
                     width - x
                 };
-                let text = if column == 0 {
-                    entry.key().map_or_else(
-                        || row.to_string(),
-                        |key| InspectionRef::File(key).summary(cwidth * 2),
-                    )
-                } else {
-                    InspectionRef::File(entry.value()).summary(cwidth * 2)
-                };
+                let text = admission.preview(cwidth * 2, cwidth, || {
+                    if column == 0 {
+                        entry.key().map_or_else(
+                            || row.to_string(),
+                            |key| InspectionRef::File(key).summary(cwidth * 2),
+                        )
+                    } else {
+                        InspectionRef::File(entry.value()).summary(cwidth * 2)
+                    }
+                });
                 let mut style = config.style(Role::Value);
                 if row == state.cursor.row && column == state.cursor.column {
                     style = style.add_modifier(Modifier::REVERSED)
                 }
                 stats.cells += 1;
                 frame.render_widget(
-                    Paragraph::new(label(&text, cwidth)).style(style),
+                    Paragraph::new(text).style(style),
                     Rect::new(
                         body.x + x as u16,
                         body.y + 1 + (row - state.cursor.top) as u16,
@@ -2176,8 +2252,10 @@ fn render_yaml(
         }
         if node.entries().len() == 0 && body.height > 1 {
             frame.render_widget(
-                Paragraph::new(InspectionRef::File(node).summary(width))
-                    .style(config.style(Role::Secondary)),
+                Paragraph::new(
+                    admission.preview(width, width, || InspectionRef::File(node).summary(width)),
+                )
+                .style(config.style(Role::Secondary)),
                 Rect::new(body.x, body.y + 1, body.width, 1),
             );
         }
@@ -2190,6 +2268,7 @@ fn render_xml(
     config: &PresentationConfig,
     cancel: &AtomicBool,
     stats: &mut RenderStats,
+    admission: &mut crate::viewport_admission::FrameBudget<'_>,
 ) {
     let file = app.file.as_ref().unwrap();
     let nav = file.xml.as_ref().unwrap();
@@ -2200,34 +2279,48 @@ fn render_xml(
         } else {
             0
         };
-        for row in 0..usize::from(body.height) {
-            let line = state.cursor.top + row;
-            if line >= pane.line_count() {
-                break;
-            }
-            let window = match pane.window(
-                nav.structure(),
-                line,
-                state.cursor.left,
-                usize::from(body.width).saturating_sub(numbers),
-                state.hit,
-                nav.budget(),
-                cancel,
-            ) {
-                Ok(w) => w,
-                Err(error) => {
+        let row_count =
+            usize::from(body.height).min(pane.line_count().saturating_sub(state.cursor.top));
+        if admission
+            .reserve(
+                row_count
+                    * (numbers * 3
+                        + std::mem::size_of::<Span<'static>>()
+                        + std::mem::size_of::<Line<'static>>()),
+            )
+            .is_err()
+        {
+            admission.preview_failure(
+                0..row_count,
+                crate::viewport_admission::Reason::FrameSymbols,
+            );
+            return;
+        }
+        let mut windows = match pane.windows(
+            nav.structure(),
+            state.cursor.top,
+            usize::from(body.height),
+            state.cursor.left,
+            usize::from(body.width).saturating_sub(numbers),
+            state.hit,
+            nav.budget(),
+            admission,
+        ) {
+            Ok(windows) => windows,
+            Err(error) => {
+                if let Some(reference) = pane.reference(nav.structure(), error) {
+                    render_reference(frame, body, &reference, config);
+                } else if error != xml_view::Error::Cancelled {
                     frame.render_widget(
                         Paragraph::new(error.to_string()).style(config.style(Role::Secondary)),
-                        Rect::new(
-                            body.x + numbers as u16,
-                            body.y + row as u16,
-                            body.width.saturating_sub(numbers as u16),
-                            1,
-                        ),
+                        body,
                     );
-                    break;
                 }
-            };
+                return;
+            }
+        };
+        for (row, window) in windows.rows.iter_mut().enumerate() {
+            let line = state.cursor.top + row;
             let mut spans = Vec::new();
             if spans.try_reserve_exact(window.cells.len()).is_err() {
                 break;
@@ -2235,7 +2328,6 @@ fn render_xml(
             if spans.capacity() > window.cells.len() {
                 break;
             }
-            let mut window = window;
             for cell in window.cells.drain(..) {
                 stats.graphemes += 1;
                 let mut style = config.style(Role::Value);
@@ -2288,7 +2380,8 @@ fn render_xml(
                 "value"
             };
             frame.render_widget(
-                Paragraph::new(heading).style(config.style(Role::Secondary)),
+                Paragraph::new(admission.label(heading, cwidth))
+                    .style(config.style(Role::Secondary)),
                 Rect::new(body.x + x as u16, body.y, cwidth as u16, 1),
             );
         }
@@ -2311,21 +2404,23 @@ fn render_xml(
                 } else {
                     width - x
                 };
-                let text = if column == 0 {
-                    entry.key().map_or_else(
-                        || row.to_string(),
-                        |key| InspectionRef::File(key).summary(cwidth * 2),
-                    )
-                } else {
-                    InspectionRef::File(entry.value()).summary(cwidth * 2)
-                };
+                let text = admission.preview(cwidth * 2, cwidth, || {
+                    if column == 0 {
+                        entry.key().map_or_else(
+                            || row.to_string(),
+                            |key| InspectionRef::File(key).summary(cwidth * 2),
+                        )
+                    } else {
+                        InspectionRef::File(entry.value()).summary(cwidth * 2)
+                    }
+                });
                 let mut style = config.style(Role::Value);
                 if row == state.cursor.row && column == state.cursor.column {
                     style = style.add_modifier(Modifier::REVERSED)
                 }
                 stats.cells += 1;
                 frame.render_widget(
-                    Paragraph::new(label(&text, cwidth)).style(style),
+                    Paragraph::new(text).style(style),
                     Rect::new(
                         body.x + x as u16,
                         body.y + 1 + (row - state.cursor.top) as u16,
@@ -2337,8 +2432,10 @@ fn render_xml(
         }
         if node.entries().len() == 0 && body.height > 1 {
             frame.render_widget(
-                Paragraph::new(InspectionRef::File(node).summary(width))
-                    .style(config.style(Role::Secondary)),
+                Paragraph::new(
+                    admission.preview(width, width, || InspectionRef::File(node).summary(width)),
+                )
+                .style(config.style(Role::Secondary)),
                 Rect::new(body.x, body.y + 1, body.width, 1),
             );
         }
@@ -2353,17 +2450,21 @@ fn render(
     cancel: &AtomicBool,
 ) -> RenderStats {
     let mut stats = RenderStats::default();
+    let mut admission = crate::viewport_admission::FrameBudget::new(cancel);
+    let _ = admission.reference_reserve();
     let area = frame.area();
     let width = area.width.saturating_sub(1);
     let content_height = area.height.saturating_sub(2);
     if width == 0 || area.height == 0 {
         return stats;
     }
+    let _ = admission.reserve(1024);
+    let _ = admission.work.admit(1024);
     let header = if app.xml_active() {
         let nav = app.file.as_ref().unwrap().xml.as_ref().unwrap();
         format!(
             "{} | XML {} node#{} | {} / {:?} | retornos {}/128",
-            label(title, usize::from(width) / 3),
+            admission.label(title, usize::from(width) / 3),
             nav.label().as_str(),
             nav.node().id().0,
             crate::data::file_kind_name(nav.node().kind()),
@@ -2374,7 +2475,7 @@ fn render(
         let nav = app.file.as_ref().unwrap().yaml.as_ref().unwrap();
         format!(
             "{} | YAML {} | {} / {:?} | retornos {}/128",
-            label(title, usize::from(width) / 3),
+            admission.label(title, usize::from(width) / 3),
             nav.label().as_str(),
             crate::data::file_kind_name(nav.node().kind()),
             nav.current().domain,
@@ -2384,14 +2485,20 @@ fn render(
         let nav = app.file.as_ref().unwrap().navigator.as_ref().unwrap();
         format!(
             "{} | Estructura {}",
-            label(title, usize::from(width) / 2),
-            nav.current().path.label(usize::from(width) / 2)
+            admission.label(title, usize::from(width) / 2),
+            admission.preview(usize::from(width) / 2, usize::from(width) / 2, || nav
+                .current()
+                .path
+                .label(usize::from(width) / 2))
         )
     } else if let Some(nav) = &app.navigator {
         format!(
             "{} | {}{}",
-            label(title, usize::from(width) / 2),
-            nav.current().path.label(usize::from(width) / 2),
+            admission.label(title, usize::from(width) / 2),
+            admission.preview(usize::from(width) / 2, usize::from(width) / 2, || nav
+                .current()
+                .path
+                .label(usize::from(width) / 2)),
             if app.pane.as_ref().is_some_and(|p| p.key) {
                 " | clave"
             } else {
@@ -2399,7 +2506,7 @@ fn render(
             }
         )
     } else {
-        label(
+        admission.label(
             &format!(
                 "{}{}",
                 title,
@@ -2409,81 +2516,135 @@ fn render(
         )
     };
     frame.render_widget(
-        Paragraph::new(header).style(config.style(Role::Heading)),
+        Paragraph::new(admission.label(&header, usize::from(width)))
+            .style(config.style(Role::Heading)),
         Rect::new(area.x, area.y, width, 1),
     );
     let body = Rect::new(area.x, area.y.saturating_add(1), width, content_height);
     if app.help {
+        let _ = admission.reserve(HELP.len() * 3 + 16 * std::mem::size_of::<Span<'static>>());
+        let _ = admission.work.admit(HELP.len());
         frame.render_widget(
             Paragraph::new(HELP).style(config.style(Role::Secondary)),
             body,
         );
     } else if app.xml_active() {
-        render_xml(frame, body, app, config, cancel, &mut stats);
+        render_xml(frame, body, app, config, cancel, &mut stats, &mut admission);
     } else if app.yaml_active() {
-        render_yaml(frame, body, app, config, cancel, &mut stats);
+        render_yaml(frame, body, app, config, cancel, &mut stats, &mut admission);
     } else if let Some(pane) = &app.pane {
         let numbers = if app.line_numbers {
             pane.model.line_count().to_string().len() + 2
         } else {
             0
         };
-        for row in 0..usize::from(content_height) {
-            if cancel.load(Ordering::Relaxed) {
-                break;
+        let number_width = numbers.min(usize::from(width));
+        let row_count = usize::from(content_height)
+            .min(pane.model.line_count().saturating_sub(pane.position.top));
+        if admission
+            .reserve(
+                row_count
+                    * (number_width * 3
+                        + std::mem::size_of::<Span<'static>>()
+                        + std::mem::size_of::<Line<'static>>()),
+            )
+            .is_err()
+        {
+            admission.preview_failure(
+                0..row_count,
+                crate::viewport_admission::Reason::FrameSymbols,
+            );
+        }
+
+        let domain = match pane.node_identity {
+            None if pane.key => crate::viewport_admission::Domain::NuValue { key: true },
+            None => crate::viewport_admission::Domain::Source,
+            Some(NodeIdentity::File(node)) => {
+                crate::viewport_admission::Domain::FileValue { node: node.0 }
             }
-            let line = pane.position.top + row;
-            if line >= pane.model.line_count() {
-                break;
-            }
-            stats.rows += 1;
-            let number_width = numbers.min(usize::from(width));
-            if number_width > 0 {
-                frame.render_widget(
-                    Paragraph::new(format!(
-                        "{:>w$} ",
-                        line + 1,
-                        w = number_width.saturating_sub(1)
-                    ))
-                    .style(config.style(Role::Secondary)),
-                    Rect::new(body.x, body.y + row as u16, number_width as u16, 1),
-                );
-            }
-            let line = text_line(
-                &pane.model,
-                line,
-                pane.position.left
+            Some(_) => crate::viewport_admission::Domain::NuValue { key: pane.key },
+        };
+        let decoration = TextDecoration {
+            hit: pane.hit.as_ref(),
+            syntax: if app.syntax.plain.is_none()
+                && app
+                    .syntax
+                    .document
+                    .as_ref()
+                    .is_some_and(|document| Arc::ptr_eq(document, &pane.model))
+            {
+                &app.syntax.spans
+            } else {
+                &[]
+            },
+        };
+        match text_lines(
+            &pane.model,
+            TextViewport {
+                domain,
+                top: pane.position.top,
+                rows: usize::from(content_height),
+                window: pane.position.left
                     ..pane
                         .position
                         .left
                         .saturating_add(usize::from(width) - number_width),
-                TextDecoration {
-                    hit: pane.hit.as_ref(),
-                    syntax: if app.syntax.plain.is_none()
-                        && app
-                            .syntax
-                            .document
-                            .as_ref()
-                            .is_some_and(|document| Arc::ptr_eq(document, &pane.model))
-                    {
-                        &app.syntax.spans
-                    } else {
-                        &[]
-                    },
-                },
-                config,
-                cancel,
-                &mut stats,
-            );
-            frame.render_widget(
-                Paragraph::new(line),
-                Rect::new(
-                    body.x + number_width as u16,
-                    body.y + row as u16,
-                    width - number_width as u16,
-                    1,
-                ),
-            );
+            },
+            decoration,
+            config,
+            &mut admission,
+            &mut stats,
+        ) {
+            Ok(lines) => {
+                for (row, line) in lines.into_iter().enumerate() {
+                    if number_width > 0 {
+                        frame.render_widget(
+                            Paragraph::new(format!(
+                                "{:>w$} ",
+                                pane.position.top + row + 1,
+                                w = number_width.saturating_sub(1)
+                            ))
+                            .style(config.style(Role::Secondary)),
+                            Rect::new(body.x, body.y + row as u16, number_width as u16, 1),
+                        );
+                    }
+                    stats.rows += 1;
+                    frame.render_widget(
+                        Paragraph::new(line),
+                        Rect::new(
+                            body.x + number_width as u16,
+                            body.y + row as u16,
+                            width - number_width as u16,
+                            1,
+                        ),
+                    );
+                }
+            }
+            Err(crate::viewport_admission::TextError::Reference(mut reference)) => {
+                if let Some(NodeIdentity::File(node)) = pane.node_identity {
+                    reference.source = app
+                        .file
+                        .as_ref()
+                        .and_then(|file| file.navigator.as_ref().map(|nav| nav.structure()))
+                        .and_then(|model| model.node(node))
+                        .and_then(|node| node.source_location())
+                        .map_or(crate::viewport_admission::SourceRelation::None, |span| {
+                            crate::viewport_admission::SourceRelation::EnclosingNodeSpan(
+                                span.range(),
+                            )
+                        });
+                }
+                render_reference(frame, body, &reference, config);
+            }
+            Err(crate::viewport_admission::TextError::Prepare(error)) => {
+                if !matches!(error, crate::presentation::PrepareError::Cancelled) {
+                    frame.render_widget(
+                        Paragraph::new(format!("referencia de viewport: {error:?}"))
+                            .style(config.style(Role::Secondary)),
+                        body,
+                    );
+                }
+            }
         }
     } else if app.file_active() {
         let nav = app.file.as_ref().unwrap().navigator.as_ref().unwrap();
@@ -2506,7 +2667,7 @@ fn render(
                 usize::from(width) - x
             };
             frame.render_widget(
-                Paragraph::new(view.column_name(column).unwrap_or(""))
+                Paragraph::new(admission.label(view.column_name(column).unwrap_or(""), cw))
                     .style(config.style(Role::Secondary)),
                 Rect::new(body.x + x as u16, body.y, cw as u16, 1),
             );
@@ -2537,7 +2698,10 @@ fn render(
                         style = style.add_modifier(Modifier::REVERSED);
                     }
                     frame.render_widget(
-                        Paragraph::new(label(&cell.summary(cw.saturating_mul(2)), cw)).style(style),
+                        Paragraph::new(admission.preview(cw.saturating_mul(2), cw, || {
+                            cell.summary(cw.saturating_mul(2))
+                        }))
+                        .style(style),
                         Rect::new(body.x + x as u16, y, cw as u16, 1),
                     );
                 }
@@ -2545,8 +2709,12 @@ fn render(
         }
         if view.row_count() == 0 && content_height > 1 {
             frame.render_widget(
-                Paragraph::new(InspectionRef::File(view.node()).summary(usize::from(width)))
-                    .style(config.style(Role::Secondary)),
+                Paragraph::new(
+                    admission.preview(usize::from(width), usize::from(width), || {
+                        InspectionRef::File(view.node()).summary(usize::from(width))
+                    }),
+                )
+                .style(config.style(Role::Secondary)),
                 Rect::new(body.x, body.y + 1, width, 1),
             );
         }
@@ -2586,7 +2754,7 @@ fn render(
                 usize::from(width) - x
             };
             frame.render_widget(
-                Paragraph::new(label(view.column_name(col).unwrap_or(""), cw))
+                Paragraph::new(admission.label(view.column_name(col).unwrap_or(""), cw))
                     .style(config.style(Role::Secondary)),
                 Rect::new(body.x + x as u16, body.y, cw as u16, 1),
             );
@@ -2623,15 +2791,22 @@ fn render(
                     style = style.add_modifier(Modifier::REVERSED);
                 }
                 frame.render_widget(
-                    Paragraph::new(label(&cell.summary(cw.saturating_mul(2)), cw)).style(style),
+                    Paragraph::new(admission.preview(cw.saturating_mul(2), cw, || {
+                        cell.summary(cw.saturating_mul(2))
+                    }))
+                    .style(style),
                     Rect::new(body.x + x as u16, y, cw as u16, 1),
                 );
             }
         }
         if view.row_count() == 0 {
             frame.render_widget(
-                Paragraph::new(view.node().summary(usize::from(width)))
-                    .style(config.style(Role::Secondary)),
+                Paragraph::new(
+                    admission.preview(usize::from(width), usize::from(width), || {
+                        view.node().summary(usize::from(width))
+                    }),
+                )
+                .style(config.style(Role::Secondary)),
                 Rect::new(
                     body.x,
                     body.y.saturating_add(1),
@@ -2649,7 +2824,7 @@ fn render(
             } else {
                 String::new()
             },
-            label(editor, usize::from(width))
+            admission.label(editor, usize::from(width))
         )
     } else {
         format!(
@@ -2660,8 +2835,14 @@ fn render(
                 String::new()
             },
             if app.searching { "buscando… " } else { "" },
-            label(
-                &format!(
+            admission.preview_bytes(
+                (app.message.len()
+                    + app.syntax_diagnostic.len()
+                    + app.structure_message.len()
+                    + 256)
+                    * 3,
+                usize::from(width) / 2,
+                || format!(
                     "{}{}{} | {}",
                     app.message,
                     if app.message.is_empty() || app.syntax_diagnostic.is_empty() {
@@ -2671,16 +2852,22 @@ fn render(
                     },
                     app.syntax_diagnostic,
                     app.structure_message
-                ),
-                usize::from(width) / 2
+                )
             )
         )
     };
     if area.height > 1 {
         frame.render_widget(
-            Paragraph::new(label(&status, usize::from(width))).style(config.style(Role::Secondary)),
+            Paragraph::new(admission.label(&status, usize::from(width)))
+                .style(config.style(Role::Secondary)),
             Rect::new(area.x, area.y + area.height - 1, width, 1),
         );
+    }
+    if let Some(reference) = &admission.failed {
+        frame.render_widget(ratatui::widgets::Clear, area);
+        render_reference(frame, area, reference, config);
+    } else if cancel.load(Ordering::Relaxed) {
+        frame.render_widget(ratatui::widgets::Clear, area);
     }
     stats
 }
@@ -2971,6 +3158,29 @@ pub fn run(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn real_render_preserves_source_and_switches_reference_with_viewport() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let giant = format!("a{}", "\u{301}".repeat(16_000_000));
+        let text = format!("ordinary\n{giant}\nafter");
+        let document = model(&text);
+        let mut app = App::new(document.clone(), None, None, &config, &cancel).unwrap();
+        let (terminal, _) = plain(&app, 120, 3, &config);
+        assert!(contains(&terminal, "ordinary"));
+        assert!(!contains(&terminal, "referencia de viewport"));
+        app.pane.as_mut().unwrap().position.top = 1;
+        let (terminal, stats) = plain(&app, 120, 3, &config);
+        assert!(contains(&terminal, "referencia de viewport"));
+        assert_eq!(stats.graphemes, 0);
+        assert!(!contains(&terminal, "ordinary"));
+        assert_eq!(document.original(), text);
+        app.pane.as_mut().unwrap().position.top = 2;
+        let (terminal, _) = plain(&app, 120, 3, &config);
+        assert!(contains(&terminal, "after"));
+        assert!(!contains(&terminal, "referencia de viewport"));
+    }
+
     use super::*;
     use crate::{cli::Cli, data::LogicalPath};
     use clap::Parser;
@@ -4698,5 +4908,310 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         assert_eq!(app.source_hit, Some(original));
+    }
+
+    #[test]
+    fn unicode_borrowed_search_overwork_keeps_hit_and_explicit_reference_until_motion() {
+        // Source-only fixture before outputs: profile128MiB maximum checkpoint gap,
+        // shortened decoded ESC document. Only checkpoint spacing is injected;
+        // normal parser, navigation, frame, source/provenance and history execute.
+        let raw = format!("\"{}X{}X\"", "\\e".repeat(32000), "\\e".repeat(32000));
+        let (mut app, structure, config) = yaml_app(&raw);
+        let cancel = AtomicBool::new(false);
+        app.maximum_profile_seek_gap = true;
+        let nav = app.file.as_ref().unwrap().yaml.as_ref().unwrap();
+        let SearchOutcome::YamlFound(hit) = find_yaml(
+            &structure,
+            "X",
+            None,
+            Direction::Forward,
+            nav.budget(),
+            &cancel,
+        ) else {
+            panic!("fixture hit")
+        };
+        app.apply_search(SearchOutcome::YamlFound(hit), &cancel)
+            .unwrap();
+        let state = app.file.as_ref().unwrap().yaml.as_ref().unwrap().current();
+        assert_eq!(state.node, hit.node);
+        assert_eq!(state.hit, Some(hit.range));
+        assert_eq!(state.last_hit, Some(hit));
+        for width in [80, 120] {
+            let (screen, _) = plain(&app, width, 12, &config);
+            let text = screen
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(|c| c.symbol())
+                .collect::<String>();
+            eprintln!("unicode overwork screen={text:?}");
+            let pane = app.file.as_ref().unwrap().borrowed.as_ref().unwrap();
+            assert_eq!(
+                pane.reference(&structure, yaml_view::Error::Work)
+                    .unwrap()
+                    .unpositioned_hit,
+                Some(hit.range.start..hit.range.end)
+            );
+            assert!(text.contains("no calculada"));
+            assert!(text.contains("coincidencia visible"));
+        }
+        app.query = "X".into();
+        for (code, expected_start) in [(KeyCode::Char('n'), 192001), (KeyCode::Char('N'), 96000)] {
+            app.key(key(code), 8, 80, &cancel).unwrap();
+            let began = Instant::now();
+            loop {
+                if let Some(outcome) = app.worker.poll() {
+                    app.apply_search(outcome, &cancel).unwrap();
+                    break;
+                }
+                assert!(began.elapsed() < Duration::from_secs(2));
+                thread::sleep(Duration::from_millis(1));
+            }
+            assert_eq!(
+                app.file
+                    .as_ref()
+                    .unwrap()
+                    .yaml
+                    .as_ref()
+                    .unwrap()
+                    .current()
+                    .hit
+                    .unwrap()
+                    .start,
+                expected_start
+            );
+        }
+        // Retry selects the same real hit, no fabricated raw/visual position.
+        app.apply_search(SearchOutcome::YamlFound(hit), &cancel)
+            .unwrap();
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .yaml
+                .as_ref()
+                .unwrap()
+                .current()
+                .last_hit,
+            Some(hit)
+        );
+        app.key(key(KeyCode::Home), 8, 80, &cancel).unwrap();
+        let (screen, _) = plain(&app, 80, 12, &config);
+        let text = screen
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect::<String>();
+        assert!(!text.contains("posición visual no calculada"));
+        assert_eq!(
+            app.file
+                .as_ref()
+                .unwrap()
+                .yaml
+                .as_ref()
+                .unwrap()
+                .current()
+                .hit,
+            Some(hit.range)
+        );
+        app.key(key(KeyCode::Char('o')), 8, 80, &cancel).unwrap();
+        assert!(!app.file_active());
+        assert!(app.pane.as_ref().unwrap().hit.is_some());
+        app.swap_file_domain(&cancel).unwrap();
+        assert!(app.file_active());
+    }
+
+    #[test]
+    fn unicode_xml_overwork_history_preserves_domain_hit_reference_and_manual_position() {
+        let raw = format!(
+            "<r>{}X{}X</r>",
+            "\u{9b}".repeat(16000),
+            "\u{9b}".repeat(16000)
+        );
+        let (mut app, structure, config) = xml_app(&raw);
+        app.maximum_profile_seek_gap = true;
+        let cancel = AtomicBool::new(false);
+        let budget = app
+            .file
+            .as_ref()
+            .unwrap()
+            .xml
+            .as_ref()
+            .unwrap()
+            .budget()
+            .clone();
+        let SearchOutcome::XmlFound(hit) =
+            find_xml(&structure, "X", None, Direction::Forward, &budget, &cancel)
+        else {
+            panic!("fixture hit")
+        };
+        app.apply_search(SearchOutcome::XmlFound(hit), &cancel)
+            .unwrap();
+        let selected = app.file.as_ref().unwrap().xml.as_ref().unwrap().current();
+        assert!(selected.position_pending);
+        assert_eq!(selected.hit, Some(hit.range));
+        for width in [80, 120] {
+            let (screen, _) = plain(&app, width, 12, &config);
+            assert!(contains(&screen, "no calculada"));
+        }
+        app.query = "X".into();
+        for code in [KeyCode::Char('n'), KeyCode::Char('N')] {
+            app.key(key(code), 8, 80, &cancel).unwrap();
+            let began = Instant::now();
+            loop {
+                if let Some(outcome) = app.worker.poll() {
+                    app.apply_search(outcome, &cancel).unwrap();
+                    break;
+                }
+                assert!(began.elapsed() < Duration::from_secs(2));
+                thread::sleep(Duration::from_millis(1));
+            }
+        }
+        let current = app.file.as_ref().unwrap().xml.as_ref().unwrap().current();
+        assert_eq!(current.hit, selected.hit);
+        app.key(key(KeyCode::Backspace), 8, 80, &cancel).unwrap();
+        let restored = app.file.as_ref().unwrap().xml.as_ref().unwrap().current();
+        assert!(restored.position_pending);
+        let (screen, _) = plain(&app, 120, 12, &config);
+        assert!(contains(&screen, "no calculada"));
+        app.key(key(KeyCode::Home), 8, 80, &cancel).unwrap();
+        assert!(
+            !app.file
+                .as_ref()
+                .unwrap()
+                .xml
+                .as_ref()
+                .unwrap()
+                .current()
+                .position_pending
+        );
+        let (screen, _) = plain(&app, 80, 12, &config);
+        assert!(!contains(&screen, "no calculada"));
+        app.key(key(KeyCode::Char('o')), 8, 80, &cancel).unwrap();
+        assert!(!app.file_active());
+        app.swap_file_domain(&cancel).unwrap();
+        assert!(app.file_active());
+        assert!(
+            !app.file
+                .as_ref()
+                .unwrap()
+                .xml
+                .as_ref()
+                .unwrap()
+                .current()
+                .position_pending
+        );
+    }
+    #[test]
+    fn unicode_xml_32mb_real_controller_reference_search_and_source_provenance() {
+        let giant = format!("a{}", "\u{301}".repeat(16_000_000));
+        let raw = format!("<r>{giant}</r>");
+        let (mut app, structure, config) = xml_app(&raw);
+        let cancel = AtomicBool::new(false);
+        let budget = app
+            .file
+            .as_ref()
+            .unwrap()
+            .xml
+            .as_ref()
+            .unwrap()
+            .budget()
+            .clone();
+        let SearchOutcome::XmlFound(hit) = find_xml(
+            &structure,
+            "\u{301}",
+            None,
+            Direction::Forward,
+            &budget,
+            &cancel,
+        ) else {
+            panic!("giant text hit")
+        };
+        app.apply_search(SearchOutcome::XmlFound(hit), &cancel)
+            .unwrap();
+        let state = app.file.as_ref().unwrap().xml.as_ref().unwrap().current();
+        assert_eq!(state.hit, Some(hit.range));
+        assert!(!state.position_pending);
+        assert_eq!(state.cursor.left, 0);
+        let (screen, stats) = plain(&app, 120, 12, &config);
+        assert!(contains(&screen, "referencia de viewport"));
+        assert_eq!(stats.graphemes, 0);
+        assert_eq!(
+            structure.node(hit.node).unwrap().decoded(),
+            Some(giant.as_str())
+        );
+        app.key(key(KeyCode::Char('o')), 8, 120, &cancel).unwrap();
+        assert!(!app.file_active());
+        let pane = app.pane.as_ref().unwrap();
+        assert!(pane.hit.is_some());
+        assert_eq!(pane.model.original(), raw);
+        let (screen, _) = plain(&app, 120, 12, &config);
+        assert!(contains(&screen, "referencia de viewport"));
+        app.swap_file_domain(&cancel).unwrap();
+        assert!(app.file_active());
+        assert_eq!(
+            app.file.as_ref().unwrap().xml.as_ref().unwrap().current(),
+            state
+        );
+    }
+
+    #[test]
+    fn root_nukey_reference_keeps_domain_for_record_and_table() {
+        for (table, action) in [
+            (false, KeyCode::Char('K')),
+            (false, KeyCode::Enter),
+            (true, KeyCode::Char('K')),
+        ] {
+            let config = config();
+            let cancel = AtomicBool::new(false);
+            let name = format!("a{}", "\u{301}".repeat(8192));
+            let record = Value::Record(vec![(name.clone(), Value::Int(42))]);
+            let value = if table {
+                Value::List(vec![record])
+            } else {
+                record
+            };
+            let typed = Arc::new(TypedInput {
+                start: Start {
+                    version: VERSION,
+                    cwd: "root-fixture".into(),
+                    origin: Origin::SingleValue,
+                },
+                payload: Payload::SingleValue(value),
+            });
+            let mut app = App::new(
+                model(""),
+                Some(typed.clone()),
+                Some(&typed),
+                &config,
+                &cancel,
+            )
+            .unwrap();
+            app.key(key(action), 8, 300, &cancel).unwrap();
+            let pane = app.pane.as_ref().unwrap();
+            assert!(pane.key);
+            assert_eq!(pane.model.original(), name);
+            let (screen, _) = plain(&app, 300, 8, &config);
+            assert!(contains(&screen, "NuValue { key: true }"));
+            assert!(contains(&screen, "sin span literal de Fuente"));
+            assert!(!contains(&screen, "origen exacto"));
+            app.key(key(KeyCode::Char('o')), 8, 300, &cancel).unwrap();
+            assert_eq!(app.source.original(), "");
+            assert!(app.file.is_none());
+        }
+    }
+    #[test]
+    fn root_nukey_fix_preserves_real_source_reference() {
+        let config = config();
+        let cancel = AtomicBool::new(false);
+        let raw = format!("a{}", "\u{301}".repeat(8192));
+        let app = App::new(model(&raw), None, None, &config, &cancel).unwrap();
+        let (screen, _) = plain(&app, 300, 8, &config);
+        assert!(contains(&screen, "dominio Source"));
+        assert!(contains(&screen, "origen exacto 0..16385"));
+        assert_eq!(app.source.original(), raw);
     }
 }

@@ -14,3 +14,5 @@ Thumbs.db
 /.tools/
 /vendor/nushell/target/
 /vendor/nushell/Cargo.lock
+
+/vendor/unicode-width-adapter/.cargo-ok
