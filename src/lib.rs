@@ -76,3 +76,6 @@ mod preparation_owner;
 mod source_preparation;
 
 mod document_code;
+
+#[allow(dead_code)] // Source fallback will be connected by the D3 inline emitter.
+mod document_inline_source;
