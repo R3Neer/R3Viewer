@@ -12,6 +12,10 @@ Diecinueve rutas Source; `lib.rs` combina los dos módulos nuevos con la regresi
 
 Root conserva el binario antes de ejecutar y obtiene 132 pruebas distintas PASS: Source15, checkpoints3, kernel19, vista34 (incluye metadata4), motor Legacy7, presentación Legacy7, owner B2 4, renderer13, búsqueda14 e inline16. Tres filtros iniciales seleccionaron cero tests y no cuentan como cobertura; los nombres reales se ejecutaron sobre el mismo binario. Formato y Clippy de workspace/todos los targets PASS. Evidencia en `.tmp/root-source-freeze-verification-2026-10-10`.
 
+## Comprobación adicional de procesos
+
+Tras el commit de integración, `cargo test --offline --locked --test document_pipeline --no-run` compiló el ejecutable de integración y el worker real del checkout. Se conservó el binario de pruebas antes de ejecutarlo: 12 pruebas PASS, incluyendo tablas, roles/procedencia, cancelación y casos Obsidian del parser. La ruta del worker es `CARGO_BIN_EXE_r3viewer`; este control es de integración del checkout, no un freeze independiente del worker ni QA de terminal. Log y recibo del binario en `COMPILE-process-R2.log`, `TEST-process-R2.log` y `PROCESS-BIN-before-runtime-R2.json` del directorio de evidencia root. No se volvieron a ejecutar suites ya aprobadas.
+
 ## Alcance pendiente
 
 El despacho financiado común del inspector, Hash previo/Loading común, sesión/pump y frame nativo con chrome todavía requieren integración y aceptación. El recibo de trabajo Source debe exportarse una sola vez a la operación completa, no crear una segunda cuota. No acredita Markdown interactivo visible, history/routing, gráficos, QA visual ni ejecución Unix.
