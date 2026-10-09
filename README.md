@@ -71,7 +71,7 @@ Validación S02: 48pruebas del workspace, Clippy/fmt, revisión independiente R1
 
 ## Candidato S03 en validación
 
-La TUI permite Enter para inspeccionar una celda/hoja, r para la fila completa, K para una clave completa y Backspace para volver conservando selección. / abre búsqueda literal sensible a mayúsculas; Enter confirma, n/N recorren y vuelven por los extremos. Escape cancela el editor; fuera del editor sale. L alterna números de línea. Consulta máxima4096bytesUTF-8. Nothing, ausencia y string vacío son estados distintos; la búsqueda incluye claves y hojas colapsadas completas.
+La TUI permite Enter para inspeccionar una celda/hoja, r para la fila completa, K para una clave completa y Backspace para volver conservando selección. / abre búsqueda literal sensible a mayúsculas; Enter confirma, n/N recorren y vuelven por los extremos. Escape cancela la edición de la consulta de búsqueda; cuando no se está editando una consulta, sale del visor. L alterna números de línea. Consulta máxima4096bytesUTF-8. Nothing, ausencia y string vacío son estados distintos; la búsqueda incluye claves y hojas colapsadas completas.
 
 Opciones de presentación: --colour auto|always|never, --theme auto|dark|light, --line-numbers/-n y --no-line-numbers. --config indica TOML de lectura, máximo64KiB. Flags prevalecen sobre configuración; auto respeta NO_COLOR/TERM=dumb. Redirección siempre plana. Esquema y rutas estándar en [S03](docs/sprints/S03.md). No crear perfiles ni archivos de configuración implícitamente.
 
