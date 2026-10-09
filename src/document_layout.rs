@@ -1931,6 +1931,17 @@ impl WindowBuilder {
     ) -> Result<bool> {
         let _points = budget.reserve_points(2 * size_of::<Point>(), 2)?;
         let index = slot.domain_index()?;
+        w.admit_structure(size_of::<crate::document_model::Block>())?;
+        let code = matches!(
+            index
+                .text()
+                .document()
+                .blocks()
+                .get(block as usize)
+                .ok_or(Error::Invalid)?
+                .kind(),
+            10 | 14
+        );
         let mut prep = DocumentWork::preparation(cancel);
         let projected =
             index
@@ -2029,12 +2040,7 @@ impl WindowBuilder {
             if width > self.cell_width.saturating_sub(self.prefix_len) {
                 return Err(Error::UnsupportedRun(u32::MAX - 2));
             }
-            // Code uses horizontal viewport; paragraph wrapping remains local to the prepared row.
-            let d = &index.text().document().domains()[slot.domain()? as usize];
-            let code = matches!(
-                index.text().document().blocks()[d.owner() as usize].kind(),
-                10 | 14
-            );
+            // Horizontal policy belongs to the actual Block, including ResourceAlt domains.
             let x = if code {
                 let end = self.column.checked_add(width).ok_or(Error::Invalid)?;
                 if self.column < self.geometry.left

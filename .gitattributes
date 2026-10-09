@@ -37,3 +37,6 @@ tests/fixtures/document-b3-search/** -text whitespace=cr-at-eol
 
 # Reviewed b2 renderer fixtures retain exact source/model bytes.
 tests/fixtures/document-b2/** -text whitespace=cr-at-eol
+
+# Resource-owner regression fixtures retain exact reviewed source offsets.
+tests/fixtures/document-b2-resource-owner/** -text whitespace=cr-at-eol

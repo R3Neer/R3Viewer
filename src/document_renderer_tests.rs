@@ -352,10 +352,19 @@ fn b2_measured_old4m_exact_total_and_previous_receipt_are_closed() {
     else {
         panic!("old4m Work")
     };
-    assert_eq!((required, limit), (7417231, 4194304));
+    let actual_block_read = std::mem::size_of::<crate::document_model::Block>();
+    assert_eq!((required, limit), (7417231 + actual_block_read, 4194304));
     assert_eq!(
         parts,
-        [1373775, 864000, 868800, 921600, 465600, 460800, 2462656]
+        [
+            1373775 + actual_block_read,
+            864000,
+            868800,
+            921600,
+            465600,
+            460800,
+            2462656
+        ]
     );
     assert!(bytes.bytes().is_empty());
     assert!(

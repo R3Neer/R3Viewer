@@ -103,3 +103,6 @@ mod document_terminal_storage_tests;
 
 #[allow(dead_code)] // Independent b3 core awaiting combined adoption.
 mod document_search;
+
+#[cfg(test)]
+mod document_resource_owner_tests;

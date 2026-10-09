@@ -416,3 +416,6 @@ NuKeyR3 [revisado y aceptado](reviews/S03-unicode-clave-nu-r3.md), tres controle
 
 
 2026-10-10: [calibración Source Common512KiB](refinement/MARKDOWN-SOURCE-COMMON-WORK.md), con [revisión independiente sin críticas de diseño](reviews/Markdown-Source-common-work-plan-r2.md). El diagnóstico completo de aperturas/posición/procedencia mide300398 de Work para120x40 y conserva el FAIL previo256K. Cambia sólo la política de preparación Common, sin eliminar cargos ni cambiar Source Legacy, Frame, símbolos, Consumer, Actor o DocumentWork; complementa explícitamente D2c256K histórico. Código R2 y aceptación independiente pendientes; SC-W01 no cerrado ni Source/pump/QA/RV aceptados.
+
+
+2026-10-10: [B2-RESOURCE-OWNER01 corregido e integrado](reviews/Markdown-B2-resource-owner-adoption-r1.md), tras [aceptación independiente final](reviews/Markdown-B2-resource-owner-acceptance-r1.md). Clasificación por bloque contenedor real evita Panic y texto alternativo oculto por coincidencias con Code/FrontMatter; cargo de 64 bytes por secuencia explícito, límites intactos. Cinco AE propias / 45 regresiones independientes y 77 pruebas de composición canónica, fmt y Clippy PASS. Baseline fallido preservado; cierre sólo del defecto, sin cerrar RV-301/306, inspector, Source, sesión/pump, gráficos, QA visual o Unix.
