@@ -35,4 +35,3 @@ Errata menor no bloqueante: párrafo dice primeras cincofilas histórico241111; 
 Ningún nuevo límite de memoria; perfilWork Common explícito permitido. Tabla autor dense80=129078 ydense120=300398 pertenece SUS fixtures, no esperado de misfixtures80×24/120×40 sinLFfinal. AE mide recibo real y contenido exacto con oráculospropios; no cambiar outputesperado para PASS.
 Al freeze verificar probes/fields/clones/constructor/admitcancel; aperturas endpoint/provenance/indexposition/cellposition; exact/−1 porAPI y preparador real; lateC1despuéscheckpoint; Symbol16Kexact/+1 y SourceFrame; composición metadata/lastDrop/SAMEauthority y preservarR1logs. La corrección puede requerir ajustar sólo APIs del harness guardando borrador, no semántica.
 No repeat de suites verdes sin cambioafectado. No cierre Pump/LoadingHashcomún/SharedDocumentDescriptor dispatcher inspector/QA/RV.
-
