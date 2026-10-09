@@ -436,7 +436,11 @@ fn dc05_empty_runs_work_cancel_and_budget_retained() {
     let index = SegmentedIndex::prepare(text, &budget, &cancel).unwrap();
     let mut p = index.start();
     assert_eq!(
-        index.step(&mut p, 4, &mut DocumentWork::frame(&cancel)),
+        index.step(
+            &mut p,
+            4,
+            &mut DocumentWork::bounded(&cancel, 262144).unwrap()
+        ),
         Err(Error::Work)
     );
     assert_eq!(p.offset(), 0);

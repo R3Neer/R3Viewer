@@ -99,13 +99,15 @@ impl From<crate::document_model::Error> for Error {
         }
     }
 }
+pub(crate) const DOCUMENT_FRAME_WORK: usize = 8 * 1024 * 1024;
+
 pub struct DocumentWork<'a>(Work<'a>, Option<(Identity, usize)>);
 impl<'a> DocumentWork<'a> {
     pub fn frame(cancel: &'a AtomicBool) -> Self {
-        Self(Work::frame(cancel), None)
+        Self(Work::permit(cancel, DOCUMENT_FRAME_WORK), None)
     }
     pub fn bounded(cancel: &'a AtomicBool, limit: usize) -> Result<Self> {
-        if limit > 262144 {
+        if limit > DOCUMENT_FRAME_WORK {
             Err(Error::Work)
         } else {
             Ok(Self(Work::permit(cancel, limit), None))

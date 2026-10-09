@@ -149,6 +149,7 @@ pub(crate) struct DocumentView {
     geometry: Geometry,
     fold_revision: u64,
     expected: Option<DocumentKey>,
+    render_binding: Binding,
 }
 fn map_cause(e: Error) -> Cause {
     match e {
@@ -260,6 +261,7 @@ impl DocumentView {
             geometry: input.key.geometry,
             fold_revision: input.key.fold_revision,
             expected: None,
+            render_binding: input.key.binding,
         })
     }
     pub(crate) fn request(
@@ -336,6 +338,7 @@ impl DocumentView {
                 self.navigator
                     .commit_prepared(new_flow, selection)
                     .map_err(map_cause)?;
+                self.render_binding = input.key.binding;
                 self.layout = layout;
                 self.geometry = input.key.geometry;
                 self.fold_revision = input.key.fold_revision;
@@ -356,6 +359,9 @@ impl DocumentView {
             return Err(Cause::Stale);
         }
         Ok(())
+    }
+    pub(crate) fn render_binding(&self) -> Binding {
+        self.render_binding
     }
     pub(crate) fn layout(&self) -> &LayoutWindow {
         &self.layout

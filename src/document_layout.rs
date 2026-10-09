@@ -63,6 +63,148 @@ pub(crate) struct Glyph {
     pub relation_mask: u8,
     pub projection_part: u8,
 }
+// Packed cells retain physical local byte + visual affinity; uniform immutable
+// run/style metadata is stored once per consecutive class, not copied per ASCII.
+#[derive(Clone, Copy)]
+struct PackedGlyph {
+    x: u16,
+    row: u16,
+    width: u16,
+    len: u16,
+    start: u32,
+    local: u32,
+    class: u16,
+    part: u8,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct FirstBase {
+    block: u32,
+    domain: u32,
+    run: u32,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct GlyphClass {
+    kind: CellKind,
+    styles: u32,
+    first: Option<FirstBase>,
+    links: usize,
+    relation_mask: u8,
+}
+struct GlyphStorage {
+    cells: ChargedVec<PackedGlyph>,
+    classes: ChargedVec<GlyphClass>,
+}
+impl GlyphStorage {
+    fn new(budget: &ConsumerBudget, cells: usize, classes: usize) -> Result<Self> {
+        Ok(Self {
+            cells: ChargedVec::new(budget, cells)?,
+            classes: ChargedVec::new(budget, classes)?,
+        })
+    }
+    fn capacity_bytes(&self) -> Result<usize> {
+        self.cells
+            .capacity()
+            .checked_mul(size_of::<PackedGlyph>())
+            .and_then(|n| {
+                self.classes
+                    .capacity()
+                    .checked_mul(size_of::<GlyphClass>())
+                    .and_then(|c| n.checked_add(c))
+            })
+            .ok_or(Error::Budget)
+    }
+    fn len(&self) -> usize {
+        self.cells.as_slice().len()
+    }
+    fn get(&self, index: usize) -> Option<Glyph> {
+        let p = self.cells.as_slice().get(index)?;
+        let c = self.classes.as_slice().get(usize::from(p.class))?;
+        Some(Glyph {
+            x: p.x,
+            row: p.row,
+            width: p.width,
+            start: p.start,
+            end: p.start + u32::from(p.len),
+            kind: c.kind,
+            styles: c.styles,
+            first: c.first.map(|f| FirstComponent {
+                block: f.block,
+                domain: f.domain,
+                run: f.run,
+                local: p.local as usize,
+            }),
+            links: c.links,
+            relation_mask: c.relation_mask,
+            projection_part: p.part,
+        })
+    }
+    fn last(&self) -> Option<Glyph> {
+        self.len().checked_sub(1).and_then(|i| self.get(i))
+    }
+    fn class_for(&mut self, g: &Glyph, w: &mut DocumentWork<'_>) -> Result<u16> {
+        let class = GlyphClass {
+            kind: g.kind,
+            styles: g.styles,
+            first: g.first.map(|f| FirstBase {
+                block: f.block,
+                domain: f.domain,
+                run: f.run,
+            }),
+            links: g.links,
+            relation_mask: g.relation_mask,
+        };
+        // A bounded one-record cache only, no linear search or uncharged hash table.
+        w.admit_structure(size_of::<GlyphClass>())?;
+        if self.classes.as_slice().last() == Some(&class) {
+            return u16::try_from(self.classes.as_slice().len() - 1).map_err(|_| Error::Budget);
+        }
+        let id = u16::try_from(self.classes.as_slice().len()).map_err(|_| Error::Budget)?;
+        w.admit_structure(size_of::<GlyphClass>())?;
+        self.classes.push(class)?;
+        Ok(id)
+    }
+    fn packed(&mut self, g: Glyph, w: &mut DocumentWork<'_>) -> Result<PackedGlyph> {
+        let len = g.end.checked_sub(g.start).ok_or(Error::Invalid)?;
+        let len = u16::try_from(len).map_err(|_| Error::Budget)?;
+        let local = u32::try_from(g.first.map_or(0, |f| f.local)).map_err(|_| Error::Invalid)?;
+        let class = self.class_for(&g, w)?;
+        w.admit_structure(size_of::<PackedGlyph>())?;
+        Ok(PackedGlyph {
+            x: g.x,
+            row: g.row,
+            width: g.width,
+            len,
+            start: g.start,
+            local,
+            class,
+            part: g.projection_part,
+        })
+    }
+    fn push(&mut self, g: Glyph, w: &mut DocumentWork<'_>) -> Result<()> {
+        let p = self.packed(g, w)?;
+        self.cells.push(p).map_err(Into::into)
+    }
+    fn replace_last(&mut self, g: Glyph, w: &mut DocumentWork<'_>) -> Result<()> {
+        let p = self.packed(g, w)?;
+        *self.cells.last_mut().ok_or(Error::Invalid)? = p;
+        Ok(())
+    }
+}
+pub(crate) struct GlyphView<'a>(&'a GlyphStorage);
+impl GlyphView<'_> {
+    pub(crate) fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub(crate) fn get(&self, index: usize) -> Option<Glyph> {
+        self.0.get(index)
+    }
+    pub(crate) fn last(&self) -> Option<Glyph> {
+        self.0.last()
+    }
+    pub(crate) fn iter(&self) -> impl DoubleEndedIterator<Item = Glyph> + ExactSizeIterator + '_ {
+        (0..self.len()).map(|i| self.0.get(i).expect("closed packedcell/class indices"))
+    }
+}
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Row {
     pub first: u32,
@@ -110,7 +252,7 @@ impl SequenceSlot {
 }
 pub(crate) struct TextWindow {
     symbols: ChargedVec<u8>,
-    glyphs: ChargedVec<Glyph>,
+    glyphs: GlyphStorage,
     rows: ChargedVec<Row>,
     slot: Option<Arc<SequenceSlot>>,
     _owner: Charge,
@@ -120,11 +262,14 @@ pub(crate) struct TextWindow {
     next: Option<crate::document_view::LayoutAnchor>,
 }
 impl TextWindow {
+    pub(crate) fn glyph_read_bytes() -> usize {
+        size_of::<PackedGlyph>() + size_of::<GlyphClass>() + size_of::<Glyph>()
+    }
     pub(crate) fn symbols(&self) -> &str {
         std::str::from_utf8(self.symbols.as_slice()).expect("complete projected UTF8")
     }
-    pub(crate) fn glyphs(&self) -> &[Glyph] {
-        self.glyphs.as_slice()
+    pub(crate) fn glyphs(&self) -> GlyphView<'_> {
+        GlyphView(&self.glyphs)
     }
     pub(crate) fn rows(&self) -> &[Row] {
         self.rows.as_slice()
@@ -137,7 +282,7 @@ impl TextWindow {
     }
     pub(crate) fn row_anchor(&self, row: usize) -> Option<crate::document_view::LayoutAnchor> {
         let r = self.rows.as_slice().get(row)?;
-        let g = self.glyphs.as_slice().get(r.first as usize)?;
+        let g = self.glyphs.get(r.first as usize)?;
         if r.count == 0 {
             return None;
         }
@@ -192,9 +337,16 @@ impl WindowBuilder {
             .checked_mul(usize::from(g.height))
             .ok_or(Error::Budget)?;
         let symbols = cells.checked_mul(4).ok_or(Error::Budget)?.max(16384);
+        let classes = cells.min(
+            usize::from(g.height)
+                .checked_mul(4)
+                .and_then(|n| n.checked_add(16))
+                .ok_or(Error::Budget)?,
+        );
         let requested = size_of::<TextWindow>()
             .checked_add(symbols)
-            .and_then(|n| n.checked_add(cells.checked_mul(size_of::<Glyph>())?))
+            .and_then(|n| n.checked_add(cells.checked_mul(size_of::<PackedGlyph>())?))
+            .and_then(|n| n.checked_add(classes.checked_mul(size_of::<GlyphClass>())?))
             .and_then(|n| n.checked_add((usize::from(g.height) + 1).checked_mul(size_of::<Row>())?))
             .ok_or(Error::Budget)?;
         if requested > WINDOW_BYTES
@@ -206,11 +358,11 @@ impl WindowBuilder {
         }
         let owner = budget.reserve(size_of::<TextWindow>())?;
         let symbols = ChargedVec::new(budget, symbols)?;
-        let glyphs = ChargedVec::new(budget, cells)?;
+        let glyphs = GlyphStorage::new(budget, cells, classes)?;
         let rows = ChargedVec::new(budget, usize::from(g.height) + 1)?;
         let bytes = size_of::<TextWindow>()
             .checked_add(symbols.capacity())
-            .and_then(|n| n.checked_add(glyphs.capacity().checked_mul(size_of::<Glyph>())?))
+            .and_then(|n| n.checked_add(glyphs.capacity_bytes().ok()?))
             .and_then(|n| n.checked_add(rows.capacity().checked_mul(size_of::<Row>())?))
             .ok_or(Error::Budget)?;
         if bytes > WINDOW_BYTES || old_bytes.checked_add(bytes).is_none_or(|n| n > FRAME_BYTES) {
@@ -234,6 +386,19 @@ impl WindowBuilder {
             geometry: g,
         })
     }
+    #[cfg(test)]
+    pub(crate) fn storage_receipt(&self) -> [usize; 8] {
+        [
+            size_of::<PackedGlyph>(),
+            size_of::<GlyphClass>(),
+            self.window.bytes,
+            self.window.symbols.capacity(),
+            self.window.glyphs.cells.capacity(),
+            self.window.glyphs.classes.capacity(),
+            self.window.rows.capacity(),
+            size_of::<Row>(),
+        ]
+    }
     pub(crate) fn retain_candidate(&mut self, slot: Option<Arc<SequenceSlot>>) {
         self.window.slot = slot;
     }
@@ -241,12 +406,12 @@ impl WindowBuilder {
         w.admit_structure(size_of::<Row>())?;
         self.window.rows.push(Row {
             first: u32::try_from(self.row_start).map_err(|_| Error::Invalid)?,
-            count: u32::try_from(self.window.glyphs.as_slice().len() - self.row_start)
+            count: u32::try_from(self.window.glyphs.len() - self.row_start)
                 .map_err(|_| Error::Invalid)?,
         })?;
         self.row += 1;
         self.column = 0;
-        self.row_start = self.window.glyphs.as_slice().len();
+        self.row_start = self.window.glyphs.len();
         Ok(self.row < usize::from(self.geometry.height))
     }
     fn resource(
@@ -259,25 +424,27 @@ impl WindowBuilder {
         if self.column > 0 && !self.newline(w)? {
             return Ok(false);
         }
-        w.admit_structure(size_of::<Glyph>())?;
-        self.window.glyphs.push(Glyph {
-            x: 0,
-            row: self.row as u16,
-            width: 0,
-            start: 0,
-            end: 0,
-            kind: CellKind::Resource(resource),
-            styles: 0,
-            first: Some(FirstComponent {
-                block,
-                domain: NONE,
-                run,
-                local: 0,
-            }),
-            links: 0,
-            relation_mask: 0,
-            projection_part: 0,
-        })?;
+        self.window.glyphs.push(
+            Glyph {
+                x: 0,
+                row: self.row as u16,
+                width: 0,
+                start: 0,
+                end: 0,
+                kind: CellKind::Resource(resource),
+                styles: 0,
+                first: Some(FirstComponent {
+                    block,
+                    domain: NONE,
+                    run,
+                    local: 0,
+                }),
+                links: 0,
+                relation_mask: 0,
+                projection_part: 0,
+            },
+            w,
+        )?;
         self.newline(w)
     }
     #[allow(clippy::too_many_arguments)] // Explicit shared ledger, cancellation and Work are not replaceable defaults.
@@ -368,7 +535,6 @@ impl WindowBuilder {
             let kind = self
                 .window
                 .glyphs
-                .as_slice()
                 .last()
                 .filter(|g| usize::from(g.row) == self.row);
             if width == 0 && kind.is_none() {
@@ -418,7 +584,7 @@ impl WindowBuilder {
             };
             let start = self.window.symbols.as_slice().len();
             let old_glyph = if width == 0 {
-                self.window.glyphs.as_slice().last().copied()
+                self.window.glyphs.last()
             } else {
                 None
             };
@@ -470,27 +636,30 @@ impl WindowBuilder {
                 };
                 Ok(())
             })?;
-            w.admit_structure(size_of::<Glyph>())?;
             if width == 0 {
-                let last = self.window.glyphs.last_mut().ok_or(Error::Invalid)?;
+                let mut last = self.window.glyphs.last().ok_or(Error::Invalid)?;
                 last.end = u32::try_from(end).map_err(|_| Error::Invalid)?;
                 last.styles |= styles;
                 last.links = last.links.checked_add(links).ok_or(Error::Work)?;
                 last.relation_mask |= relation_mask;
+                self.window.glyphs.replace_last(last, w)?;
             } else {
-                self.window.glyphs.push(Glyph {
-                    x: x as u16,
-                    row: self.row as u16,
-                    width: width as u16,
-                    start: u32::try_from(start).map_err(|_| Error::Invalid)?,
-                    end: u32::try_from(end).map_err(|_| Error::Invalid)?,
-                    kind: CellKind::Glyph,
-                    styles,
-                    first,
-                    links,
-                    relation_mask,
-                    projection_part: before_raw.2,
-                })?;
+                self.window.glyphs.push(
+                    Glyph {
+                        x: x as u16,
+                        row: self.row as u16,
+                        width: width as u16,
+                        start: u32::try_from(start).map_err(|_| Error::Invalid)?,
+                        end: u32::try_from(end).map_err(|_| Error::Invalid)?,
+                        kind: CellKind::Glyph,
+                        styles,
+                        first,
+                        links,
+                        relation_mask,
+                        projection_part: before_raw.2,
+                    },
+                    w,
+                )?;
             }
             self.column = self.column.checked_add(width).ok_or(Error::Invalid)?;
         }
@@ -821,4 +990,59 @@ pub(crate) fn shift_line(
 }
 fn size_of_val_record() -> usize {
     size_of::<crate::document_model::Run>()
+}
+
+#[cfg(test)]
+pub(crate) fn check_storage_roundtrip(budget: &ConsumerBudget) {
+    let cancel = AtomicBool::new(false);
+    let baseline = budget.used();
+    let mut w = DocumentWork::frame(&cancel);
+    let mut storage = GlyphStorage::new(budget, 2, 1).unwrap();
+    let g = Glyph {
+        x: 7,
+        row: 3,
+        width: 2,
+        start: 11,
+        end: 20,
+        kind: CellKind::Glyph,
+        styles: 6,
+        first: Some(FirstComponent {
+            block: 3,
+            domain: 4,
+            run: 9,
+            local: 12345,
+        }),
+        links: 2,
+        relation_mask: 5,
+        projection_part: 3,
+    };
+    storage.push(g, &mut w).unwrap();
+    let copy = storage.get(0).unwrap();
+    assert_eq!(
+        (copy.x, copy.row, copy.width, copy.start, copy.end),
+        (7, 3, 2, 11, 20)
+    );
+    assert_eq!(
+        (
+            copy.styles,
+            copy.links,
+            copy.relation_mask,
+            copy.projection_part
+        ),
+        (6, 2, 5, 3)
+    );
+    let f = copy.first.unwrap();
+    assert_eq!((f.block, f.domain, f.run, f.local), (3, 4, 9, 12345));
+    let before = w.used();
+    let mut changed = g;
+    changed.styles = 7;
+    assert!(matches!(storage.push(changed, &mut w), Err(Error::Budget)));
+    assert_eq!(storage.len(), 1);
+    assert_eq!(storage.get(0).unwrap().styles, 6);
+    assert!(w.used() > before);
+    cancel.store(true, std::sync::atomic::Ordering::Release);
+    assert!(matches!(storage.push(g, &mut w), Err(Error::Cancelled)));
+    assert_eq!(storage.len(), 1);
+    drop(storage);
+    assert_eq!(budget.used(), baseline);
 }

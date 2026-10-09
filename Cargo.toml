@@ -38,7 +38,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 
 [workspace]
 members = [".", "crates/wire", "crates/nu-plugin", "vendor/unicode-width-adapter"]
-exclude = ["vendor/nushell", "vendor/crossterm", "vendor/jiter", "vendor/saphyr-parser", ".tmp/*"]
+exclude = ["vendor/nushell", "vendor/crossterm", "vendor/jiter", "vendor/saphyr-parser", "vendor/ratatui-core", ".tmp/*"]
 resolver = "3"
 
 [patch.crates-io]
@@ -48,3 +48,5 @@ nu-plugin = { path = "vendor/nushell/nu-plugin" }
 nu-plugin-core = { path = "vendor/nushell/nu-plugin-core" }
 
 crossterm = { path = "vendor/crossterm" }
+
+ratatui-core = { path = "vendor/ratatui-core" }

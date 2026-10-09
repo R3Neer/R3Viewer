@@ -323,7 +323,10 @@ fn d2a09_work_preserves_cursor() {
     assert_eq!(cur.ordinal(), 0);
     let target = i.location(16000).unwrap();
     assert_eq!(
-        i.event_at(&target, &mut DocumentWork::frame(&cancel)),
+        i.event_at(
+            &target,
+            &mut DocumentWork::bounded(&cancel, 256 * 1024).unwrap()
+        ),
         Err(Error::Work)
     );
     let other = FlowIndex::prepare(

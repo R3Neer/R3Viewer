@@ -91,3 +91,10 @@ mod document_roles;
 
 pub mod document_output;
 pub mod document_selection;
+
+mod document_renderer;
+mod document_terminal;
+
+#[cfg(test)]
+#[path = "document_terminal_storage_tests.rs"]
+mod document_terminal_storage_tests;

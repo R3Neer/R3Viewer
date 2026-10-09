@@ -1,0 +1,62 @@
+{
+  "upstream": {
+    "crate": "ratatui-core",
+    "version": "0.1.2",
+    "source": "registry+https://github.com/rust-lang/crates.io-index",
+    "checksum": "cbb175c433c8e28a809d1f5773a2ae96e68c0ce40db865cbab1020bf33ae479c",
+    "vcs": {
+      "git": {
+        "sha1": "e665c36cb14752a61cd777fbd06dbef8474f2add"
+      },
+      "path_in_vcs": "ratatui-core"
+    }
+  },
+  "archived_owner_delta": [
+    "src/buffer/cell.rs",
+    "src/terminal.rs",
+    "src/terminal/r3_storage.rs"
+  ],
+  "additional_renderer_hook": "src/terminal/r3_storage.rs",
+  "note": "Archive byte originals preserved. CRCRLF normalized only in derived Rust source. LICENSE retained byteexactly.",
+  "patched_files": [
+    {
+      "path": "src/buffer/cell.rs",
+      "upstream_sha256": "C483C4139658804E633F264E8D302951E76546DB52245A19388697F1C51333F9",
+      "derived_sha256": "21CF4062299161D204F017B0535EE8C2510C386BA21CAE49197D5A50C8F39113",
+      "bytes": 14469
+    },
+    {
+      "path": "src/terminal.rs",
+      "upstream_sha256": "2E2DB1EE77AFF2FB1962F0D24049C37E9B5D6236CF0BF31352EBD65F86F35409",
+      "derived_sha256": "0C71F46CD341A57690BD228AABB43DAE8FED0E485897951B19FB2A9794E0D45B",
+      "bytes": 22968
+    },
+    {
+      "path": "src/terminal/r3_storage.rs",
+      "upstream_sha256": null,
+      "derived_sha256": "15928C32B90A4BD362EC9B00CEA8F0D1457A4221E4B6F6E802AF4A2F86E8531E",
+      "bytes": 5174
+    }
+  ],
+  "unchanged_upstream_files": 66,
+  "unchanged_LICENSE_sha256": "50EB43E8D742C9C61A9391E42B2184FCE54DBD1893A1BB1C85B8C9EE217AB1F5",
+  "unchanged_diff_sha256": "16A85FDA39915E788075E7E0438BF28063D6D02C51342EB9E4183F58C8081342",
+  "hooks": [
+    "r3_empty_fixed",
+    "r3_buffer_storage",
+    "r3_reserve_buffer",
+    "r3_resize_reserved_fixed",
+    "r3_apply_buffer_admitted",
+    "r3_reset_current_symbols",
+    "r3_reset_symbols"
+  ],
+  "lifecycle": "Expanded borrowed preclears+base iterator updates last_known_cursor_pos; hide_cursor, swap/reset, backend.flush, CompletedFrame and count match original apply. Backend error poisons owner. Final preoutput cancellation resets only current and retains previous physical symbols/Charge.",
+  "legacy": "Original draw/apply/diff, including None/AlwaysUpdate CellDiffOption semantics, unchanged. Cell hook only reads actual CompactString heap capacity.",
+  "excluded_registry_cache_metadata": [
+    {
+      "path": ".cargo-ok",
+      "sha256": "AFBF9D0F3560B0FD7795E81C42A0A79EE6B6FC67E064F77826AEE642CAD28D91",
+      "evidence": "registry-cargo-ok-evidence outside product; not vendored source"
+    }
+  ]
+}

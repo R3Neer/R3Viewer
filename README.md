@@ -113,3 +113,8 @@ El repositorio incorpora modelo Document validado, parser pulldown-cmark0.13.4 c
 La vista conserva texto, estructura y marcadores seguros de recursos. Imágenes, Mermaid y matemáticas siguen pendientes de representación gráfica; esos marcadores no acreditan gráficos completos. Un fallo del worker con cierre físico comprobado permite Fuente completa segura; cancelación devuelve130 y limpieza pendiente impide publicar salida.
 
 Markdown interactivo muestra Fuente y avisa: «Markdown interactivo pendiente; se muestra Fuente. Usa --inline/-i para la vista Markdown.» El renderer/pump de Documento, sus recursos gráficos y resaltado de fences siguen pendientes. No anuncia QA visual, resolución completa de bóveda ni soporte Unix del worker. Evidencia del núcleo y límites en [adopción documental](docs/reviews/Markdown-AC-D1-code-adoption-r1.md).
+
+
+## Primer renderer textual interno y pausa
+
+El [primer renderer Markdown textual con estilos](docs/reviews/Markdown-renderer-text-adoption-r2.md) está incorporado como biblioteca interna, con revisión y aceptación independientes. No está conectado al comando interactivo, que continúa mostrando Fuente con aviso; viewer -i conserva su vista Markdown. Recursos gráficos y presentación completa de bloques siguen pendientes. El desarrollo queda [pausado tras el hito solicitado](docs/process/PAUSA-2026-10-09.md), hasta una nueva petición del usuario.

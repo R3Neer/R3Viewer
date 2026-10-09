@@ -93,11 +93,11 @@ fn b101_root_multirun_and_atomic_links() {
     assert_eq!(symbols(&v), "ABa\u{301}");
     let glyphs = v.layout().text().unwrap().glyphs();
     assert_eq!(glyphs.len(), 3);
-    assert_eq!(glyphs[1].styles & 2, 2);
-    assert_eq!(glyphs[2].end - glyphs[2].start, 3);
-    assert_eq!(glyphs[2].width, 1);
-    assert_eq!(glyphs[2].links, 2);
-    let first = glyphs[2].first.unwrap();
+    assert_eq!(glyphs.get(1).unwrap().styles & 2, 2);
+    assert_eq!(glyphs.get(2).unwrap().end - glyphs.get(2).unwrap().start, 3);
+    assert_eq!(glyphs.get(2).unwrap().width, 1);
+    assert_eq!(glyphs.get(2).unwrap().links, 2);
+    let first = glyphs.get(2).unwrap().first.unwrap();
     let r = &v.document.runs()[first.run as usize];
     let tr = &v.document.text_refs()[r.text() as usize];
     assert_eq!(tr.start() as usize + first.local, 9);
@@ -153,7 +153,7 @@ fn b104_source_controls_and_newline_rows() {
     let (v, _) = view("A\u{1b}  \nB\n", geometry(10));
     assert_eq!(symbols(&v), "A␛B");
     let text = v.layout().text().unwrap();
-    assert_eq!(text.glyphs()[0].row, 0);
+    assert_eq!(text.glyphs().get(0).unwrap().row, 0);
     assert_eq!(text.glyphs().last().unwrap().row, 1);
     assert_eq!(v.document.source().text(), "A\u{1b}  \nB\n");
 }
