@@ -1,0 +1,22 @@
+PREOUTPUT B3 SEARCH CORE, 2026-10-09. Source/model oracle, before matcher outputs.
+Base 7a7b9a76e322edc1cf852614c9bf9755ac795953 (code 353418c).
+Query is case sensitive, literal UTF8 <=4096; empty NoMatch.
+aaa / aa: starts [0,1], forward continuation 0 -> 1 -> wrap0,
+backward initial1 -> 0 -> wrap1. Continuation compares starts, permits overlap.
+A&amp;B: MainBody A&B = projected0..3; & relation EnclosingToken,
+source range1..6; Source A&B absent, Source &amp; = absolute1..6.
+![fox](https://example.invalid/secret "caption"):
+MainBody fox/secret/caption absent; Alt fox=0..3; Title caption=0..7;
+Source secret=31..37. No Run/Domain is required for target bytes.
+**fox**: Source **=absolute0..2 then5..7. MainBody ** absent.
+a + combining acute in two validated styled Runs:
+query acute projected1..3, highlight entire cluster0..3, two Coverage pieces.
+NUL/ESC: D1 controls use existing provider projection, source uses original.
+Separate blocks/resources must not join a match; styles/links/Runs may join.
+Nested collapsed callouts OUT, IN: HIT remains searchable;
+heading Destino remains present in semantic heading page without expanding.
+65 headings '# Same\n\n': page sizes64,1; BlockIDs unique; same semantic order.
+4096 a bytes + b query ab finds4095..4097 crossing provider chunk.
+Cancellation/Work/Budget/stale cursor are never NoMatch. Quota keeps old live hit/page.
+Heading page/read charges must coexist with current page before replacement.
+No terminal, Source transition, history, folds mutation, renderer, owner or session acceptance.

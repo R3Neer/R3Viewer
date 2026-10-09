@@ -1,0 +1,14 @@
+R2 PREOUTPUT OWNER01 before candidate runtime:
+original fixture exact UTF8: ![fox](one "same") ![fox](two "same")
+real parser emits two Resource records with IDs0,1. Before quarantine, replace
+resource1.title_decoded with resource0.title_decoded. Validated graph keeps two
+Resource owners; title text is shared, TextRefID is identical.
+ResourceTitle forward first owner0, next owner1, wrapped owner0.
+ResourceTitle backward first owner1, next owner0.
+All hits carry ResourceTitle field/domain, same title TextRefID and range0..4.
+A positioning-Work pending result at second hit retains resource_id1.
+Explicit retry retains resource_id1 and same shared TextRefID.
+Unrelated same-spelling query identity retry fails stale and does not change owner.
+ResourceAlt fox hits likewise retain IDs0/1 and ResourceAlt field/domain.
+MainBody has no resource owner and does not include these title/alt strings.
+R1 freeze unchanged; no Source, owner, b2, history, transition or session changes.

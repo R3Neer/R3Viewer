@@ -1,0 +1,27 @@
+# Revisión y aceptación adversaria de core search b3 R2
+
+2026-10-09. markdown_actions_adversary; autor markdown_search_implementation. Cierre del corte puro core semántico/search/headings. R1/informe/oráculos/bins/logs intactos. Sin cambios canónicos.
+
+## Snapshot exacto y pruebas propias
+
+Freeze final `.tmp/markdown-b3-search-2026-10-09/frozen-r2/MANIFEST.json` SHA7A0E795560E0A84FF89B88BB827AA96A9DE3FDCBC26158717258E42CF6957579;13artifacts verificados. Base7a7b9a76e322edc1cf852614c9bf9755ac795953/code353418c19f2152614d5650d605aa05df72a1cbca. FuenteAC413B53C7BE38247FCA832479B9722815D8F3C42E45AA2AC2297CF7275D596E; testsautor809ADE5DB4E1A0D057410C9503EFC14B8CCCD48D541E54D7E752531C85FD5F3D. Autorbin3D1796C6EFE99FF8CBED3248F59C74E1D7A0107655C68A50A33438EB47C0C8CB no se confunde con AE propia.
+
+Copia nueva independiente coresearch-r2-product construida desde archive exacto + source/tests R2 e inclusión lib/fixtures; sourcehash verificado. Preoutputs ORACULOS11665517E233082D333032D48C7856479DFCB6D3DF70962723FA9A8A796A5E43/FIXTURES BE77D0215044323F63EB09F36ABD09CCCBD4E05A23D63DFB544F23F35DC40D36 previos a matcher, mismos fixtures/R1 repro. Harness propio A38CD295A1C199E59B853E1F9150F194AB8A0D7D4EC5CE82D96DDC0B868A6D99;15grupos independientes PASS/0.14s. Bin copiado y hash ANTES ejecutar/reusar target: coresearch-r2-adversary-tests.exe SHA EFEA6F7C2FAFE859062C8EF299C38018A761F00986EB6DB3324B2416901209A0. Log coresearch-r2-adversary-run.log; build offline/locked coresearch-r2-build.jsonl. El primer intento de arrancar build con cwd aún inexistente fue rechazado antes ejecutar; se creó desde raíz y compiló, sin tocar R1 ni producción.
+
+## B3-CS-OWNER01 — RESUELTA
+
+Delta fuente exacto R1->R2: Sequence añade resource_id:Option<u32>; Sequences::resource conserva Some(id) del record Resource real; secuencias MainBody/CalloutTitle llevan None. DocumentHit.resource_id() expone valor copiado; SearchDomain ya etiqueta ResourceAlt/ResourceTitle. No getter fabrica identidad desde Ref/ordinal y no hay API para construir Sequence/Hit arbitrariamente. FoundPending retiene la misma Sequence; retry copia su asociación. Aumento estructural cubierto por cargos size_of<Match>/DocumentHit existentes. Algoritmo de búsqueda/provider/Work no cambiado.
+
+Reproducción ORIGINAL independiente: parser real de two-resources.md; Candidate Resource1.title_decoded comparte el TextRefID de Resource0; quarantine válido. Ambos hits mantienen anchor/rango/ref iguales, pero getter acredita owner0 yowner1. Repro ahora cumple asociación consumible. ResourceAlt acredita mismos owners0/1 con dominios distintos; forward/back/wrap conserva orden e identidades sin cruces de secuencia.
+
+Nuevo focal sobre el mismo repro:16 límites pequeños de Work provocan DocumentFoundPending del segundo title. En todos conserva resource_idSome(1), domainResourceTitle y matched0..4; retry del MISMO request produce Found con owner1. Request nuevo equivalente rechaza retry viejo por identidad sellada. Forward tras segundo wrap devuelve owner0; backward desde segundo vuelve owner0. No pending/Work convertido en NoMatch. B3-CS-OWNER01 queda cerrada en código y AE propia, sin cambiar el criterio.
+
+## Composición y límites
+
+Los15grupos reejecutan los13oráculos originales + FoundPending/control/D1costes + ResourcePending/retry. PASS sobre R2: SourceHit absoluto/DomainRef hit, cursores extranjeros, overlapASCII/UTF8 ywrap, multirun/source disjoint, entity/control/raw separación, Resource/Block/Domainbarriers ysoft/hard, chunk4096Unicode, hiddenheadings/bodies/titles,64+1pagination conold+newquota, querylimit/cancel/Work/quota yDropcharges, grapheme multirun. No nuevas críticas accionables.
+
+Costes reales D1 y límites de API permanecen según informeR1: prepare del provider tiene Work cancelable propio, no cabe atribuirlo al Work inyectado del matcher. Medición propia4.102B repite textWork16487 + UnicodeWork118987, Consumer10928/checkpoints4. PendingC1 en29límites conserva matched6..13 yrawscalar; highlightNone indica posición pendiente, retry correcto raw3/part1. No declarar el fallbackpart0 como ubicación visual final ni SourceMatched como SourceReady. Owner/session posterior debe aplicar esas distinciones; este core no publica UI ni crea workers/historia.
+
+## Dictamen
+
+SIN_CRITICAS_PENDIENTES de código y aceptación funcional propia para CORE SEARCH B3 R2 exacto. B3-CS-OWNER01 resuelta. Autoriza adopción de esta biblioteca pura tras checks pertinentes de composición, conservando asociación ResourceOwner para consumidor posterior. No cierra b3acciones/SourceTransition/history/pump, no acredita SourceReady/render/teclas/QA visual/Unix ni RV-306/producto completos. Ninguna exigencia de runtime b2 ni otro comité para este cierre focal.

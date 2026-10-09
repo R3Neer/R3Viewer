@@ -1,0 +1,1 @@
+![fox](https://example.invalid/secret "caption")

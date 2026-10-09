@@ -1,0 +1,1 @@
+![fox](one "same") ![fox](two "same")
