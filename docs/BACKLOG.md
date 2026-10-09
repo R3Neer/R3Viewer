@@ -386,3 +386,6 @@ NuKeyR3 [revisado y aceptado](reviews/S03-unicode-clave-nu-r3.md), tres controle
 
 
 2026-10-09: [primer renderer textual con estilos integrado](reviews/Markdown-renderer-text-adoption-r2.md), tras [aceptación independiente sin críticas pendientes](reviews/Markdown-renderer-text-acceptance-r2.md) para este corte. Owner Ratatui, compactación, preclears, cargos y cancelación incluidos; cuatro grupos propios adversarios PASS y 51 pruebas de composición, fmt/Clippy PASS. DocumentWork8MiB explícito sustituye candidato4MiB insuficiente, con fallo anterior conservado y límites de memoria acotados. No conexión al pump/comando interactivo, roles/recursos completos, fences, gráficos ni cierre RV-301/QA/Unix. [Pausa solicitada tras el hito](process/PAUSA-2026-10-09.md); no comenzar siguiente incremento hasta nueva petición del usuario.
+
+
+2026-10-09, reanudación posterior: el usuario revoca la pausa y autoriza continuar el producto completo sin pausas voluntarias hasta nueva indicación. HEAD353418c limpio y goal activo comprobados. Refinamiento b2 de roles/recursos del renderer con adversario independiente en curso; especificaciones b3 de búsqueda/acciones se preparan en paralelo. Ningún cierre adicional de RV ni ampliación de la aceptación del corte previo.
