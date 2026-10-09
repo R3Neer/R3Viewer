@@ -26,6 +26,7 @@ struct Frame {
     block: u32,
     next: u32,
     stage: u32,
+    enter_ordinal: u64,
 }
 #[derive(Clone, Debug)]
 struct CursorState {
@@ -41,6 +42,57 @@ pub struct FlowCursor {
     _charge: Charge,
 }
 impl FlowCursor {
+    /// Borrowed actual stack after the current event; no parent/root replay or heap copy.
+    pub(crate) fn context<'a>(
+        &'a self,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<impl DoubleEndedIterator<Item = (u32, u32, u32, u64)> + 'a> {
+        work.admit_structure(
+            self.state
+                .depth
+                .checked_mul(size_of::<Frame>())
+                .ok_or(Error::Work)?,
+        )?;
+        Ok(self.state.stack[..self.state.depth]
+            .iter()
+            .map(|f| (f.block, f.next, f.stage, f.enter_ordinal)))
+    }
+    pub(crate) fn parent_item_ordinal(
+        &self,
+        document: &Document,
+        block: u32,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<u32> {
+        work.admit_structure(self.state.depth * size_of::<Frame>())?;
+        let depth = self.state.stack[..self.state.depth]
+            .iter()
+            .position(|f| f.block == block)
+            .ok_or(Error::Invalid)?;
+        let parent = self
+            .state
+            .stack
+            .get(depth.checked_sub(1).ok_or(Error::Invalid)?)
+            .ok_or(Error::Invalid)?;
+        work.admit_structure(
+            size_of::<crate::document_model::Block>() + size_of::<crate::document_model::Item>(),
+        )?;
+        let b = document
+            .blocks()
+            .get(parent.block as usize)
+            .ok_or(Error::Invalid)?;
+        let position = b
+            .first_item()
+            .checked_add(parent.next.checked_sub(1).ok_or(Error::Invalid)?)
+            .ok_or(Error::Invalid)?;
+        let item = document
+            .items()
+            .get(position as usize)
+            .ok_or(Error::Invalid)?;
+        if item.kind() != 0 || item.target() != block {
+            return Err(Error::Invalid);
+        }
+        Ok(item.ordinal())
+    }
     pub fn ordinal(&self) -> u64 {
         self.state.ordinal
     }
@@ -247,6 +299,7 @@ impl CursorState {
                                     block: item.target(),
                                     next: 0,
                                     stage: 0,
+                                    enter_ordinal: self.ordinal,
                                 };
                                 self.depth += 1;
                                 continue;
@@ -300,6 +353,25 @@ impl CursorState {
     }
 }
 impl FlowIndex {
+    /// Fork the actual current cursor under its own charge; never replay Root to obtain context.
+    pub(crate) fn copy_current(
+        &self,
+        cursor: &FlowCursor,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<FlowCursor> {
+        if !cursor.state.identity.same(&self.identity) {
+            return Err(Error::Invalid);
+        }
+        work.admit_structure(size_of::<CursorState>())?;
+        let charge = self.budget.reserve_points(size_of::<FlowCursor>(), 1)?;
+        Ok(FlowCursor {
+            state: cursor.state.clone(),
+            _charge: charge,
+        })
+    }
+    pub(crate) fn expanded(&self, block: u32, work: &mut DocumentWork<'_>) -> Result<bool> {
+        expanded(&self.document, block, self.folds.as_slice(), work)
+    }
     pub fn fixed_requested_bytes() -> usize {
         size_of::<Self>() + 4 * size_of::<CursorState>() + 2 * size_of::<usize>()
     }

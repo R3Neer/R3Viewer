@@ -312,6 +312,9 @@ impl<B: Backend> BudgetedTerminal<B> {
         if !permit.matches(&plan) {
             return Err(RenderError::Admission(renderer::Error::Invalid));
         }
+        if self.area.width == 0 || self.area.height == 0 {
+            return Ok(plan.work());
+        } // Geometry Reference performs no backend IO.
         // The frame permit has prepaid both physical storage scans.
         let before = self.readback().map_err(RenderError::Owner)?;
         let new_heap: Charge = plan.reserve_heap().map_err(RenderError::Admission)?;
@@ -329,10 +332,9 @@ impl<B: Backend> BudgetedTerminal<B> {
         {
             let mut frame = self.terminal.get_frame();
             let grid = frame.buffer_mut();
-            for glyph in plan.window().glyphs().iter() {
+            for (glyph, symbol) in plan.cells() {
                 let x = plan.geometry().x + glyph.x;
                 let y = plan.geometry().y + glyph.row;
-                let symbol = &plan.window().symbols()[glyph.start as usize..glyph.end as usize];
                 let style = renderer::style(glyph, plan.config());
                 grid[(x, y)]
                     .set_symbol(symbol)
@@ -379,7 +381,7 @@ impl<B: Backend> BudgetedTerminal<B> {
         }
         // swap reset physically destroyed previous symbol allocations.
         self.symbol_charge = Some(new_heap);
-        self.previous_window = plan.window().bytes();
+        self.previous_window = plan.window_bytes();
         self.previous_payload = plan.payload();
         self.previous_copied_bytes = plan.copied_bytes();
         Ok(plan.work())

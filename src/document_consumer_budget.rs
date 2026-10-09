@@ -158,6 +158,53 @@ impl<T> ChargedVec<T> {
         self.data.push(value);
         Ok(())
     }
+    /// Candidate growth retains both physical allocations until the copied candidate is complete.
+    pub(crate) fn grow_copy(
+        &mut self,
+        budget: &ConsumerBudget,
+        capacity: usize,
+        peak_limit: usize,
+        work: &mut crate::document_text::DocumentWork<'_>,
+    ) -> crate::document_text::Result<()>
+    where
+        T: Copy,
+    {
+        let unit = size_of::<T>();
+        let peak = self
+            .capacity()
+            .checked_add(capacity)
+            .and_then(|n| n.checked_mul(unit))
+            .ok_or(crate::document_text::Error::Budget)?;
+        if peak > peak_limit {
+            return Err(crate::document_text::Error::Budget);
+        }
+        work.admit_structure(
+            self.data
+                .len()
+                .checked_mul(unit)
+                .ok_or(crate::document_text::Error::Work)?,
+        )?;
+        let mut candidate = Self::new(budget, capacity)?;
+        if self
+            .capacity()
+            .checked_add(candidate.capacity())
+            .and_then(|n| n.checked_mul(unit))
+            .is_none_or(|n| n > peak_limit)
+        {
+            return Err(crate::document_text::Error::Budget);
+        }
+        for chunk in self.data.chunks((4096 / unit.max(1)).max(1)) {
+            work.admit_structure(0)?;
+            for &item in chunk {
+                candidate.push(item)?;
+            }
+        }
+        *self = candidate;
+        Ok(())
+    }
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
+        &mut self.data
+    }
     pub(crate) fn pop(&mut self) -> Option<T> {
         self.data.pop()
     }

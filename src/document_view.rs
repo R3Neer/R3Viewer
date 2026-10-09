@@ -1,5 +1,6 @@
 //! Private b1 library: real Flow/text preparation, typed final commit, no session/pump/renderer.
 #![allow(dead_code)]
+use crate::document_presentation_anchor::PresentationAnchor;
 use crate::{
     document_consumer_budget::{Charge, ChargedVec, ConsumerBudget},
     document_consumer_profile::ConsumerProfile,
@@ -59,6 +60,8 @@ pub(crate) enum Operation {
     Home,
     End,
     Resize,
+    Presentation,
+    Horizontal { left: usize },
     Seek(RawAnchor),
     Continue(LayoutAnchor),
     Fold { block: u32, expanded: bool },
@@ -104,6 +107,7 @@ pub(crate) struct DocumentPreparationInput {
     old_flow: Option<FlowHandle>,
     old_slot: Option<Arc<SequenceSlot>>,
     anchor: Option<LayoutAnchor>,
+    presentation: Option<PresentationAnchor>,
     old_window_bytes: usize,
     _metadata: Charge,
     _source_metadata: Arc<Charge>,
@@ -148,6 +152,7 @@ pub(crate) struct DocumentView {
     layout: LayoutWindow,
     geometry: Geometry,
     fold_revision: u64,
+    presentation: Option<PresentationAnchor>,
     expected: Option<DocumentKey>,
     render_binding: Binding,
 }
@@ -227,6 +232,7 @@ impl DocumentView {
             old_flow: None,
             old_slot: None,
             anchor: None,
+            presentation: None,
             old_window_bytes: 0,
             _metadata: metadata,
             _source_metadata: source_metadata,
@@ -250,6 +256,10 @@ impl DocumentView {
         let flow = new_flow.ok_or(Cause::Missing)?;
         let navigation = navigation.ok_or(Cause::Missing)?;
         let navigator = Navigator::from_storage(flow, selection, navigation);
+        let presentation = input
+            .presentation
+            .clone()
+            .or_else(|| layout.text().and_then(|w| w.presentation_row(0).cloned()));
         Ok(Self {
             document: input.document.clone(),
             budget: input.budget.clone(),
@@ -260,6 +270,7 @@ impl DocumentView {
             layout,
             geometry: input.key.geometry,
             fold_revision: input.key.fold_revision,
+            presentation,
             expected: None,
             render_binding: input.key.binding,
         })
@@ -289,14 +300,35 @@ impl DocumentView {
         };
         let mut anchor = self.navigator.current().map(LayoutAnchor::state);
         let mut operation = operation;
+        let mut presentation = self.presentation.clone();
+        if matches!(
+            operation,
+            Operation::Seek(_) | Operation::Continue(_) | Operation::Home | Operation::End
+        ) {
+            presentation = None;
+        }
         if let Operation::Line { delta } = operation
             && delta > 0
             && geometry == self.geometry
             && let Some(w) = self.layout.text()
-            && let Some(a) = w.row_anchor(delta as usize).or_else(|| w.next_anchor())
         {
-            anchor = Some(a);
-            operation = Operation::Continue(a);
+            if let Some(a) = w
+                .presentation_row(delta as usize)
+                .or_else(|| w.presentation_next())
+            {
+                presentation = Some(a.clone());
+                anchor = Some(a.layout_selection());
+                operation = Operation::Presentation;
+            } else if let Some(a) = w.row_anchor(delta as usize).or_else(|| w.next_anchor()) {
+                anchor = Some(a);
+                presentation = Some(PresentationAnchor::Domain(a));
+                operation = Operation::Continue(a);
+            }
+        }
+        if matches!(operation, Operation::Resize | Operation::Horizontal { .. })
+            && let Some(a) = presentation.as_ref()
+        {
+            anchor = Some(a.layout_selection());
         }
         let key = DocumentKey { operation, ..key };
         let old_slot = self.layout.text().and_then(|w| w.slot_alias());
@@ -309,6 +341,7 @@ impl DocumentView {
             old_flow: Some(flow),
             old_slot,
             anchor,
+            presentation,
             old_window_bytes: self.layout.bytes(),
             _metadata: metadata,
             _source_metadata: self._source_metadata.clone(),
@@ -339,6 +372,10 @@ impl DocumentView {
                     .commit_prepared(new_flow, selection)
                     .map_err(map_cause)?;
                 self.render_binding = input.key.binding;
+                self.presentation = layout
+                    .text()
+                    .and_then(|w| w.presentation_row(0).cloned())
+                    .or_else(|| input.presentation.clone());
                 self.layout = layout;
                 self.geometry = input.key.geometry;
                 self.fold_revision = input.key.fold_revision;
@@ -359,6 +396,9 @@ impl DocumentView {
             return Err(Cause::Stale);
         }
         Ok(())
+    }
+    pub(crate) fn presentation_anchor(&self) -> Option<&PresentationAnchor> {
+        self.presentation.as_ref()
     }
     pub(crate) fn render_binding(&self) -> Binding {
         self.render_binding
@@ -400,7 +440,7 @@ fn remap(flow: &FlowHandle, layout: LayoutAnchor, cancel: &AtomicBool) -> Result
         )
     }
 }
-fn validate_raw_anchor(
+pub(crate) fn validate_raw_anchor(
     document: &Document,
     anchor: RawAnchor,
     work: &mut DocumentWork<'_>,
@@ -521,6 +561,13 @@ fn prepare(
     let requested = match input.key.operation {
         Operation::Seek(raw) => Some(LayoutAnchor::physical(raw)),
         Operation::Continue(layout) => Some(layout),
+        Operation::Presentation => Some(
+            input
+                .presentation
+                .as_ref()
+                .ok_or(Error::Invalid)?
+                .layout_selection(),
+        ),
         _ => input.anchor,
     };
     if let Some(layout) = requested {
@@ -535,6 +582,72 @@ fn prepare(
             layout.projection_part,
             &mut prep,
         )?;
+    }
+    if let Operation::Horizontal { left } = input.key.operation {
+        if input.key.geometry.left != left {
+            return Err(Error::Invalid);
+        }
+        let block = requested.ok_or(Error::Invalid)?.raw.block;
+        if !matches!(
+            crate::document_roles::block_role(&input.document, block, &mut prep)?,
+            crate::document_roles::BlockRole::Code { .. }
+                | crate::document_roles::BlockRole::Frontmatter
+        ) {
+            return Err(Error::Invalid);
+        }
+    }
+    if let Some(anchor) = input.presentation.as_ref() {
+        match anchor {
+            PresentationAnchor::Ref(a) => {
+                crate::document_presentation_anchor::RefAnchor::checked(
+                    &input.document,
+                    a.owner(),
+                    a.text_ref(),
+                    a.local(),
+                    a.part(),
+                    &mut prep,
+                )?;
+            }
+            PresentationAnchor::ResourceAlt(a) => {
+                crate::document_presentation_anchor::ResourceAltAnchor::checked(
+                    &input.document,
+                    a.block(),
+                    a.run(),
+                    a.resource(),
+                    a.domain(),
+                    a.position(),
+                    &mut prep,
+                )?;
+            }
+            PresentationAnchor::Table(t) => {
+                for p in t.cells() {
+                    prep.admit_structure(size_of::<
+                        crate::document_presentation_anchor::TableCellProgress,
+                    >())?;
+                    if let crate::document_presentation_anchor::CellProgress::At(a) = p.progress {
+                        validate_raw_anchor(&input.document, a.raw, &mut prep)?;
+                        crate::document_text::validate_visual_part(
+                            &input.document,
+                            a.raw.run,
+                            a.raw.byte,
+                            a.projection_part,
+                            &mut prep,
+                        )?;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(PresentationAnchor::Role(a)) = input.presentation.as_ref() {
+        let flow = input.old_flow.as_ref().ok_or(Error::Invalid)?;
+        let location = flow.index().location(a.ordinal())?;
+        let event = flow.index().event_at(&location, &mut prep)?;
+        if !matches!(event,crate::document_flow::Event::Enter(block)if block==a.block()&&a.run()==NONE)
+            && !matches!(event,crate::document_flow::Event::Run{block,run}if block==a.block()&&run==a.run())
+        {
+            return Err(Error::Invalid);
+        }
     }
     // Window capacity is mandatory and admitted before adaptive sparse-index density.
     let builder = WindowBuilder::new(&input.budget, input.key.geometry, input.old_window_bytes);
@@ -587,6 +700,15 @@ fn prepare(
         Operation::End => flow.index().terminal().map(State::from_target),
         Operation::Seek(raw) => Some(remap(&flow, LayoutAnchor::physical(raw), cancel)?),
         Operation::Continue(layout) => Some(remap(&flow, layout, cancel)?),
+        Operation::Presentation => Some(remap(
+            &flow,
+            input
+                .presentation
+                .as_ref()
+                .ok_or(Error::Invalid)?
+                .layout_selection(),
+            cancel,
+        )?),
         Operation::Fold { block, .. } => match input.anchor {
             Some(raw) => match remap(&flow, raw, cancel) {
                 Ok(s) => Some(s),
@@ -595,7 +717,7 @@ fn prepare(
             },
             None => flow.index().first().map(State::from_target),
         },
-        Operation::Resize | Operation::Line { .. } => {
+        Operation::Resize | Operation::Horizontal { .. } | Operation::Line { .. } => {
             input.anchor.map(|r| remap(&flow, r, cancel)).transpose()?
         }
     };
@@ -617,19 +739,19 @@ fn prepare(
         shifted_slot = slot;
     }
     let layout = match (builder, selection.as_ref()) {
-        (_, None) => LayoutWindow::Reference {
-            reason: ReferenceReason::Geometry,
-            work: document_layout::REFERENCE_WORK,
-        },
+        (_, None) => {
+            LayoutWindow::reference(ReferenceReason::Geometry, input.key.geometry, cancel)?
+        }
         (Err(Error::Cancelled), _) => return Err(Error::Cancelled),
-        (Err(_), _) => LayoutWindow::Reference {
-            reason: if input.key.geometry.width == 0 || input.key.geometry.height == 0 {
+        (Err(_), _) => LayoutWindow::reference(
+            if input.key.geometry.width == 0 || input.key.geometry.height == 0 {
                 ReferenceReason::Geometry
             } else {
                 ReferenceReason::Window
             },
-            work: document_layout::REFERENCE_WORK,
-        },
+            input.key.geometry,
+            cancel,
+        )?,
         (Ok(mut builder), Some(selected)) => {
             builder.retain_candidate(shifted_slot.take());
             let end_anchor = input.key.operation == Operation::End
@@ -655,6 +777,7 @@ fn prepare(
                 cancel,
                 profile,
                 end_anchor,
+                input.presentation.as_ref(),
             )?
         }
     };

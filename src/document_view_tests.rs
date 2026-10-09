@@ -187,7 +187,7 @@ fn b105_flow_handle_retains_budget_and_alias_is_fallible() {
 fn b106_root_fold_resize_and_stale_locations() {
     let _s = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let (mut v, mut a) = view("> [!note]- T\n> BODY\n\nEND\n", geometry(10));
-    assert_eq!(symbols(&v), "TEND");
+    assert_eq!(semantic_symbols(&v), "TEND");
     let callout = v
         .document
         .blocks()
@@ -206,7 +206,7 @@ fn b106_root_fold_resize_and_stale_locations() {
         },
         g,
     );
-    assert_eq!(symbols(&v), "TBODYEND");
+    assert_eq!(semantic_symbols(&v), "TBODYEND");
     assert!(v.navigator.index().check_location(&old).is_err());
     perform(
         &mut v,
@@ -214,7 +214,7 @@ fn b106_root_fold_resize_and_stale_locations() {
         Operation::Resize,
         Geometry { width: 20, ..g },
     );
-    assert_eq!(symbols(&v), "TBODYEND");
+    assert_eq!(semantic_symbols(&v), "TBODYEND");
     assert_eq!(v.navigator.history_len(), 0);
 }
 #[test]
@@ -251,7 +251,7 @@ fn b107_fold_preserves_history_raw_and_back_rejects_stale_without_pop() {
         },
         g,
     );
-    assert_eq!(symbols(&v), "TEND");
+    assert_eq!(semantic_symbols(&v), "TEND");
     assert_eq!(v.navigator.history_len(), 1);
     assert_eq!(v.navigator.raw_back(), back);
     let current = RawAnchor::state(v.navigator.current().unwrap());
@@ -640,4 +640,17 @@ fn b117_visual_affinity_invalid_before_geometry_reference() {
             assert_eq!(v.navigator.history_len(), 0);
         }
     }
+}
+
+#[path = "document_b2_tests.rs"]
+mod b2;
+
+// Fold/history oracle reads only genuine semantic glyphs; b2 role/ref decorations are separately tested.
+fn semantic_symbols(v: &DocumentView) -> String {
+    let w = v.layout().text().unwrap();
+    w.glyphs()
+        .iter()
+        .filter(|g| g.first.is_some())
+        .map(|g| &w.symbols()[g.start as usize..g.end as usize])
+        .collect()
 }

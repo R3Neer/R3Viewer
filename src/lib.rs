@@ -92,6 +92,8 @@ mod document_roles;
 pub mod document_output;
 pub mod document_selection;
 
+mod document_frame_work;
+mod document_presentation_anchor;
 mod document_renderer;
 mod document_terminal;
 

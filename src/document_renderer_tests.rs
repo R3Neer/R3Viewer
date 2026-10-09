@@ -327,7 +327,7 @@ fn shared_work_exact_guard() {
 }
 
 #[test]
-fn measured_old4m_exact_total_and_previous_receipt_are_closed() {
+fn b2_measured_old4m_exact_total_and_previous_receipt_are_closed() {
     let raw = format!("{}  \n", "X".repeat(120)).repeat(40);
     let v = view(&raw, geometry(120, 40));
     let c = config(false);
@@ -352,10 +352,10 @@ fn measured_old4m_exact_total_and_previous_receipt_are_closed() {
     else {
         panic!("old4m Work")
     };
-    assert_eq!((required, limit), (7063279, 4194304));
+    assert_eq!((required, limit), (7417231, 4194304));
     assert_eq!(
         parts,
-        [1327023, 710400, 715200, 921600, 465600, 460800, 2462656]
+        [1373775, 864000, 868800, 921600, 465600, 460800, 2462656]
     );
     assert!(bytes.bytes().is_empty());
     assert!(
@@ -384,10 +384,10 @@ fn measured_old4m_exact_total_and_previous_receipt_are_closed() {
         .unwrap();
     bytes.clear();
     let previous = t.previous_frame();
-    assert_eq!(previous.window(), 122848);
+    assert_eq!(previous.window(), 120864);
     assert_eq!(previous.payload(), 4800);
     let (plan, _) = prepare(&v, &c, Rect::new(0, 0, 120, 40), &previous, &cancel).unwrap();
-    assert!(plan.frame_bytes() > 245696 + 9600);
+    assert!(plan.frame_bytes() > 241728 + 9600);
     assert_eq!(plan.work().diff, 470400);
     let other = view("other", geometry(120, 40));
     let (otherplan, otherpermit) =
@@ -545,4 +545,46 @@ fn partial_native_flush_error_poison_is_not_false_atomic_rollback() {
         ))
     ));
     assert!(bytes.bytes().is_empty());
+}
+
+#[test]
+fn b2_reference_and_roles_use_closed_real_crossterm_draw() {
+    let cancel = AtomicBool::new(false);
+    let config = config(false);
+    let (mut t, capture) = owner(80, 24);
+    let v = view("\u{301}", geometry(80, 24));
+    assert!(matches!(
+        v.layout(),
+        crate::document_layout::LayoutWindow::Reference {
+            reason: ReferenceReason::WidthZero,
+            ..
+        }
+    ));
+    let work = t
+        .draw_document(&v, &config, &cancel, |b| b == v.render_binding())
+        .unwrap();
+    assert!(work.total <= DOCUMENT_FRAME_WORK);
+    let written = String::from_utf8(capture.bytes()).unwrap();
+    assert!(written.contains("[Document reference: WidthZero]"));
+    capture.clear();
+    let v = view(
+        "# a**\u{301}**\n\n![ALT](image.png \"TITLE\")\n",
+        geometry(80, 24),
+    );
+    t.draw_document(&v, &config, &cancel, |b| b == v.render_binding())
+        .unwrap();
+    let written = String::from_utf8(capture.bytes()).unwrap();
+    assert!(written.contains("# a\u{301}"));
+    assert!(written.contains("[Image pending: image.png; alt: ALT; title: TITLE]"));
+}
+#[test]
+fn b2_zero_geometry_draw_performs_no_native_writer_io() {
+    let v = view("text", geometry(0, 0));
+    let (mut t, capture) = owner(0, 0);
+    let config = config(false);
+    t.draw_document(&v, &config, &AtomicBool::new(false), |b| {
+        b == v.render_binding()
+    })
+    .unwrap();
+    assert!(capture.bytes().is_empty());
 }

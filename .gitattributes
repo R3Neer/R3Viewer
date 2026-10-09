@@ -34,3 +34,6 @@ tests/fixtures/markdown-code/** -text whitespace=cr-at-eol
 
 # Reviewed semantic search fixtures preserve exact source/model bytes.
 tests/fixtures/document-b3-search/** -text whitespace=cr-at-eol
+
+# Reviewed b2 renderer fixtures retain exact source/model bytes.
+tests/fixtures/document-b2/** -text whitespace=cr-at-eol

@@ -1465,6 +1465,36 @@ pub(crate) fn validate_visual_part(
     Ok(())
 }
 
+pub(crate) fn validate_ref_visual_part(
+    document: &Document,
+    id: u32,
+    local: usize,
+    part: u8,
+    work: &mut DocumentWork<'_>,
+) -> Result<()> {
+    work.admit_structure(std::mem::size_of::<crate::document_model::TextRef>() + 8)?;
+    let text = document.text(id).map_err(|_| Error::Invalid)?;
+    if local > text.len() || !text.is_char_boundary(local) {
+        return Err(Error::Invalid);
+    }
+    if part == 0 {
+        return Ok(());
+    }
+    let ch = text
+        .get(local..)
+        .and_then(|s| s.chars().next())
+        .ok_or(Error::Invalid)?;
+    if !matches!(ch, '\u{80}'..='\u{9f}') {
+        return Err(Error::Invalid);
+    }
+    let mut bytes = [0; 8];
+    let projection = text_projection::scalar(ch, None, &mut bytes);
+    if usize::from(part) >= projection.len() || !projection.is_char_boundary(usize::from(part)) {
+        return Err(Error::Invalid);
+    }
+    Ok(())
+}
+
 fn charged_upper(
     n: usize,
     w: &mut DocumentWork<'_>,
@@ -1535,6 +1565,61 @@ impl TextRefIndex {
             index,
             _metadata: metadata,
         })
+    }
+    /// Provider-backed local/visual seek: ordinal zero remains internal to TextRef selection.
+    pub(crate) fn seek_visual(
+        &self,
+        local: usize,
+        part: u8,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<Point> {
+        let text = &self.index.text;
+        let payload = text.document.text(self.id).map_err(|_| Error::Invalid)?;
+        w.admit_structure(std::mem::size_of::<crate::document_model::TextRef>())?;
+        if local > payload.len() || !payload.is_char_boundary(local) {
+            return Err(Error::Invalid);
+        }
+        let points = text.checkpoints.as_slice();
+        let i = charged_upper(points.len(), w, std::mem::size_of::<Checkpoint>(), |i| {
+            (points[i].pos.raw.byte, points[i].pos.part) <= (local, usize::from(part))
+        })?
+        .saturating_sub(1);
+        let mut at = points[i].pos;
+        while (at.raw.byte, at.part) < (local, usize::from(part)) {
+            at = text.character(at, w)?.ok_or(Error::Invalid)?.1;
+        }
+        if (at.raw.byte, at.part) != (local, usize::from(part)) {
+            return Err(Error::Invalid);
+        }
+        let target = at.offset;
+        let mut point = self.index.seek_before_with_work(target, w)?;
+        while point.offset() < target {
+            let before = point.clone();
+            let unit = self
+                .index
+                .step(&mut point, 4096, w)?
+                .ok_or(Error::Invalid)?;
+            if unit.projected.end > target {
+                point = before;
+                break;
+            }
+        }
+        Ok(point)
+    }
+    pub(crate) fn visual_local(
+        &self,
+        point: &Point,
+        w: &mut DocumentWork<'_>,
+    ) -> Result<(usize, u8)> {
+        w.admit_structure(std::mem::size_of::<Point>())?;
+        let p = point.position;
+        if !matches!(self.index.text.selection,PayloadSelection::TextRef(id) if id==self.id) {
+            return Err(Error::Invalid);
+        }
+        Ok((
+            p.raw.byte,
+            u8::try_from(p.part).map_err(|_| Error::Invalid)?,
+        ))
     }
     pub(crate) fn id(&self) -> u32 {
         self.id

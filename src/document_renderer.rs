@@ -3,7 +3,7 @@
 use crate::{
     config::{PresentationConfig, Role},
     document_consumer_budget::Charge,
-    document_layout::{CellKind, FRAME_BYTES, Glyph, TextWindow},
+    document_layout::{CellKind, FRAME_BYTES, Glyph, LayoutWindow, ReferenceReason, TextWindow},
     document_text::{DOCUMENT_FRAME_WORK, DocumentWork},
     document_view::DocumentView,
     preparation_owner::Binding,
@@ -41,7 +41,7 @@ pub(crate) struct WorkReceipt {
     pub total: usize,
 }
 pub(crate) struct RenderPlan<'a> {
-    window: &'a TextWindow,
+    layout: &'a LayoutWindow,
     geometry: Rect,
     binding: Binding,
     config: &'a PresentationConfig,
@@ -55,8 +55,11 @@ pub(crate) struct RenderPlan<'a> {
     _metadata: Charge,
 }
 impl RenderPlan<'_> {
-    pub(crate) fn window(&self) -> &TextWindow {
-        self.window
+    pub(crate) fn window_bytes(&self) -> usize {
+        self.layout.bytes()
+    }
+    pub(crate) fn cells(&self) -> impl Iterator<Item = (Glyph, &str)> {
+        layout_cells(self.layout, self.geometry)
     }
     pub(crate) fn geometry(&self) -> Rect {
         self.geometry
@@ -135,28 +138,33 @@ fn prepare_limit<'a>(
     {
         return Err(Error::Invalid);
     }
-    let window = view.layout().text().ok_or(Error::Resource)?;
-    let identity = window as *const TextWindow as usize;
+    let layout = view.layout();
+    let receipt = layout.frame_receipt().replay();
+    if receipt.geometry() != g {
+        return Err(Error::Invalid);
+    }
+    let layout_work = receipt.layout_spent();
+    let identity = layout as *const LayoutWindow as usize;
     let mut w = DocumentWork::bounded(cancel, limit).map_err(|_| Error::Work {
         required: DOCUMENT_FRAME_WORK + 1,
         limit: DOCUMENT_FRAME_WORK,
         parts: [0; 7],
     })?;
-    w.admit_structure(window.work).map_err(|e| match e {
+    w.admit_structure(layout_work).map_err(|e| match e {
         crate::document_text::Error::Cancelled => Error::Cancelled,
         _ => Error::Work {
-            required: window.work,
+            required: layout_work,
             limit: DOCUMENT_FRAME_WORK,
-            parts: [window.work, 0, 0, 0, 0, 0, 0],
+            parts: [layout_work, 0, 0, 0, 0, 0, 0],
         },
     })?;
     let mut payload = 0usize;
     let mut heap = 0usize;
     let mut copied_bytes = 0usize;
     let mut inspected = 0usize;
-    for i in 0..window.glyphs().len() {
+    for i in 0..layout_count(layout, area) {
         // Read packed20 + class40, construct Glyph72 by value, check metadata/range.
-        let cost = TextWindow::glyph_read_bytes() + 16;
+        let cost = TextWindow::glyph_read_bytes() + 16 + 32;
         w.admit_structure(cost).map_err(|e| match e {
             crate::document_text::Error::Cancelled => Error::Cancelled,
             _ => Error::Work {
@@ -166,18 +174,14 @@ fn prepare_limit<'a>(
             },
         })?;
         inspected = add(inspected, cost)?;
-        let c = window.glyphs().get(i).ok_or(Error::Invalid)?;
-        if c.kind != CellKind::Glyph {
+        let (c, s) = layout_cell(layout, area, i);
+        if matches!(c.kind, CellKind::Resource(_)) {
             return Err(Error::Resource);
         }
         if c.width == 0 || c.row >= g.height || c.x.checked_add(c.width).is_none_or(|x| x > g.width)
         {
             return Err(Error::Invalid);
         }
-        let s = window
-            .symbols()
-            .get(c.start as usize..c.end as usize)
-            .ok_or(Error::Invalid)?;
         if s.is_empty() || s.len() > 16384 {
             return Err(Error::Symbol);
         }
@@ -193,7 +197,7 @@ fn prepare_limit<'a>(
         )?;
     }
     let metadata = size_of::<RenderPlan<'_>>() + size_of::<MandatoryRenderPermit>();
-    let frame_bytes = window
+    let frame_bytes = layout
         .bytes()
         .checked_add(previous_window)
         .and_then(|n| n.checked_add(copied_bytes))
@@ -217,7 +221,7 @@ fn prepare_limit<'a>(
     let materialize = add(inspected, payload)?;
     let formatter = add(formatter, 256)?; // fixed FG/BG/attribute reset, cursor-hide and flush descriptors
     let parts = [
-        window.work,
+        layout_work,
         inspected,
         materialize,
         readbacks,
@@ -226,7 +230,11 @@ fn prepare_limit<'a>(
         formatter,
     ];
     let total = parts.iter().try_fold(0usize, |n, &c| add(n, c))?;
-    if total > limit {
+    if total > limit
+        || receipt
+            .validate_spend(total.checked_sub(layout_work).ok_or(Error::Invalid)?)
+            .is_err()
+    {
         return Err(Error::Work {
             required: total,
             limit,
@@ -244,7 +252,7 @@ fn prepare_limit<'a>(
         })?;
     }
     let work = WorkReceipt {
-        layout: window.work,
+        layout: layout_work,
         preflight: inspected,
         materialize,
         readbacks,
@@ -259,7 +267,7 @@ fn prepare_limit<'a>(
         .map_err(|_| Error::Consumer)?;
     let binding = view.render_binding();
     let p = RenderPlan {
-        window,
+        layout,
         geometry: area,
         binding,
         config,
@@ -285,11 +293,23 @@ pub(crate) fn style(g: Glyph, config: &PresentationConfig) -> Style {
         return Style::default();
     }
     let linked = g.links > 0;
-    let mut s = config.style(if g.styles & 8 != 0 || linked {
-        Role::Accent
-    } else {
-        Role::Value
+    let paint = match g.kind {
+        CellKind::Text(p) => p,
+        CellKind::Decoration(_) | CellKind::RefText(_) => {
+            crate::document_presentation_anchor::PaintRole::Secondary
+        }
+        _ => crate::document_presentation_anchor::PaintRole::Value,
+    };
+    let mut s = config.style(match paint {
+        crate::document_presentation_anchor::PaintRole::Heading => Role::Heading,
+        crate::document_presentation_anchor::PaintRole::Code => Role::Accent,
+        crate::document_presentation_anchor::PaintRole::Secondary => Role::Secondary,
+        _ if g.styles & 8 != 0 || linked => Role::Accent,
+        _ => Role::Value,
     });
+    if paint == crate::document_presentation_anchor::PaintRole::Heading {
+        s = s.add_modifier(Modifier::BOLD);
+    }
     if g.styles & 1 != 0 {
         s = s.add_modifier(Modifier::ITALIC)
     }
@@ -307,3 +327,55 @@ pub(crate) fn style(g: Glyph, config: &PresentationConfig) -> Style {
 #[cfg(test)]
 #[path = "document_renderer_tests.rs"]
 mod tests;
+
+fn reference_label(reason: ReferenceReason) -> &'static str {
+    match reason {
+        ReferenceReason::Geometry => "[Document reference: Geometry]",
+        ReferenceReason::Symbol => "[Document reference: Symbol]",
+        ReferenceReason::WidthZero => "[Document reference: WidthZero]",
+        ReferenceReason::Width => "[Document reference: Width]",
+        ReferenceReason::Window => "[Document reference: Window]",
+        ReferenceReason::Work => "[Document reference: Work]",
+        ReferenceReason::Budget => "[Document reference: Budget]",
+        ReferenceReason::Resource => "[Document reference: Resource]",
+    }
+}
+fn layout_count(layout: &LayoutWindow, area: Rect) -> usize {
+    match layout {
+        LayoutWindow::Text(w) => w.glyphs().len(),
+        LayoutWindow::Reference { reason, .. } => reference_label(*reason)
+            .len()
+            .min(usize::from(area.width) * usize::from(area.height)),
+    }
+}
+fn layout_cell(layout: &LayoutWindow, area: Rect, i: usize) -> (Glyph, &str) {
+    match layout {
+        LayoutWindow::Text(w) => {
+            let mut g = w.glyphs().get(i).expect("closed glyph");
+            g.kind = CellKind::Text(w.paint(g).expect("closed origin/paint"));
+            (g, &w.symbols()[g.start as usize..g.end as usize])
+        }
+        LayoutWindow::Reference { reason, .. } => {
+            let s = reference_label(*reason);
+            (
+                Glyph {
+                    x: (i % usize::from(area.width)) as u16,
+                    row: (i / usize::from(area.width)) as u16,
+                    width: 1,
+                    start: 0,
+                    end: 1,
+                    kind: CellKind::Text(crate::document_presentation_anchor::PaintRole::Secondary),
+                    styles: 0,
+                    first: None,
+                    links: 0,
+                    relation_mask: 0,
+                    projection_part: 0,
+                },
+                &s[i..i + 1],
+            )
+        }
+    }
+}
+fn layout_cells(layout: &LayoutWindow, area: Rect) -> impl Iterator<Item = (Glyph, &str)> {
+    (0..layout_count(layout, area)).map(move |i| layout_cell(layout, area, i))
+}

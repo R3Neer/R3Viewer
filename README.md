@@ -118,3 +118,8 @@ Markdown interactivo muestra Fuente y avisa: «Markdown interactivo pendiente; s
 ## Primer renderer textual interno y pausa
 
 El [primer renderer Markdown textual con estilos](docs/reviews/Markdown-renderer-text-adoption-r2.md) está incorporado como biblioteca interna, con revisión y aceptación independientes. No está conectado al comando interactivo, que continúa mostrando Fuente con aviso; viewer -i conserva su vista Markdown. Recursos gráficos y presentación completa de bloques siguen pendientes. El [checkpoint del hito](docs/process/PAUSA-2026-10-09.md) conserva la pausa histórica y la reanudación posterior autorizada por el usuario el mismo día. El desarrollo completo vuelve a estar activo.
+
+
+## Presentación interna de bloques Markdown
+
+El [renderer documental b2](docs/reviews/Markdown-D2b2-renderer-adoption-r1.md) incorpora bloques, roles, recursos seguros y tablas con posiciones por celda conservadas al redimensionar. Tiene revisión y aceptación independientes y133 regresiones canónicas PASS; sigue siendo biblioteca interna. La conexión a la sesión interactiva, el inspector, historial, fences y gráficos permanecen pendientes. El comando interactivo continúa mostrando Fuente con el aviso indicado arriba; no se acredita QA visual ni soporte nativo Unix por este incremento.
