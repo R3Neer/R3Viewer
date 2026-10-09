@@ -79,6 +79,8 @@ pub enum Error {
     Invalid,
     Budget,
     UnsupportedRun(u32),
+    ProvidersBusy,
+    ScopePending,
 }
 pub type Result<T> = std::result::Result<T, Error>;
 impl From<crate::text_engine::Error> for Error {
@@ -1796,5 +1798,18 @@ impl ResolvedRefUnit<'_> {
             return Err(Error::Invalid);
         }
         w.admit(0)
+    }
+}
+
+#[path = "document_text_coverage_cursor.rs"]
+mod coverage_cursor;
+pub(crate) use coverage_cursor::{Component as CoverageComponent, CoverageCursor, CoverageStep};
+impl TextRefIndex {
+    pub(crate) fn seek_before_with_work(
+        &self,
+        offset: usize,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<Point> {
+        self.index.seek_before_with_work(offset, work)
     }
 }

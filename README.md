@@ -122,9 +122,11 @@ El [primer renderer Markdown textual con estilos](docs/reviews/Markdown-renderer
 
 ## Presentación interna de bloques Markdown
 
-El [renderer documental b2](docs/reviews/Markdown-D2b2-renderer-adoption-r1.md) incorpora bloques, roles, recursos seguros y tablas con posiciones por celda conservadas al redimensionar. Tiene revisión y aceptación independientes y133 regresiones canónicas PASS; sigue siendo biblioteca interna. La conexión a la sesión interactiva, el inspector, historial, fences y gráficos permanecen pendientes. El comando interactivo continúa mostrando Fuente con el aviso indicado arriba; no se acredita QA visual ni soporte nativo Unix por este incremento.
+El [renderer documental b2](docs/reviews/Markdown-D2b2-renderer-adoption-r1.md) incorpora bloques, roles, recursos seguros y tablas con posiciones por celda conservadas al redimensionar. Tiene revisión y aceptación independientes y133 regresiones canónicas PASS; sigue siendo biblioteca interna. La conexión a la sesión interactiva, historial, fences y gráficos permanecen pendientes. El comando interactivo continúa mostrando Fuente con el aviso indicado arriba; no se acredita QA visual ni soporte nativo Unix por este incremento.
 
 
 El [fix del bloque contenedor de recursos](docs/reviews/Markdown-B2-resource-owner-adoption-r1.md) evita errores con varias imágenes y conserva su texto alternativo al desplazar código ajeno. Tiene aceptación independiente y 77 regresiones de composición aprobadas. Este cambio corresponde al renderer interno; la vista Markdown interactiva y los recursos gráficos siguen pendientes.
 
 Fuente compartida: [biblioteca R2 integrada](docs/reviews/Markdown-Source-common-adoption-r2.md), con aceptación independiente y 132 controles de composición PASS. Comparte modelo/contexto y contabiliza aperturas del viewport; conexión a sesión interactiva y Hash común aún pendientes.
+
+Inspector y admisión física: [biblioteca R2 integrada](docs/reviews/Markdown-inspector-gate-adoption-r2.md), con [aceptación independiente](docs/reviews/Markdown-inspector-gate-acceptance-r2.md) y219pruebas distintas de composición PASS. Inspección desde posición/hit real, procedencia paginada y gate de dos proveedores scoped conservan owner, estado y cargos físicos. La conexión a la sesión interactiva y la ejecución de acciones de Fuente siguen pendientes; el comando mantiene Fuente con aviso.

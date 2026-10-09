@@ -94,8 +94,6 @@ mod document_roles;
 pub mod document_output;
 pub mod document_selection;
 
-mod document_frame_work;
-mod document_presentation_anchor;
 mod document_renderer;
 mod document_terminal;
 
@@ -105,6 +103,21 @@ mod document_terminal_storage_tests;
 
 #[allow(dead_code)] // Independent b3 core awaiting combined adoption.
 mod document_search;
+
+#[cfg(test)]
+mod document_inspector_fixtures;
+
+mod document_frame_work;
+mod document_presentation_anchor;
+
+#[allow(dead_code)] // Preparation inspector awaiting combined session adoption.
+mod document_inspector;
+
+#[allow(dead_code)]
+pub(crate) mod document_provider_gate;
+
+#[cfg(test)]
+mod document_provider_gate_tests;
 
 #[cfg(test)]
 mod document_resource_owner_tests;

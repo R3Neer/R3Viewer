@@ -49,7 +49,7 @@ pub(crate) fn render(
             let source = document.source().original_handle();
             let content = source_fallback(&source, config.line_numbers, cancel, limit)?;
             let diagnostic = match reason {
-                Error::Budget => {
+                Error::Budget | Error::ProvidersBusy | Error::ScopePending => {
                     "no se pudo representar Documento; se muestra Fuente completa: presupuesto"
                 }
                 Error::Work => {

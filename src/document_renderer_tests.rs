@@ -597,3 +597,55 @@ fn b2_zero_geometry_draw_performs_no_native_writer_io() {
     .unwrap();
     assert!(capture.bytes().is_empty());
 }
+
+#[test]
+fn p11_scoped_cache_retirement_preserves_real_native_frame() {
+    use crate::{
+        document_inspector::preparation::{
+            InspectionLibraryInput, InspectionLibraryOutput, InspectionPreparationInput,
+        },
+        document_provider_gate_tests as gate,
+    };
+    let (mut view, mut authority) =
+        gate::initial("![bee](pin \"hold\") ![fox](one \"same\") ![fox](two \"same\")");
+    let c = config(false);
+    let cancel = AtomicBool::new(false);
+    let (mut before, bytes_before) = owner(80, 24);
+    let first = before
+        .draw_document(&view, &c, &cancel, |binding| {
+            binding == view.render_binding()
+        })
+        .unwrap();
+    let seed = InspectionPreparationInput::view(
+        &view,
+        Some(gate::resource_cell(&view, 1)),
+        &mut crate::document_text::DocumentWork::preparation(&cancel),
+    )
+    .unwrap();
+    let retired = view
+        .retire_cached_provider(&mut crate::document_text::DocumentWork::preparation(
+            &cancel,
+        ))
+        .unwrap();
+    assert!(view.layout().text().unwrap().slot_alias().is_none());
+    let input = InspectionLibraryInput::retire_and_inspect(
+        retired,
+        seed,
+        &mut crate::document_text::DocumentWork::preparation(&cancel),
+    )
+    .ok()
+    .unwrap();
+    let InspectionLibraryOutput::Inspector(prepared) = gate::run(input, &mut authority) else {
+        panic!("inspector")
+    };
+    assert!(prepared.result().is_ok());
+    let (mut after, bytes_after) = owner(80, 24);
+    let second = after
+        .draw_document(&view, &c, &cancel, |binding| {
+            binding == view.render_binding()
+        })
+        .unwrap();
+    assert_eq!(bytes_before.bytes(), bytes_after.bytes());
+    assert_eq!(first.total, second.total);
+    assert!(!bytes_after.bytes().is_empty());
+}

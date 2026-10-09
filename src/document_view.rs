@@ -100,6 +100,7 @@ impl ViewStorage {
 }
 pub(crate) struct DocumentPreparationInput {
     document: Arc<Document>,
+    provider_gate: Option<Arc<crate::document_provider_gate::ProviderGate>>,
     budget: ConsumerBudget,
     source: Arc<PreparedSourceContext>,
     storage: Arc<ViewStorage>,
@@ -148,6 +149,7 @@ pub(crate) type DocumentPreparationAuthority =
     PreparationAuthority<DocumentPreparationInput, PreparedState>;
 pub(crate) struct DocumentView {
     document: Arc<Document>,
+    provider_gate: Option<Arc<crate::document_provider_gate::ProviderGate>>,
     budget: ConsumerBudget,
     source: Arc<PreparedSourceContext>,
     storage: Arc<ViewStorage>,
@@ -166,6 +168,8 @@ fn map_cause(e: Error) -> Cause {
         Error::Invalid => Cause::Stale,
         Error::Work => Cause::Limit("DocumentWork"),
         Error::Budget => Cause::Limit("ConsumerBudget"),
+        Error::ProvidersBusy => Cause::Limit("Provider slots"),
+        Error::ScopePending => Cause::Limit("Inspectable scope"),
         Error::UnsupportedRun(_) => Cause::Limit("DocumentRun"),
     }
 }
@@ -316,6 +320,7 @@ impl DocumentView {
         let metadata = input_charge(&budget, false, funding).map_err(map_cause)?;
         Ok(Arc::new(DocumentPreparationInput {
             document,
+            provider_gate: None,
             budget,
             source,
             storage,
@@ -359,6 +364,7 @@ impl DocumentView {
             .or_else(|| layout.text().and_then(|w| w.presentation_row(0).cloned()));
         Ok(Self {
             document: input.document.clone(),
+            provider_gate: input.provider_gate.clone(),
             budget: input.budget.clone(),
             source: input.source.clone(),
             storage: input.storage.clone(),
@@ -469,6 +475,7 @@ impl DocumentView {
         let old_slot = self.layout.text().and_then(|w| w.slot_alias());
         let input = Arc::new(DocumentPreparationInput {
             document: self.document.clone(),
+            provider_gate: self.provider_gate.clone(),
             budget: self.budget.clone(),
             source: self.source.clone(),
             storage: self.storage.clone(),
@@ -808,7 +815,8 @@ fn prepare(
         }
     }
     // Window capacity is mandatory and admitted before adaptive sparse-index density.
-    let builder = WindowBuilder::new(&input.budget, input.key.geometry, input.old_window_bytes);
+    let builder = WindowBuilder::new(&input.budget, input.key.geometry, input.old_window_bytes)
+        .map(|b| b.with_provider_gate(input.provider_gate.clone()));
     let profile = ConsumerProfile::plan(
         &input.budget,
         512,
@@ -883,7 +891,7 @@ fn prepare(
     if let Operation::Line { delta } = input.key.operation
         && let Some(selected) = selection.as_ref()
     {
-        let (s, slot) = document_layout::shift_line(
+        let (s, slot) = document_layout::shift_line_scoped(
             input.document.clone(),
             &flow,
             selected,
@@ -892,6 +900,7 @@ fn prepare(
             &input.budget,
             cancel,
             profile,
+            input.provider_gate.as_ref(),
         )?;
         selection = Some(s);
         shifted_slot = slot;
@@ -956,3 +965,62 @@ mod tests;
 #[cfg(test)]
 #[path = "document_kernel_metadata_tests.rs"]
 mod kernel_metadata_tests;
+
+impl DocumentView {
+    pub(crate) fn inspect_provider_gate(
+        &self,
+    ) -> Option<&Arc<crate::document_provider_gate::ProviderGate>> {
+        self.provider_gate.as_ref()
+    }
+}
+
+pub(crate) struct CacheRetirement {
+    pub(crate) gate: Arc<crate::document_provider_gate::ProviderGate>,
+    pub(crate) slot: Option<Arc<SequenceSlot>>,
+    _charge: Charge,
+}
+impl DocumentView {
+    pub(crate) fn retire_cached_provider(
+        &mut self,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<CacheRetirement, Error> {
+        let gate = self.provider_gate.as_ref().ok_or(Error::ScopePending)?;
+        work.admit_structure(size_of::<CacheRetirement>())?;
+        let charge = self.budget.reserve(size_of::<CacheRetirement>())?;
+        work.admit_structure(0)?;
+        let slot = match &mut self.layout {
+            LayoutWindow::Text(text) => text.take_provider_cache(),
+            LayoutWindow::Reference { .. } => None,
+        };
+        Ok(CacheRetirement {
+            gate: gate.clone(),
+            slot,
+            _charge: charge,
+        })
+    }
+}
+
+impl DocumentView {
+    pub(crate) fn initial_shared_inspectable_input<
+        DI: Send + Sync + 'static,
+        DO: Send + 'static,
+    >(
+        document: Arc<Document>,
+        geometry: Geometry,
+        authority: &PreparationAuthority<DI, DO>,
+    ) -> Result<SharedDocumentDescriptor, Cause> {
+        let mut descriptor = Self::initial_shared_input(document, geometry, authority)?;
+        let input = Arc::get_mut(&mut descriptor.input).ok_or(Cause::Missing)?;
+        let stop = AtomicBool::new(false);
+        let gate = crate::document_provider_gate::ProviderGate::from_owner(
+            input.document.clone(),
+            &input.budget,
+            input.source.clone(),
+            input._source_metadata.clone(),
+            &mut DocumentWork::preparation(&stop),
+        )
+        .map_err(map_cause)?;
+        input.provider_gate = Some(gate);
+        Ok(descriptor)
+    }
+}

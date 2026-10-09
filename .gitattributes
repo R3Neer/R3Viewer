@@ -42,3 +42,6 @@ tests/fixtures/document-b2/** -text whitespace=cr-at-eol
 tests/fixtures/document-b2-resource-owner/** -text whitespace=cr-at-eol
 
 tests/fixtures/source-common/** -text whitespace=cr-at-eol
+
+# Inspector fixtures retain reviewed source offsets and byte-exact model evidence.
+tests/fixtures/document-b3-inspector/** -text whitespace=cr-at-eol

@@ -1,0 +1,22 @@
+PREOUTPUT BEFORE INSPECTOR RUNTIME / 2026-10-09 / baseline12d28a4
+Source/model-derived contracts, no candidate inspector output used.
+I01 a*U+0301*: glyph one, Run0 source0..1, Run1 source2..4; Disjoint.
+I02 [a](one)[U+0301](two): glyph one, LinkIDs0/1; distinct choices.
+I03 A&amp;B: & decoded, EnclosingToken source1..6, never Exact.
+I04 rawESC and rawU+009B: control rawscalar0..1 and1..3; safe projection.
+I05 validated decoded equal bytes: EnclosingToken irrespective equality.
+I06 two validated Resources share titleTextRef: owner0/1 remains distinct.
+I07 65 linked parts one glyph: components/choices order0..64 pages64+1.
+I08 Rule: no literal; actual block origin separate enclosing action.
+I09 real Resources: preserve raw vs decoded/input/title/alt/flags/dimensions.
+I10 no-query real selected anchor: same D1 coverage; table selectedcell actual.
+I11 failure/cancel/stale cannot replace current page or chosen link.
+I12 long refs: safe bounded projected samples, explicit continuation.
+IN13 source ab query ab: hit0..2; inspector unit0..1 only.
+IN14 source ESC ESC query U+241B U+241B: hit0..6; unit first0..3/raw0..1;
+secondunit3..6/raw1..2; merged ControlProjection raw0..2 not single scalar.
+IR02 first64 ExactSource contiguous0..127 then last Enclosing127..129:
+page64 actions Exact individually; whole Pending until65/end thenDisjoint.
+All65Exact positive: whole Exact0..129 only after actual coverage exhaustion.
+Canonical approved spec/I-A01 authoritative; dump records computed only through
+real parser+quarantine, prior to candidate implementation/runtime.

@@ -4,6 +4,7 @@ use crate::document_presentation_anchor::{
     CellProgress, OriginMeta, PaintRole, PresentationAnchor, RefAnchor, RefField, RefOwner,
     ResourceAltAnchor, RoleAnchor, TableCellProgress, TableResume,
 };
+use crate::document_provider_gate::{IndexOwner, ProviderGate, RefOwner as ProviderRefOwner};
 use crate::document_roles::{self as roles, Alignment, BlockRole, ResourceKind, TaskState};
 use crate::{
     document_consumer_budget::{Charge, ChargedVec, ConsumerBudget},
@@ -11,9 +12,7 @@ use crate::{
     document_flow::{Event, FlowHandle},
     document_model::{Document, NONE},
     document_navigation::State,
-    document_text::{
-        DocumentWork, Error, IndexProfile, Point, Relation, Result, SegmentedIndex, SegmentedText,
-    },
+    document_text::{DocumentWork, Error, IndexProfile, Point, Relation, Result, SegmentedIndex},
 };
 use std::{
     mem::size_of,
@@ -221,11 +220,11 @@ pub(crate) struct Row {
 }
 enum SlotPayload {
     Domain {
-        index: SegmentedIndex,
+        index: IndexOwner,
         domain: u32,
         runs: Range<usize>,
     },
-    Ref(crate::document_text::TextRefIndex),
+    Ref(ProviderRefOwner),
 }
 pub(crate) struct SequenceSlot {
     payload: SlotPayload,
@@ -239,18 +238,20 @@ impl SequenceSlot {
         budget: &ConsumerBudget,
         cancel: &AtomicBool,
         profile: IndexProfile,
+        gate: Option<&Arc<ProviderGate>>,
     ) -> Result<Arc<Self>> {
         let metadata = budget
             .reserve(size_of::<Self>() - size_of::<SegmentedIndex>() + 2 * size_of::<usize>())?;
-        let text = SegmentedText::prepare_with_profile(
+        let text = crate::document_provider_gate::TextOwner::prepare(
             document,
             domain,
             runs.clone(),
             budget,
             cancel,
             profile,
+            gate,
         )?;
-        let index = SegmentedIndex::prepare_with_profile(text, budget, cancel, profile)?;
+        let index = text.into_index(budget, cancel, profile)?;
         Ok(Arc::new(Self {
             payload: SlotPayload::Domain {
                 index,
@@ -266,11 +267,11 @@ impl SequenceSlot {
         budget: &ConsumerBudget,
         cancel: &AtomicBool,
         profile: IndexProfile,
+        gate: Option<&Arc<ProviderGate>>,
     ) -> Result<Arc<Self>> {
         let metadata = budget
             .reserve(size_of::<Self>() - size_of::<SegmentedIndex>() + 2 * size_of::<usize>())?;
-        let index =
-            crate::document_text::TextRefIndex::prepare(document, id, budget, cancel, profile)?;
+        let index = ProviderRefOwner::prepare(document, id, budget, cancel, profile, gate)?;
         Ok(Arc::new(Self {
             payload: SlotPayload::Ref(index),
             _metadata: metadata,
@@ -513,6 +514,7 @@ pub(crate) struct WindowBuilder {
     row_start: usize,
     geometry: Geometry,
     budget: ConsumerBudget,
+    provider_gate: Option<Arc<ProviderGate>>,
     old_bytes: usize,
     prefix: [u8; 256],
     prefix_len: usize,
@@ -534,6 +536,11 @@ pub(crate) struct WindowBuilder {
     role_resume: Option<RoleAnchor>,
 }
 impl WindowBuilder {
+    pub(crate) fn with_provider_gate(mut self, gate: Option<Arc<ProviderGate>>) -> Self {
+        self.provider_gate = gate;
+        self
+    }
+
     pub(crate) fn new(budget: &ConsumerBudget, g: Geometry, old_bytes: usize) -> Result<Self> {
         if g.width == 0 || g.height == 0 {
             return Err(Error::Budget);
@@ -604,6 +611,7 @@ impl WindowBuilder {
             row_start: 0,
             geometry: g,
             budget: budget.clone(),
+            provider_gate: None,
             old_bytes,
             prefix: [0; 256],
             prefix_len: 0,
@@ -1208,6 +1216,7 @@ impl WindowBuilder {
                     budget,
                     cancel,
                     profile,
+                    self.provider_gate.as_ref(),
                 )?;
                 let anchor = start.unwrap_or(crate::document_view::LayoutAnchor {
                     raw: crate::document_view::RawAnchor {
@@ -1414,7 +1423,14 @@ impl WindowBuilder {
             s.clone()
         } else {
             self.window.slot = None;
-            SequenceSlot::prepare_ref(document.clone(), id, budget, cancel, profile)?
+            SequenceSlot::prepare_ref(
+                document.clone(),
+                id,
+                budget,
+                cancel,
+                profile,
+                self.provider_gate.as_ref(),
+            )?
         };
         let SlotPayload::Ref(index) = &slot.payload else {
             return Err(Error::Invalid);
@@ -1645,6 +1661,7 @@ impl WindowBuilder {
                     budget,
                     cancel,
                     profile,
+                    self.provider_gate.as_ref(),
                 )?;
                 let start = alt_resume.map(|a| a.position()).unwrap_or(
                     crate::document_view::LayoutAnchor {
@@ -2406,6 +2423,7 @@ pub(crate) fn build_window(
                         budget,
                         cancel,
                         profile.index,
+                        builder.provider_gate.as_ref(),
                     )?
                 };
                 let byte = if run == selected.run() {
@@ -2459,6 +2477,7 @@ pub(crate) fn build_window(
         }
         Err(Error::Cancelled) => Err(Error::Cancelled),
         Err(Error::Invalid) => Err(Error::Invalid),
+        Err(Error::ProvidersBusy) => Err(Error::ProvidersBusy),
         Err(e) => {
             let reason = match e {
                 Error::Work => ReferenceReason::Work,
@@ -2479,7 +2498,7 @@ pub(crate) fn build_window(
 
 /// Background-only line positioning; no whole-document geometry index or UI traversal.
 #[allow(clippy::too_many_arguments)] // No hidden owner, new allowance or implicit profile.
-pub(crate) fn shift_line(
+pub(crate) fn shift_line_scoped(
     document: Arc<Document>,
     flow: &FlowHandle,
     selected: &State,
@@ -2488,6 +2507,7 @@ pub(crate) fn shift_line(
     budget: &ConsumerBudget,
     cancel: &AtomicBool,
     profile: ConsumerProfile,
+    gate: Option<&Arc<ProviderGate>>,
 ) -> Result<(State, Option<Arc<SequenceSlot>>)> {
     if delta == 0 {
         return Ok((selected.clone(), old_slot.cloned()));
@@ -2557,6 +2577,7 @@ pub(crate) fn shift_line(
             budget,
             cancel,
             profile.index,
+            gate,
         )?
     };
     let _point = budget.reserve_points(2 * size_of::<Point>(), 2)?;
@@ -2746,5 +2767,51 @@ fn following_anchor(
                 )));
             }
         }
+    }
+}
+
+impl SequenceSlot {
+    pub(crate) fn inspect_provider(&self) -> crate::document_search::inspect_hit::ProviderRef<'_> {
+        match &self.payload {
+            SlotPayload::Domain { index, .. } => {
+                crate::document_search::inspect_hit::ProviderRef::Runs(index)
+            }
+            SlotPayload::Ref(index) => {
+                crate::document_search::inspect_hit::ProviderRef::TextRef(index)
+            }
+        }
+    }
+    pub(crate) fn inspect_budget(&self) -> &ConsumerBudget {
+        self._metadata.budget()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn shift_line(
+    document: Arc<Document>,
+    flow: &FlowHandle,
+    selected: &State,
+    delta: i32,
+    old_slot: Option<&Arc<SequenceSlot>>,
+    budget: &ConsumerBudget,
+    cancel: &AtomicBool,
+    profile: ConsumerProfile,
+) -> Result<(State, Option<Arc<SequenceSlot>>)> {
+    shift_line_scoped(
+        document, flow, selected, delta, old_slot, budget, cancel, profile, None,
+    )
+}
+impl SequenceSlot {
+    pub(crate) fn provider_gate(&self) -> Option<&Arc<ProviderGate>> {
+        match &self.payload {
+            SlotPayload::Domain { index, .. } => index.gate(),
+            SlotPayload::Ref(index) => index.gate(),
+        }
+    }
+}
+
+impl TextWindow {
+    pub(crate) fn take_provider_cache(&mut self) -> Option<Arc<SequenceSlot>> {
+        self.slot.take()
     }
 }

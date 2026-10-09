@@ -1,13 +1,15 @@
 //! Semantic Markdown search. Preparation-only, no worker, history or visible Flow.
 //! A single Items walker includes hidden bodies. D1 supplies safe projected chunks;
 //! original Source bytes use a distinct result. No flattened document or hit index.
+use crate::document_provider_gate::{
+    IndexOwner, ProviderGate, RefOwner as ProviderRefOwner, TextOwner,
+};
 use crate::{
     document_consumer_budget::{Charge, ChargedVec, ConsumerBudget},
     document_model::{Document, NONE},
     document_source::DocumentSource,
     document_text::{
-        Coverage, DocumentWork, Error, IndexProfile, Point, RefCoverage, Result, SegmentedIndex,
-        SegmentedText, TextRefIndex,
+        Coverage, DocumentWork, Error, IndexProfile, Point, RefCoverage, Result, SegmentedText,
     },
     search::{Direction, QUERY_LIMIT},
     text_engine::Identity,
@@ -39,6 +41,7 @@ pub(crate) enum SearchDomain {
 pub(crate) struct SearchRequest {
     document: Arc<Document>,
     budget: ConsumerBudget,
+    provider_gate: Option<Arc<ProviderGate>>,
     domain: SearchDomain,
     revision: u64,
     identity: Identity,
@@ -82,6 +85,7 @@ pub(crate) struct DocumentHit {
     highlight: Option<Range<usize>>,
     anchor: DocumentAnchor,
     provider: Option<HitProvider>,
+    provider_gate: Option<Arc<ProviderGate>>,
     _charge: Charge,
 }
 impl DocumentHit {
@@ -458,12 +462,12 @@ impl<'a> Kmp<'a> {
     }
 }
 enum ProjectionProvider {
-    Runs(SegmentedText),
-    TextRef(TextRefIndex),
+    Runs(TextOwner),
+    TextRef(ProviderRefOwner),
 }
 enum HitProvider {
-    Runs(SegmentedIndex),
-    TextRef(TextRefIndex),
+    Runs(IndexOwner),
+    TextRef(ProviderRefOwner),
 }
 struct Match {
     sequence: Sequence,
@@ -508,6 +512,7 @@ impl SearchRequest {
         Ok(Self {
             document,
             budget: budget.clone(),
+            provider_gate: None,
             domain,
             revision,
             identity: Identity::new(),
@@ -600,6 +605,9 @@ impl SearchRequest {
         )?;
         if self.domain == SearchDomain::SourceOriginal {
             return self.find_source(direction, after, work, result_charge);
+        }
+        if self.provider_gate.is_some() {
+            return self.find_scoped(direction, after, cancel, work, result_charge);
         }
         let mut sequences = Sequences::new();
         let mut best: Option<Match> = None;
@@ -694,20 +702,22 @@ impl SearchRequest {
                 domain,
                 first,
                 count,
-            } => ProjectionProvider::Runs(SegmentedText::prepare_with_profile(
+            } => ProjectionProvider::Runs(TextOwner::prepare(
                 self.document.clone(),
                 domain,
                 first as usize..first.checked_add(count).ok_or(Error::Invalid)? as usize,
                 &self.budget,
                 cancel,
                 PROFILE,
+                self.provider_gate.as_ref(),
             )?),
-            Payload::TextRef(id) => ProjectionProvider::TextRef(TextRefIndex::prepare(
+            Payload::TextRef(id) => ProjectionProvider::TextRef(ProviderRefOwner::prepare(
                 self.document.clone(),
                 id,
                 &self.budget,
                 cancel,
                 PROFILE,
+                self.provider_gate.as_ref(),
             )?),
         })
     }
@@ -755,6 +765,7 @@ impl SearchRequest {
             highlight: None,
             anchor: anchor.ok_or(Error::Invalid)?,
             provider: None,
+            provider_gate: self.provider_gate.clone(),
             _charge: charge,
         };
         if let Err(cause) = work.admit_structure(coverage_work.used()) {
@@ -765,10 +776,9 @@ impl SearchRequest {
         }
 
         let prepared = match found.provider {
-            ProjectionProvider::Runs(text) => {
-                SegmentedIndex::prepare_with_profile(text, &self.budget, cancel, PROFILE)
-                    .map(HitProvider::Runs)
-            }
+            ProjectionProvider::Runs(text) => text
+                .into_index(&self.budget, cancel, PROFILE)
+                .map(HitProvider::Runs),
             ProjectionProvider::TextRef(index) => Ok(HitProvider::TextRef(index)),
         };
         match prepared {
@@ -1043,3 +1053,232 @@ impl HeadingCursor {
 #[cfg(test)]
 #[path = "document_search_tests.rs"]
 mod tests;
+
+#[path = "document_inspect_hit.rs"]
+pub(crate) mod inspect_hit;
+
+struct BestDescriptor {
+    sequence: Sequence,
+    range: Range<usize>,
+    primary: bool,
+    anchor: DocumentAnchor,
+}
+impl DocumentHit {
+    pub(crate) fn provider_gate(&self) -> Option<&Arc<ProviderGate>> {
+        self.provider_gate.as_ref()
+    }
+}
+impl SearchRequest {
+    pub(crate) fn from_view(
+        view: &crate::document_view::DocumentView,
+        domain: SearchDomain,
+        query: &str,
+        revision: u64,
+        cancel: &AtomicBool,
+    ) -> Result<Self> {
+        let gate = view.inspect_provider_gate().ok_or(Error::Invalid)?;
+        let mut request = Self::prepare(
+            view.inspect_document().clone(),
+            view.budget(),
+            domain,
+            query,
+            revision,
+            cancel,
+        )?;
+        request.provider_gate = Some(gate.clone());
+        Ok(request)
+    }
+    fn find_scoped(
+        &self,
+        direction: Direction,
+        after: Option<&SearchCursor>,
+        cancel: &AtomicBool,
+        work: &mut DocumentWork<'_>,
+        charge: Charge,
+    ) -> Result<SearchOutcome> {
+        let _descriptor = self.budget.reserve(size_of::<BestDescriptor>())?;
+        let mut sequences = Sequences::new();
+        let mut best: Option<BestDescriptor> = None;
+        while let Some(sequence) = sequences.next(&self.document, self.domain, work)? {
+            let provider = self.provider(sequence, cancel)?;
+            let mut matcher = Kmp::new(self.query.as_slice(), self.prefix.as_slice());
+            let mut selected: Option<(Range<usize>, bool)> = None;
+            provider.visit(work, |chunk| {
+                matcher.feed(chunk.as_bytes(), |range| {
+                    let primary = Self::eligible(direction, after, sequence.ordinal, range.start);
+                    if selected.as_ref().is_none_or(|(old, old_primary)| {
+                        Self::better(
+                            direction,
+                            primary,
+                            (sequence.ordinal, range.start),
+                            *old_primary,
+                            (sequence.ordinal, old.start),
+                        )
+                    }) {
+                        selected = Some((range, primary));
+                    }
+                })
+            })?;
+            if let Some((range, primary)) = selected {
+                if primary && matches!(direction, Direction::Forward) {
+                    return self.document_hit(
+                        Match {
+                            sequence,
+                            range,
+                            primary,
+                            provider,
+                        },
+                        cancel,
+                        work,
+                        charge,
+                    );
+                }
+                if best.as_ref().is_none_or(|old| {
+                    Self::better(
+                        direction,
+                        primary,
+                        (sequence.ordinal, range.start),
+                        old.primary,
+                        (old.sequence.ordinal, old.range.start),
+                    )
+                }) {
+                    let mut anchor_work = DocumentWork::preparation(cancel);
+                    let anchor = provider.raw_anchor(range.clone(), &mut anchor_work)?;
+                    work.admit_structure(anchor_work.used())?;
+                    best = Some(BestDescriptor {
+                        sequence,
+                        range,
+                        primary,
+                        anchor,
+                    });
+                }
+            }
+            // Actual provider (including its linear permit) is dropped before next factory.
+            drop(provider);
+        }
+        work.admit_structure(0)?;
+        let Some(best) = best else {
+            return Ok(SearchOutcome::NoMatch);
+        };
+        match self.provider(best.sequence, cancel) {
+            Ok(provider) => self.document_hit(
+                Match {
+                    sequence: best.sequence,
+                    range: best.range,
+                    primary: best.primary,
+                    provider,
+                },
+                cancel,
+                work,
+                charge,
+            ),
+            Err(Error::Cancelled) => Err(Error::Cancelled),
+            Err(cause) => Ok(SearchOutcome::DocumentFoundPending(
+                DocumentHit {
+                    document: self.document.clone(),
+                    revision: self.revision,
+                    domain: self.domain,
+                    cursor: self.cursor(best.sequence.ordinal, best.range.start),
+                    sequence: best.sequence,
+                    matched: best.range,
+                    highlight: None,
+                    anchor: best.anchor,
+                    provider: None,
+                    provider_gate: self.provider_gate.clone(),
+                    _charge: charge,
+                },
+                cause,
+            )),
+        }
+    }
+}
+impl ProjectionProvider {
+    fn raw_anchor(
+        &self,
+        range: Range<usize>,
+        work: &mut DocumentWork<'_>,
+    ) -> Result<DocumentAnchor> {
+        let mut anchor = None;
+        match self {
+            Self::Runs(text) => text.visit_coverage(range, work, |c| {
+                if anchor.is_none() {
+                    anchor = Some(DocumentAnchor::Run {
+                        run: c.run,
+                        raw_byte: c.local.start,
+                        projection_part: 0,
+                    });
+                }
+                Ok(())
+            })?,
+            Self::TextRef(index) => index.visit_coverage(range, work, |c| {
+                if anchor.is_none() {
+                    anchor = Some(DocumentAnchor::TextRef {
+                        text_ref: c.text_ref,
+                        raw_byte: c.local.start,
+                    });
+                }
+                Ok(())
+            })?,
+        }
+        anchor.ok_or(Error::Invalid)
+    }
+}
+impl HeadingTarget {
+    pub(crate) fn visit_title_in_view(
+        &self,
+        view: &crate::document_view::DocumentView,
+        cancel: &AtomicBool,
+        work: &mut DocumentWork<'_>,
+        visit: impl FnMut(&str) -> Result<()>,
+    ) -> Result<()> {
+        if !Arc::ptr_eq(&self.document, view.inspect_document()) {
+            return Err(Error::Invalid);
+        }
+        let gate = view.inspect_provider_gate().ok_or(Error::Invalid)?;
+        let payload = Sequences::domain_payload(&self.document, self.domain, work)?;
+        let Payload::Runs { count, .. } = payload else {
+            return Err(Error::Invalid);
+        };
+        let text = TextOwner::prepare(
+            self.document.clone(),
+            self.domain,
+            0..count as usize,
+            view.budget(),
+            cancel,
+            PROFILE,
+            Some(gate),
+        )?;
+        text.visit_projected(0..text.len(), work, visit)
+    }
+}
+
+impl SearchRequest {
+    pub(crate) fn prepare_with_gate(
+        document: Arc<Document>,
+        budget: &ConsumerBudget,
+        domain: SearchDomain,
+        query: &str,
+        revision: u64,
+        cancel: &AtomicBool,
+        gate: &Arc<ProviderGate>,
+    ) -> Result<Self> {
+        if !gate.validates(&document, budget) {
+            return Err(Error::Invalid);
+        }
+        let mut request = Self::prepare(document, budget, domain, query, revision, cancel)?;
+        request.provider_gate = Some(gate.clone());
+        Ok(request)
+    }
+}
+impl SearchOutcome {
+    pub(crate) fn covered_body(&self) -> usize {
+        match self {
+            Self::DocumentFound(_) | Self::DocumentFoundPending(..) => size_of::<DocumentHit>(),
+            Self::SourceMatched(_) => size_of::<SourceHit>(),
+            _ => 0,
+        }
+    }
+}
+
+#[path = "document_search_shared.rs"]
+pub(crate) mod shared_query;
