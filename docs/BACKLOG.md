@@ -389,3 +389,6 @@ NuKeyR3 [revisado y aceptado](reviews/S03-unicode-clave-nu-r3.md), tres controle
 
 
 2026-10-09, reanudación posterior: el usuario revoca la pausa y autoriza continuar el producto completo sin pausas voluntarias hasta nueva indicación. HEAD353418c limpio y goal activo comprobados. Refinamiento b2 de roles/recursos del renderer con adversario independiente en curso; especificaciones b3 de búsqueda/acciones se preparan en paralelo. Ningún cierre adicional de RV ni ampliación de la aceptación del corte previo.
+
+
+2026-10-09: [contrato b3 de búsqueda y acciones R2](refinement/MARKDOWN-D2B3-SEARCH-ACTIONS.md) con [revisión adversaria sin críticas pendientes de diseño](reviews/Markdown-D2b3-plan-r2.md). SourceHit absoluto separado para marcado/targets sin Run y headings ocultos mediante expansión conjunta/remap en Flow candidato cierran B3-R01/02. Biblioteca e historial/Source ownership todavía no implementados; dependen de anchors b2 congelados. Refinamiento b2 de bloques/recursos continúa en revisión; no cierre RV-301/306, pump, gráficos, QA ni Unix.
