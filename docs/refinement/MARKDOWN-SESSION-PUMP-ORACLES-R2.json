@@ -1,0 +1,232 @@
+{
+  "status": "preoutput supplement only; no runtime/code; R1 preserved",
+  "base": "3db799c6d95513c08469295d592834b8bde79fe2",
+  "r1_sha256": "6B9FEA8DD351FFE6A8274DEE23C7E6EA7AD8D8B3EBE7B7CF5EBEF075B94759FD",
+  "cases": [
+    {
+      "id": "R01-A",
+      "phases": [
+        "Loading without Document",
+        "real parser failure then SourceReady current",
+        "Doc->Source->Doc"
+      ],
+      "expected": [
+        "one SAME ActorArena64M real",
+        "Arena Lease current/candidate metadata and nonDocument heap",
+        "Document Charge only actual Consumer",
+        "Consumer1M nested lease not plus direct Arena doublecharge",
+        "readback exact both grids",
+        "frame256K/framework2M/Work8M unchanged",
+        "Drop/releases only physical destructions"
+      ]
+    },
+    {
+      "id": "R01-B",
+      "boundaries": [
+        "shell metadata requested/actual exact-/exact+",
+        "mixed old Arena/new Document heap",
+        "old Document/new Source Arena heap",
+        "Source/Loading no Document Budget construction"
+      ],
+      "expected": [
+        "failure before output preserves current and previous physical receipts",
+        "no fake Document/Consumer",
+        "one allocation classified once",
+        "new Source model memory receipt separate"
+      ]
+    },
+    {
+      "id": "R02-A",
+      "source_fixture": "session.md",
+      "expected": [
+        "same Box address and SafeTextModel identity after move to wrapper",
+        "same original Arc/context/input/generation/request/hash",
+        "all wrapper/Arc/handle metadata precharged Arena",
+        "adopt failure returns SAME Box/model/scope/charges",
+        "source_shared/kernel adapter usable and compiled independently before pump"
+      ]
+    },
+    {
+      "id": "R02-B",
+      "phases": [
+        "Source current real Page/Resize worker blocked after real progress",
+        "q",
+        "supersede",
+        "Pending cleanup2s",
+        "physical release and retry"
+      ],
+      "expected": [
+        "SourceViewportInput owned Send+Sync static with real SourceLease",
+        "no from_shared or hash rerun",
+        "no borrow UI/unsafe Send",
+        "current holds same model throughout",
+        "pending lease/output/lastowner retains model+all charges",
+        "last Drop releases actual allocation only"
+      ]
+    },
+    {
+      "id": "R02-PROVIDER",
+      "expected": [
+        "layoutA+hitB2 distinct provider keys",
+        "inspection/paging aliases B does not create3",
+        "third C fails BEFORE index allocation while A leased",
+        "cache retirement only unleased with current glyphs/anchor/hit preserved",
+        "no-query requires actual provider/proof",
+        "Doc charge+checkpoint4096 complete; no D1global edits",
+        "common library no dependency on D2c pump"
+      ]
+    },
+    {
+      "id": "R03-C06",
+      "fixture": "source-domains.md",
+      "vt_keys": [
+        "d",
+        "Down",
+        "Down",
+        "Down",
+        "Down",
+        "Enter",
+        "/",
+        "s",
+        "e",
+        "c",
+        "r",
+        "e",
+        "t",
+        "Enter",
+        "Backspace",
+        "Tab",
+        "Tab",
+        "q"
+      ],
+      "domain_initial": "MainBody",
+      "domain_confirmed": "SourceOriginal",
+      "expected": [
+        "selector actually visible5 options",
+        "one QueryRevision increment without view Binding change",
+        "old continuation invalid",
+        "SourceHit absolute[40, 46] original",
+        "complete SourceShared same model/original and1return"
+      ]
+    },
+    {
+      "id": "R03-EDITOR",
+      "fixture": "session.md",
+      "vt_keys": [
+        "/",
+        "A",
+        "Ctrl-D",
+        "Down",
+        "Esc",
+        "Ctrl-D",
+        "Down",
+        "Enter",
+        "Enter"
+      ],
+      "expected": [
+        "Esc selector restores draft A/no revision",
+        "confirm CalloutTitle retains A draft increments queryrevision1",
+        "Enter query requests only newdomain",
+        "oldReady rejected",
+        "current/hit/history unchanged until fully validated result"
+      ]
+    },
+    {
+      "id": "R03-SAME-CANCEL",
+      "fixture": "session.md",
+      "vt_keys": [
+        "d",
+        "Enter",
+        "d",
+        "Down",
+        "Esc"
+      ],
+      "expected": [
+        "same domain no revision",
+        "Esc cancel no revision",
+        "no history/pane/hit/cursor changes",
+        "later n/N continues same validquerydomain only"
+      ]
+    },
+    {
+      "id": "R03-RESOURCE",
+      "fixture": "session.md",
+      "vt_keys": [
+        "d",
+        "Down",
+        "Down",
+        "Enter",
+        "/",
+        "A",
+        "L",
+        "T",
+        "Enter"
+      ],
+      "expected": [
+        "ResourceAlt chosen by keyboard",
+        "MainBody ALT absent as resource lane",
+        "hit owner real Resource/domain",
+        "cancel/quota/stale keeps oldreading",
+        "no target IO"
+      ]
+    }
+  ],
+  "limits_unchanged": {
+    "Window": 131072,
+    "Frame": 262144,
+    "Consumer": 1048576,
+    "Framework": 2097152,
+    "DocumentWork": 8388608,
+    "checkpoints": 4096,
+    "Source_original": 134217728,
+    "Source_visible": 268435456,
+    "Source_lines": 1000000,
+    "query": 4096,
+    "history_transitions": 128,
+    "cleanup_seconds": 2,
+    "controller_seconds": 10
+  },
+  "fixtures_unchanged": [
+    {
+      "file": "empty.md",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "file": "loading.md",
+      "bytes": 8149,
+      "sha256": "4B7069F951EB0975214026CF14A17BD83B9FB82212973915FA942E8348C40862"
+    },
+    {
+      "file": "nested.md",
+      "bytes": 86,
+      "sha256": "9C242C9E8326A7F4479E03C333A383DF3CCB117AFDAA40501A30E3AC46B5D80C"
+    },
+    {
+      "file": "reference.md",
+      "bytes": 18016,
+      "sha256": "635865464DC3A53DD3F9C5D423231FF704690AFA40E15CAA085F7C4C5D1C0C60"
+    },
+    {
+      "file": "role-ref-resume.md",
+      "bytes": 125,
+      "sha256": "EC105F5290EBD89ED1ACA20DD95196C3BE6F62F35DE2BC7E1FBE139F7CB409CD"
+    },
+    {
+      "file": "session.md",
+      "bytes": 238,
+      "sha256": "070EAB54FC066BC91455CEA54385132843E93D19E6A2EE1B927C4668283136C6"
+    },
+    {
+      "file": "source-domains.md",
+      "bytes": 73,
+      "sha256": "7DC8F8418356F1E3D0CE20410F3293195EF2D1649AF3E5343AB5509ACAF26F24"
+    },
+    {
+      "file": "table-resize.md",
+      "bytes": 135,
+      "sha256": "9A6B0E5E828A0A8D40A58CCFE074BF1871427A20AE2F58D920BA80B5935289C3"
+    }
+  ],
+  "native_qa": false
+}

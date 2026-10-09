@@ -1,0 +1,382 @@
+{
+  "status": "before D2c implementation, build or runtime; not golden from outputs",
+  "base": "ac4f44eac478d3c5be15bb54dbae3410a950ed77",
+  "b2_freeze_manifest_sha256": "E55ED3D66A52791ADF3A9DDFE2DEBB4384F135FFAAB07B2ADDD4CF9C5DCCEBFD",
+  "fixtures": [
+    {
+      "file": "empty.md",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "file": "loading.md",
+      "bytes": 8149,
+      "sha256": "4B7069F951EB0975214026CF14A17BD83B9FB82212973915FA942E8348C40862"
+    },
+    {
+      "file": "nested.md",
+      "bytes": 86,
+      "sha256": "9C242C9E8326A7F4479E03C333A383DF3CCB117AFDAA40501A30E3AC46B5D80C"
+    },
+    {
+      "file": "reference.md",
+      "bytes": 18016,
+      "sha256": "635865464DC3A53DD3F9C5D423231FF704690AFA40E15CAA085F7C4C5D1C0C60"
+    },
+    {
+      "file": "role-ref-resume.md",
+      "bytes": 125,
+      "sha256": "EC105F5290EBD89ED1ACA20DD95196C3BE6F62F35DE2BC7E1FBE139F7CB409CD"
+    },
+    {
+      "file": "session.md",
+      "bytes": 238,
+      "sha256": "070EAB54FC066BC91455CEA54385132843E93D19E6A2EE1B927C4668283136C6"
+    },
+    {
+      "file": "source-domains.md",
+      "bytes": 73,
+      "sha256": "7DC8F8418356F1E3D0CE20410F3293195EF2D1649AF3E5343AB5509ACAF26F24"
+    },
+    {
+      "file": "table-resize.md",
+      "bytes": 135,
+      "sha256": "9A6B0E5E828A0A8D40A58CCFE074BF1871427A20AE2F58D920BA80B5935289C3"
+    }
+  ],
+  "cases": [
+    {
+      "id": "C01-READY",
+      "fixture": "session.md",
+      "terminal": [
+        80,
+        24
+      ],
+      "expect": [
+        "Loading before hash/parser/view construction",
+        "# BEGIN",
+        "A&B",
+        "BEFORE before INNER before AFTER",
+        "Image pending",
+        "unused footnote reachable",
+        "TAIL via End"
+      ],
+      "exit": 0,
+      "keys": [
+        "wait_ready",
+        "End",
+        "q"
+      ]
+    },
+    {
+      "id": "C02-RESIZE",
+      "fixture": "session.md",
+      "terminal": [
+        120,
+        40
+      ],
+      "keys": [
+        "PageDown",
+        "resize18x12",
+        "resize120x40",
+        "End",
+        "q"
+      ],
+      "expect": [
+        "all table3 columns and row2 accessible narrow vertical",
+        "same logical position across resize",
+        "TAIL",
+        "no half CJK cluster",
+        "history unchanged by viewport/resize"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C03-SEARCH-FOLD",
+      "fixture": "nested.md",
+      "keys": [
+        "/HIDDENHIT",
+        "Enter",
+        "n",
+        "Backspace",
+        "Ctrl-Y",
+        "q"
+      ],
+      "expect": [
+        "both OUT and IN expand atomically",
+        "one new Flow identity",
+        "one return transition",
+        "Back/Forward same exact hit/anchor/folds",
+        "no external IO"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C04-HEADINGS",
+      "fixture": "nested.md",
+      "keys": [
+        "i",
+        "select Destino",
+        "Enter",
+        "Backspace",
+        "q"
+      ],
+      "expect": [
+        "Destino listed before fold expansion",
+        "selection expands both ancestors together",
+        "one history transition",
+        "duplicate titles distinguished by actual BlockID"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C05-INSPECT",
+      "fixture": "session.md",
+      "keys": [
+        "/á",
+        "Enter",
+        "m",
+        "Enter chooser",
+        "select option2",
+        "confirm",
+        "Backspace",
+        "q"
+      ],
+      "expect": [
+        "one D1 glyph with2 real Links",
+        "no implicit first choice",
+        "no URL/file open",
+        "Source action Disjoint components",
+        "inspector close restores hit"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C06-SOURCE",
+      "fixture": "source-domains.md",
+      "keys": [
+        "set searchdomain SourceOriginal",
+        "/secret",
+        "Enter",
+        "Backspace",
+        "Tab",
+        "Tab",
+        "q"
+      ],
+      "expect": [
+        "absolute SourceHit in URL without forged Run",
+        "complete SourceReady same original Arc/hash",
+        "selection literal secret",
+        "one return",
+        "Tab original identity/positions retained"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C07-REF",
+      "fixture": "reference.md",
+      "keys": [
+        "PageDown",
+        "wait Reference",
+        "m",
+        "End",
+        "q"
+      ],
+      "expect": [
+        "WholeReference bounded and safe",
+        "no rendered prefix claimed complete",
+        "source preserved",
+        "TAIL recovers Text without reparse"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C08-METADATA-TABLE-HISTORY",
+      "fixtures": [
+        "table-resize.md",
+        "role-ref-resume.md"
+      ],
+      "keys": [
+        "select real middle anchor",
+        "returnable jump",
+        "resize",
+        "Back",
+        "Forward",
+        "q"
+      ],
+      "expect": [
+        "same RefOwner/field/TextRef/local/projectionpart",
+        "table all At/Done local positions survive8->20->vertical",
+        "no Done restart",
+        "TAIL"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C09-LOADING-Q",
+      "fixture": "loading.md",
+      "phases": [
+        "Hash",
+        "Controller",
+        "View",
+        "Search",
+        "Inspector",
+        "Source"
+      ],
+      "keys": [
+        "wait actual phase witness",
+        "q"
+      ],
+      "expect": [
+        "exit intent before barrier release",
+        "restore before reap wait",
+        "no late commit/new factory/fallback",
+        "owned pending retained until physical join"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C10-LOADING-CTRL-C",
+      "fixture": "loading.md",
+      "phases": [
+        "Hash",
+        "Controller",
+        "View",
+        "Source"
+      ],
+      "keys": [
+        "wait actual phase witness",
+        "byte03"
+      ],
+      "expect": [
+        "cancel even queue full",
+        "restore input/output modes/cursor/alternate",
+        "no lateReady publication",
+        "next invocation after physical reap works"
+      ],
+      "exit": 130
+    },
+    {
+      "id": "C11-LIMIT-CANCEL",
+      "fixture": "session.md",
+      "expect": [
+        "SourceFailed preserves current Document/history/anchor",
+        "initial DocFailed+SourceFailed gives1 with no fake complete Source",
+        "old/new receipts charged to physical drop",
+        "stale/cancel/ready-before-join cannot commit"
+      ],
+      "controlled_real_faults": true
+    },
+    {
+      "id": "C12-EMPTY-TINY",
+      "fixture": "empty.md",
+      "terminals": [
+        [
+          80,
+          24
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "expect": [
+        "q0/CtrlC130 responsive",
+        "identity and anchor retained",
+        "zero geometry does not native draw",
+        "no forced min geometry"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C13-KEY-EDITOR",
+      "fixture": "session.md",
+      "keys": [
+        "/",
+        "q",
+        "Esc",
+        "?",
+        "Esc",
+        "q"
+      ],
+      "expect": [
+        "q literal in editor",
+        "Esc cancels editor/closes help then normal q exits",
+        "overflow reports loss",
+        "queued exit candidate checked under actual editor state"
+      ],
+      "exit": 0
+    },
+    {
+      "id": "C14-HISTORY-CAP",
+      "fixture": "session.md",
+      "expect": [
+        "400 viewport moves add0 transitions",
+        "128 confirmed returnable transitions admitted",
+        "129 rejected without truncating oldest or future",
+        "Back then new append replaces only future",
+        "backend failure partial poisons no false visible rollback"
+      ]
+    },
+    {
+      "id": "C15-CONSOLE-RESTORE",
+      "fixture": "session.md",
+      "expect": [
+        "native input/output modes before==after",
+        "cursor visible before==after",
+        "alternate screen returned",
+        "guard restore witness before cleanup wait",
+        "owned following session succeeds",
+        "readerror/preparer panic/parser failure release all handles or retain typed Pending"
+      ]
+    },
+    {
+      "id": "C16-BOUNDARIES",
+      "fixture": "session.md",
+      "terminals": [
+        [
+          80,
+          24
+        ],
+        [
+          120,
+          40
+        ]
+      ],
+      "expect": [
+        "whole native frame incl chrome current+candidate Frame<=262144",
+        "Consumer<=1048576 checkpoint<=4096 Framework<=2097152",
+        "Work layout+chrome+preflight+copy+diff+readback+reset+formatter<=8388608",
+        "exact-/exact+ rejected/admitted with frozen predicted receipt before output",
+        "same-area redraw no hidden clear",
+        "no second Ratatui Buffer/Terminal"
+      ]
+    }
+  ],
+  "source_ranges": {
+    "secret": [
+      40,
+      46
+    ]
+  },
+  "limits": {
+    "Window": 131072,
+    "Frame": 262144,
+    "Consumer": 1048576,
+    "Framework": 2097152,
+    "DocumentWork": 8388608,
+    "checkpoints": 4096,
+    "Source_original": 134217728,
+    "Source_visible": 268435456,
+    "Source_lines": 1000000,
+    "query": 4096,
+    "history_transitions": 128,
+    "cleanup_seconds": 2,
+    "controller_seconds": 10
+  },
+  "functional_evidence": "real pump+KeyboardReader+Guard+Crossterm+owners+real parser/provider via owned ConPTY; no mocks"
+}
