@@ -1,0 +1,27 @@
+# Revisión independiente focal de diseño inspector R2
+
+2026-10-09. markdown_actions_adversary. Alcance: inspector completo desde anchors reales sin query, entrada Hit, asociaciones/provenance, paginación/chooser y SourceAction descriptor. No código/harness inspector, SourceReady, historia, pump, renderer/QA ni cierre RV. No cambios canónicos. Evidencias previas de history/core preservadas.
+
+Candidato privado PROPOSAL-INSPECTOR-R2.md SHA256 DF609393155BDBB477E71FDB4B363F8BACEB56B26C8DEBF7FF181405004EAD74; R1 SHA256 2B8A07D534D31F8813CDDD80773A674552ADAF5F9C79561DD17609D57BECE9C5 y ROOT-REVIEW-INSPECTOR-R1.md SHA256 DDF612E0751860958E9D0AD5A0FA8CF9204210FBD479ED421748A2C976CDB893 leídos y preservados. Base código declarada12d28a48df7701bea5cf2d1e60b66c9674d2ef41; historyf849c36 es documentación, según coordinador. No alego gitstatus propio en este corte.
+
+Canon leído: MARKDOWN-D2B3-SEARCH-ACTIONS.md SHA256 5DF019CBB83097C431F50FDCD353448477ABB24BA71F0A120AA9FBC338B312CB, §2/§4; b2 MARKDOWN-D2B2-PRESENTATION.md SHA256 4D379672543404918C1793632180013B4B892286F36DF616BAADB605B80F42CA. Lecturas focales de DocumentHit/HitProvider, Charge/ConsumerBudget/ChargedVec, SharedFlow y D1 Coverage/RefCoverage/validator; requisitos NF03/NF05 y selección/enlaces/interactiva.
+
+## Preoutputs independientes
+
+ORACULOS-INSPECTOR.md SHA256 70C7DBCCC8687C6B33756A036597C7D422192C70240CDF9BA2249F8521D245EF; FIXTURES.json SHA256 EDA306CDF2F47F8A79B3033B5A37E6BDE794D5EBA0FAE6F91AF912255C6DF27C. Doce fixtures pequeñas selladas antes de lectura de candidato/outputs. Incluyen multirun, links distintos de target igual, páginas64+1, últimos decoded tras64Exact, byteigual decoded/Source, controles, ResourceTitle compartido con owners distintos, BlockRole/metadata, NoLiteral y stale/UTF8. Se corrigió un cercado Markdown mal escapado en fixture privada antes de leer R2.
+
+ORACULOS-SCOPE-CONTROL-R2.md SHA256 6DBA0C97B7053ED21FC72F32663365110EC6F82858E1BA06A1D6065EA48D65D5 fija IN13/IN14 tras contraste diseño/API y antes de cualquier código/output inspector. Ninguna prueba de runtime ejecutada ni PASS atribuido.
+
+## Disposición concreta
+
+**I-R01 cerrado en diseño.** DocumentHit actual contiene HitProvider por valor, no Arc. R2 lo mueve completo con sus cargos a HitAllocation, reserva metadata/counters/handles reales antes del move y retorna el mismo hit cuando falla preparación. Charge::budget es préstamo de su propietario real; try_share no admite otro presupuesto. ProviderRef sólo vive bajo el lease retenido. Page/cursor mantienen owners y cargos tras Drop del handle original; current layout+hit+inspection metadata+candidate siguen cobrados simultáneamente. Compartir añade handles, no índice adicional. No-query depende honestamente del lease sellado del slot seleccionado en el freeze b2; sin él no hay aceptación de esa entrada por un sustituto inventado.
+
+**I-R02 cerrado en diseño.** Acción por componente y WholeSummary son estados distintos. Únicamente EndOfCoverage real acredita agotamiento; page<64 o prefijo64 no lo sustituyen. Component65 decoded/disjunto cambia la clasificación: nunca WholeExact del prefijo. Summary compacto no conserva vector total. Page/summary cursor se acreditan y sustituyen con old+new cobrados; cancel/quota/stale mantiene lo aceptado y retry explícito. Opciones mantienen LinkID aun con strings iguales; no primer link automático ni ejecución de target.
+
+**I-A01 cerrado por delta explícito aprobado por coordinador.** R2 llama unidad Unicode a su scope pero aceptar DocumentHit listo no basta: highlight puede contener varios glyphs, y D1 fusiona controles consecutivos del mismo Run. La regla aprobada para integrar junto a R2 es: desde Hit inspeccionar la UNIDAD D1 que contiene el anchor lógico/iniciohighlight, resuelta con provider real; el highlight completo sigue siendo propiedad semántica del hit/query y se conserva para Back. No se añade SelectionRange. IN13: source/query `ab`, hit0..2, inspector inicial sólo unidad `a`0..1. IN14: raw ESC ESC, query ␛␛/highlight0..6; coverage completa podría ser ControlProjection0..2, pero inspector inicial selecciona scalar0..1, segundo anchor1..2. Una acción etiquetada scalar único exige exactamente un codepoint raw UTF8 acreditado; merged0..2 no cumple. R2 privada queda intacta: esta precisión no se atribuye a sus bytes originales.
+
+El resto del corte conserva glyph multirun/link union, RefOwner ResourceID/field frente a RefID compartido, BlockRole KIND/INFO/LABEL, Resource lane y Table selected-cell/anchor/TableResume real. NoLiteral admite Enclosing real separado; decoded permanece Enclosing incluso byteigual. SourceAction sólo descriptor sellado a Arc/hash/generation/request/inspection, rangos UTF8/límites comprobados y samples D1 seguros. D1 CoverageCursor/RefCoverageCursor es delta aditivo declarado: posición/proyección/pending merge y EndProof cerrados, Work/record/raw cobrados, sin callback replay/Stop opaco/lista total. Su implementación y lifetimes siguen por verificar.
+
+## Dictamen y frontera
+
+**SIN_CRITICAS_PENDIENTES de diseño focal R2 + delta I-A01 aprobado por coordinador.** La regla I-A01 debe quedar explícita en la integración del contrato y en los oráculos del candidato. No aprueba código inexistente. Aceptación posterior exige freeze exacto de implementación, cargos/capacidades/Drop/rollback reales, cursores D1 y APIs b2 efectivas, especialmente selección sin query/Table/Ref/Role/Resource. No equivaler dependencia pendiente a funcionalidad implementada ni al cumplimiento completo del inspector/b3.

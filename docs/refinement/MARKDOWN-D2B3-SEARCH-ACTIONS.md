@@ -22,6 +22,8 @@ Encontrar texto bajo folds no necesita expandir todo Document para buscar. La se
 
 ## 2. Inspector y acciones
 
+Refinamiento vigente: [inspector R2 revisado](MARKDOWN-INSPECTOR.md). Desde Hit se inspecciona la unidad D1 del anchor; el highlight íntegro no se redefine. WholeSourceAction exige agotamiento real de cobertura, separado de las acciones por componente.
+
 Entrada del inspector: anchor acreditado del snapshot vigente; celda decorativa llega como RoleAnchor, recurso como ResourceAnchor y texto como run/raw/projection_part. No construir una procedencia a partir del texto que terminó en el buffer de terminal.
 
 Inspection retiene Document/binding y cursores cobrados; páginas <=64 asociaciones/opciones, current+candidate cobrados antes reemplazo. Muestras mediante D1/admisión; targets/title/raw token se proyectan seguros. No copiar payload íntegro ni materializar todos los Origin/Link en Vec. Mostrar relación, rangos/componentes y metadatos reales; SourceOrigin sólo LocalFile cuando lo era de entrada. Un Role sin literal ofrece NoLiteral; puede ofrecer aparte su nodo Enclosing acreditado, etiquetado como tal.
