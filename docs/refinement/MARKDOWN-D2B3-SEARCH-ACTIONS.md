@@ -103,4 +103,4 @@ Resolución de revisión: B3-R01 se cierra con SourceHit absoluto discriminado, 
 
 Bloqueos concretos antes código b3: congelar getters de selection/role/resource de b2, implementar el timeline de authority única de history ya concretado, cierre consuming/retained owner de PreparedSourceModel, fijar oráculo overlap/cursor y campos de binding b3. Son decisiones técnicas dentro del encargo, no preguntas de producto ni excusa para fraccionar en burocracia microscópica.
 
-Copia canónica del contrato privado SHA2560D1AC65E7C2C6B3CD1551EC1BCE94B92371824D2DF720600C08966782D6A3448: sólo se actualiza el estado posterior de revisión y se normaliza el final del archivo. El original privado y R1 permanecen preservados; no es aceptación de código.
+Copia canónica inicial del contrato privado SHA2560D1AC65E7C2C6B3CD1551EC1BCE94B92371824D2DF720600C08966782D6A3448: al incorporarla sólo se actualizó el estado de revisión y el final del archivo. Posteriormente se concretó §3 con el delta revisado de historial atrás/adelante y se actualizaron sus referencias en §7. El original privado y R1 permanecen preservados; estos cambios no son aceptación de código.
