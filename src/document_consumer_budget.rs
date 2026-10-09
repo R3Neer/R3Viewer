@@ -97,6 +97,14 @@ pub(crate) struct Charge {
     bytes: usize,
     points: usize,
 }
+impl Charge {
+    pub(crate) fn bytes(&self) -> usize {
+        self.bytes
+    }
+    pub(crate) fn budget(&self) -> &ConsumerBudget {
+        &self.owner
+    }
+}
 impl Drop for Charge {
     fn drop(&mut self) {
         self.owner.0.used.fetch_sub(self.bytes, Ordering::AcqRel);

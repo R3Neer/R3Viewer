@@ -74,6 +74,8 @@ pub mod document_navigation;
 
 mod preparation_owner;
 mod source_preparation;
+mod source_shared;
+mod source_view_preparation;
 
 mod document_code;
 mod document_code_cache;

@@ -250,6 +250,9 @@ impl Document {
     pub fn attributes(&self) -> &[Attribute] {
         &self.inner.attributes
     }
+    pub(crate) fn actor_arena(&self) -> &ActorArena {
+        &self.inner.arena
+    }
     pub fn arena_used(&self) -> usize {
         self.inner.arena.used()
     }

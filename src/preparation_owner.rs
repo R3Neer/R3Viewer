@@ -60,6 +60,24 @@ trait PendingTask: Send {
     fn finished(&self) -> bool;
     fn reap(self: Box<Self>) -> ReapReceipt;
 }
+// Named capture fixes the exact allocation layout charged by common Source factories.
+struct WorkerCapture<I, O, F> {
+    input: Arc<I>,
+    stop: Arc<AtomicBool>,
+    binding: Binding,
+    sender: SyncSender<Completion<O>>,
+    run: F,
+}
+impl<
+    I: Send + Sync + 'static,
+    O: Send + 'static,
+    F: FnOnce(&I, &AtomicBool) -> Outcome<O> + Send + 'static,
+> WorkerCapture<I, O, F>
+{
+    fn execute(self) -> FinalReceipt<O> {
+        execute(self.input, self.stop, self.binding, self.sender, self.run)
+    }
+}
 struct Parts<I, O> {
     input: Arc<I>,
     binding: Binding,
@@ -146,6 +164,50 @@ impl<I: Send + Sync + 'static, O: Send + 'static> OwnedPreparation<I, O> {
     pub(crate) fn known_parts_bytes() -> usize {
         std::mem::size_of::<Parts<I, O>>()
     }
+    pub(crate) fn known_owner_value_bytes() -> usize {
+        std::mem::size_of::<Self>()
+    }
+    pub(crate) fn known_capture_layout<C>() -> usize {
+        std::mem::size_of::<WorkerCapture<I, O, C>>()
+    }
+    pub(crate) fn known_final_receipt_bytes() -> usize {
+        std::mem::size_of::<FinalReceipt<O>>()
+    }
+    pub(crate) fn known_worker_capture_bytes<
+        F: FnOnce(&I, &AtomicBool) -> Outcome<O> + Send + 'static,
+    >(
+        _: &F,
+    ) -> usize {
+        std::mem::size_of::<WorkerCapture<I, O, F>>()
+    }
+    pub(crate) fn known_stop_arc_bytes() -> Option<usize> {
+        let align = std::mem::align_of::<usize>();
+        Some(
+            std::mem::size_of::<AtomicBool>()
+                .checked_add(2 * std::mem::size_of::<usize>())?
+                .checked_add(align - 1)?
+                / align
+                * align,
+        )
+    }
+    pub(crate) fn known_job_bytes<F: FnOnce(&I, &AtomicBool) -> Outcome<O> + Send + 'static>(
+        run: &F,
+    ) -> Option<usize> {
+        // Known Rust layouts only: Parts Box, one channel completion, final receipt,
+        // named capture and AtomicBool Arc. Allocator/channel/thread internals remain unknown.
+        Self::known_parts_bytes()
+            .checked_add(Self::known_completion_bytes())?
+            .checked_add(Self::known_final_receipt_bytes())?
+            .checked_add(Self::known_worker_capture_bytes(run))?
+            .checked_add(Self::known_stop_arc_bytes()?)
+    }
+    pub(crate) fn known_spawn_bytes<F: FnOnce(&I, &AtomicBool) -> Outcome<O> + Send + 'static>(
+        run: &F,
+    ) -> Option<usize> {
+        std::mem::size_of::<I>()
+            .checked_add(2 * std::mem::size_of::<usize>())?
+            .checked_add(Self::known_job_bytes(run)?)
+    }
     pub(crate) fn known_completion_bytes() -> usize {
         std::mem::size_of::<Completion<O>>()
     }
@@ -209,7 +271,14 @@ impl<I: Send + Sync + 'static, O: Send + 'static> OwnedPreparation<I, O> {
             closure_bytes: 0,
             _permit: permit,
         });
-        let worker = move || execute(worker_input, worker_stop, binding, sender, run);
+        let capture = WorkerCapture {
+            input: worker_input,
+            stop: worker_stop,
+            binding,
+            sender,
+            run,
+        };
+        let worker = move || capture.execute();
         parts.closure_bytes = std::mem::size_of_val(&worker);
         let handle = spawn(Box::new(worker)).map_err(|_| Cause::Spawn)?;
         parts.handle = Some(handle);
@@ -369,13 +438,34 @@ pub(crate) enum PreparedCompletion<DO> {
     ),
     Document(Outcome<DO>, OwnerReceipt),
 }
+struct AuthorityStorage<DI: Send + Sync + 'static, DO: Send + 'static> {
+    phase: AuthorityState<DI, DO>,
+    metadata: Option<crate::document_budget::Lease>,
+}
+impl<DI: Send + Sync + 'static, DO: Send + 'static> PendingTask for AuthorityStorage<DI, DO> {
+    fn finished(&self) -> bool {
+        self.phase.finished()
+    }
+    fn reap(self: Box<Self>) -> ReapReceipt {
+        let Self { phase, metadata } = *self;
+        let receipt = match phase {
+            AuthorityState::Running(o) | AuthorityState::Pending(o) => o.reap(),
+            AuthorityState::Idle => unreachable!(),
+        };
+        drop(metadata);
+        receipt
+    }
+}
 pub(crate) struct PreparationAuthority<DI: Send + Sync + 'static, DO: Send + 'static> {
-    state: Option<Box<AuthorityState<DI, DO>>>,
+    state: Option<Box<AuthorityStorage<DI, DO>>>,
 }
 impl<DI: Send + Sync + 'static, DO: Send + 'static> Default for PreparationAuthority<DI, DO> {
     fn default() -> Self {
         Self {
-            state: Some(Box::new(AuthorityState::Idle)),
+            state: Some(Box::new(AuthorityStorage {
+                phase: AuthorityState::Idle,
+                metadata: None,
+            })),
         }
     }
 }
@@ -422,15 +512,15 @@ impl<DI: Send + Sync + 'static, DO: Send + 'static> PendingTask for AuthoritySta
 impl<DI: Send + Sync + 'static, DO: Send + 'static> Drop for PreparationAuthority<DI, DO> {
     fn drop(&mut self) {
         if let Some(mut state) = self.state.take() {
-            match state.as_mut() {
+            match &mut state.phase {
                 AuthorityState::Idle => return,
                 AuthorityState::Running(o) | AuthorityState::Pending(o) => o.stop(),
             }
             if state.finished() {
                 state.reap();
             } else {
-                let old = std::mem::replace(state.as_mut(), AuthorityState::Idle);
-                *state = match old {
+                let old = std::mem::replace(&mut state.phase, AuthorityState::Idle);
+                state.phase = match old {
                     AuthorityState::Running(o) | AuthorityState::Pending(o) => {
                         AuthorityState::Pending(o)
                     }
@@ -444,13 +534,42 @@ impl<DI: Send + Sync + 'static, DO: Send + 'static> Drop for PreparationAuthorit
     }
 }
 impl<DI: Send + Sync + 'static, DO: Send + 'static> PreparationAuthority<DI, DO> {
+    pub(crate) fn known_authority_bytes() -> Option<usize> {
+        std::mem::size_of::<AuthorityStorage<DI, DO>>().checked_add(std::mem::size_of::<Self>())
+    }
+    /// The single existing Authority Box is charged once and travels intact into Pending.
+    pub(crate) fn in_arena(arena: &crate::document_budget::ActorArena) -> Result<Self, Cause> {
+        let bytes = std::mem::size_of::<AuthorityStorage<DI, DO>>()
+            .checked_add(std::mem::size_of::<Self>())
+            .ok_or(Cause::Limit("authority metadata"))?;
+        let metadata = arena
+            .reserve(bytes)
+            .map_err(|_| Cause::Limit("authority Arena"))?;
+        Ok(Self {
+            state: Some(Box::new(AuthorityStorage {
+                phase: AuthorityState::Idle,
+                metadata: Some(metadata),
+            })),
+        })
+    }
+    pub(crate) fn actor_arena(&self) -> Option<&crate::document_budget::ActorArena> {
+        self.state
+            .as_ref()?
+            .metadata
+            .as_ref()
+            .map(crate::document_budget::Lease::arena)
+    }
     fn authority_receipt(mut r: OwnerReceipt) -> OwnerReceipt {
-        r.authority_box_bytes = std::mem::size_of::<AuthorityState<DI, DO>>();
+        r.authority_box_bytes = std::mem::size_of::<AuthorityStorage<DI, DO>>();
         r.authority_value_bytes = std::mem::size_of::<Self>();
         r
     }
     fn idle_state(&mut self) -> Result<&mut AuthorityState<DI, DO>, Cause> {
-        let s = self.state.as_deref_mut().ok_or(Cause::Missing)?;
+        let s = self
+            .state
+            .as_deref_mut()
+            .map(|s| &mut s.phase)
+            .ok_or(Cause::Missing)?;
         match s {
             AuthorityState::Idle => Ok(s),
             AuthorityState::Running(_) => Err(Cause::Busy),
@@ -477,7 +596,12 @@ impl<DI: Send + Sync + 'static, DO: Send + 'static> PreparationAuthority<DI, DO>
         Ok(())
     }
     pub(crate) fn poll(&mut self) -> Result<bool, Cause> {
-        match self.state.as_deref_mut().ok_or(Cause::Missing)? {
+        match self
+            .state
+            .as_deref_mut()
+            .map(|s| &mut s.phase)
+            .ok_or(Cause::Missing)?
+        {
             AuthorityState::Running(o) | AuthorityState::Pending(o) => o.poll(),
             AuthorityState::Idle => Err(Cause::Missing),
         }
@@ -487,7 +611,11 @@ impl<DI: Send + Sync + 'static, DO: Send + 'static> PreparationAuthority<DI, DO>
         expected: Binding,
         exit_intent: bool,
     ) -> Result<Option<PreparedCompletion<DO>>, Cause> {
-        let state = self.state.as_deref_mut().ok_or(Cause::Missing)?;
+        let state = self
+            .state
+            .as_deref_mut()
+            .map(|s| &mut s.phase)
+            .ok_or(Cause::Missing)?;
         let owner = match state {
             AuthorityState::Running(o) => o,
             AuthorityState::Pending(_) => return Err(Cause::Pending),
@@ -509,7 +637,7 @@ impl<DI: Send + Sync + 'static, DO: Send + 'static> PreparationAuthority<DI, DO>
     }
     pub(crate) fn stop(&mut self) {
         if let Some(AuthorityState::Running(o) | AuthorityState::Pending(o)) =
-            self.state.as_deref_mut()
+            self.state.as_deref_mut().map(|s| &mut s.phase)
         {
             o.stop();
         }
@@ -526,7 +654,11 @@ impl<DI: Send + Sync + 'static, DO: Send + 'static> PreparationAuthority<DI, DO>
         while !self.is_finished() && Instant::now() < deadline {
             thread::sleep(Duration::from_millis(1));
         }
-        let state = self.state.as_deref_mut().ok_or(Cause::Missing)?;
+        let state = self
+            .state
+            .as_deref_mut()
+            .map(|s| &mut s.phase)
+            .ok_or(Cause::Missing)?;
         let old = std::mem::replace(state, AuthorityState::Idle);
         match old {
             AuthorityState::Running(o) | AuthorityState::Pending(o) => {
@@ -541,7 +673,11 @@ impl<DI: Send + Sync + 'static, DO: Send + 'static> PreparationAuthority<DI, DO>
         }
     }
     pub(crate) fn retry_cleanup(&mut self) -> Result<Option<ReapReceipt>, Cause> {
-        let state = self.state.as_deref_mut().ok_or(Cause::Missing)?;
+        let state = self
+            .state
+            .as_deref_mut()
+            .map(|s| &mut s.phase)
+            .ok_or(Cause::Missing)?;
         match state {
             AuthorityState::Pending(o) if o.finished() => {
                 let old = std::mem::replace(state, AuthorityState::Idle);

@@ -111,8 +111,12 @@ pub(crate) struct DocumentPreparationInput {
     old_window_bytes: usize,
     _metadata: Charge,
     _source_metadata: Arc<Charge>,
+    funding: KernelFunding,
 }
 impl DocumentPreparationInput {
+    pub(crate) fn metadata_bytes(&self) -> usize {
+        self._metadata.bytes()
+    }
     pub(crate) fn key(&self) -> DocumentKey {
         self.key
     }
@@ -170,27 +174,119 @@ fn revision() -> Result<u64, Cause> {
         .try_update(Ordering::AcqRel, Ordering::Acquire, |n| n.checked_add(1))
         .map_err(|_| Cause::Limit("Document revision"))
 }
-fn input_charge(budget: &ConsumerBudget, has_flow: bool) -> Result<Charge, Error> {
-    // FlowHandle owns its separate value charge; the input descriptor excludes that value.
+struct DocumentRunner {
+    context: Arc<DocumentPreparationInput>,
+}
+impl DocumentRunner {
+    fn execute(self, stop: &AtomicBool) -> Outcome<PreparedState> {
+        run_prepare(self.context, stop)
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum KernelFunding {
+    Legacy,
+    Actor,
+    Shared,
+}
+fn input_metadata_bytes(has_flow: bool, funding: KernelFunding) -> Result<usize, Error> {
     let input = size_of::<DocumentPreparationInput>()
         .checked_sub(if has_flow { size_of::<FlowHandle>() } else { 0 })
         .and_then(|n| n.checked_add(2 * size_of::<usize>()))
         .ok_or(Error::Budget)?;
-    // Known Rust owner/container/closure values; channel/thread runtime allocation remains unknown.
-    let kernel = OwnedPreparation::<DocumentPreparationInput, PreparedState>::known_parts_bytes()
-        .checked_add(
-            OwnedPreparation::<DocumentPreparationInput, PreparedState>::known_completion_bytes(),
-        )
-        .and_then(|n| n.checked_add(size_of::<Binding>() + 4 * size_of::<usize>() + 64))
+    if matches!(funding, KernelFunding::Shared) {
+        return Ok(input);
+    }
+    type Owner = OwnedPreparation<DocumentPreparationInput, PreparedState>;
+    // Preserve the historical scope of known OwnerReceipt fields. The returned thread packet/FinalReceipt
+    // is not an additional guarantee in this legacy path; common Source charges its known Rust value separately.
+    let mut kernel = Owner::known_parts_bytes()
+        .checked_add(Owner::known_completion_bytes())
+        .and_then(|n| n.checked_add(Owner::known_capture_layout::<DocumentRunner>()))
+        .and_then(|n| n.checked_add(Owner::known_stop_arc_bytes()?))
+        .and_then(|n| n.checked_add(Owner::known_owner_value_bytes()))
         .ok_or(Error::Budget)?;
+    if matches!(funding, KernelFunding::Legacy) {
+        kernel = kernel
+            .checked_add(
+                DocumentPreparationAuthority::known_authority_bytes().ok_or(Error::Budget)?,
+            )
+            .ok_or(Error::Budget)?;
+    }
+    input.checked_add(kernel).ok_or(Error::Budget)
+}
+fn input_charge(
+    budget: &ConsumerBudget,
+    has_flow: bool,
+    funding: KernelFunding,
+) -> Result<Charge, Error> {
     budget
-        .reserve(input.checked_add(kernel).ok_or(Error::Budget)?)
+        .reserve(input_metadata_bytes(has_flow, funding)?)
         .map_err(Into::into)
 }
+pub(crate) struct SharedDocumentDescriptor {
+    input: Arc<DocumentPreparationInput>,
+}
+impl SharedDocumentDescriptor {
+    pub(crate) fn key(&self) -> DocumentKey {
+        self.input.key()
+    }
+    pub(crate) fn budget(&self) -> &ConsumerBudget {
+        self.input.budget()
+    }
+    pub(crate) fn document(&self) -> &Arc<Document> {
+        self.input.document()
+    }
+    pub(crate) fn metadata_bytes(&self) -> usize {
+        self.input.metadata_bytes()
+    }
+}
+/// Does not spawn. The scoped sum factory must fund its concrete I/O job before calling this in its worker.
+pub(crate) fn prepare_shared_document(
+    input: &SharedDocumentDescriptor,
+    stop: &AtomicBool,
+) -> Outcome<PreparedState> {
+    run_prepare(input.input.clone(), stop)
+}
+
 impl DocumentView {
     pub(crate) fn initial_input(
         document: Arc<Document>,
         geometry: Geometry,
+    ) -> Result<Arc<DocumentPreparationInput>, Cause> {
+        Self::initial_with(document, geometry, KernelFunding::Legacy)
+    }
+    pub(crate) fn initial_input_in<DI: Send + Sync + 'static, DO: Send + 'static>(
+        document: Arc<Document>,
+        geometry: Geometry,
+        authority: &PreparationAuthority<DI, DO>,
+    ) -> Result<Arc<DocumentPreparationInput>, Cause> {
+        if !authority
+            .actor_arena()
+            .is_some_and(|a| a.same(document.actor_arena()))
+        {
+            return Err(Cause::Stale);
+        }
+        Self::initial_with(document, geometry, KernelFunding::Actor)
+    }
+    pub(crate) fn initial_shared_input<DI: Send + Sync + 'static, DO: Send + 'static>(
+        document: Arc<Document>,
+        geometry: Geometry,
+        authority: &PreparationAuthority<DI, DO>,
+    ) -> Result<SharedDocumentDescriptor, Cause> {
+        if !authority
+            .actor_arena()
+            .is_some_and(|a| a.same(document.actor_arena()))
+        {
+            return Err(Cause::Stale);
+        }
+        Ok(SharedDocumentDescriptor {
+            input: Self::initial_with(document, geometry, KernelFunding::Shared)?,
+        })
+    }
+    fn initial_with(
+        document: Arc<Document>,
+        geometry: Geometry,
+        funding: KernelFunding,
     ) -> Result<Arc<DocumentPreparationInput>, Cause> {
         let budget = ConsumerBudget::new(&document).map_err(|_| Cause::Limit("ConsumerBudget"))?;
         let storage = ViewStorage::new(&budget).map_err(map_cause)?;
@@ -217,7 +313,7 @@ impl DocumentView {
             return Err(Cause::Limit("Source context actual capacity"));
         }
         let binding = source.binding(revision()?);
-        let metadata = input_charge(&budget, false).map_err(map_cause)?;
+        let metadata = input_charge(&budget, false, funding).map_err(map_cause)?;
         Ok(Arc::new(DocumentPreparationInput {
             document,
             budget,
@@ -236,6 +332,7 @@ impl DocumentView {
             old_window_bytes: 0,
             _metadata: metadata,
             _source_metadata: source_metadata,
+            funding,
         }))
     }
     pub(crate) fn from_prepared(state: PreparedState) -> Result<Self, Cause> {
@@ -280,11 +377,49 @@ impl DocumentView {
         operation: Operation,
         geometry: Geometry,
     ) -> Result<Arc<DocumentPreparationInput>, Cause> {
+        self.request_with(operation, geometry, KernelFunding::Legacy)
+    }
+    pub(crate) fn request_in<DI: Send + Sync + 'static, DO: Send + 'static>(
+        &mut self,
+        operation: Operation,
+        geometry: Geometry,
+        authority: &PreparationAuthority<DI, DO>,
+    ) -> Result<Arc<DocumentPreparationInput>, Cause> {
+        if !authority
+            .actor_arena()
+            .is_some_and(|a| a.same(self.document.actor_arena()))
+        {
+            return Err(Cause::Stale);
+        }
+        self.request_with(operation, geometry, KernelFunding::Actor)
+    }
+    pub(crate) fn request_shared<DI: Send + Sync + 'static, DO: Send + 'static>(
+        &mut self,
+        operation: Operation,
+        geometry: Geometry,
+        authority: &PreparationAuthority<DI, DO>,
+    ) -> Result<SharedDocumentDescriptor, Cause> {
+        if !authority
+            .actor_arena()
+            .is_some_and(|a| a.same(self.document.actor_arena()))
+        {
+            return Err(Cause::Stale);
+        }
+        Ok(SharedDocumentDescriptor {
+            input: self.request_with(operation, geometry, KernelFunding::Shared)?,
+        })
+    }
+    fn request_with(
+        &mut self,
+        operation: Operation,
+        geometry: Geometry,
+        funding: KernelFunding,
+    ) -> Result<Arc<DocumentPreparationInput>, Cause> {
         if operation == Operation::Initial {
             return Err(Cause::Stale);
         }
         let flow = self.navigator.share_flow().map_err(map_cause)?;
-        let metadata = input_charge(&self.budget, true).map_err(map_cause)?;
+        let metadata = input_charge(&self.budget, true, funding).map_err(map_cause)?;
         let fold_revision = if matches!(operation, Operation::Fold { .. }) {
             self.fold_revision
                 .checked_add(1)
@@ -345,6 +480,7 @@ impl DocumentView {
             old_window_bytes: self.layout.bytes(),
             _metadata: metadata,
             _source_metadata: self._source_metadata.clone(),
+            funding,
         });
         self.expected = Some(key);
         Ok(input)
@@ -403,6 +539,15 @@ impl DocumentView {
     pub(crate) fn render_binding(&self) -> Binding {
         self.render_binding
     }
+    pub(crate) fn inspect_document(&self) -> &Arc<Document> {
+        &self.document
+    }
+    pub(crate) fn inspect_source_context(&self) -> &Arc<PreparedSourceContext> {
+        &self.source
+    }
+    pub(crate) fn inspect_source_metadata(&self) -> &Arc<Charge> {
+        &self._source_metadata
+    }
     pub(crate) fn layout(&self) -> &LayoutWindow {
         &self.layout
     }
@@ -420,10 +565,23 @@ pub(crate) fn start_document(
     input: Arc<DocumentPreparationInput>,
     authority: &mut DocumentPreparationAuthority,
 ) -> Result<(), Cause> {
+    let funding = match authority.actor_arena() {
+        Some(a) if a.same(input.document.actor_arena()) => KernelFunding::Actor,
+        Some(_) => return Err(Cause::Stale),
+        None => KernelFunding::Legacy,
+    };
+    if input.funding != funding
+        || input.metadata_bytes()
+            != input_metadata_bytes(input.old_flow.is_some(), funding).map_err(map_cause)?
+    {
+        return Err(Cause::Stale);
+    }
     let binding = input.key.binding;
-    let context = input.clone();
+    let runner = DocumentRunner {
+        context: input.clone(),
+    };
     authority.start_document_owner(move || {
-        OwnedPreparation::spawn(input, binding, move |_, stop| run_prepare(context, stop))
+        OwnedPreparation::spawn(input, binding, move |_, stop| runner.execute(stop))
     })
 }
 fn remap(flow: &FlowHandle, layout: LayoutAnchor, cancel: &AtomicBool) -> Result<State, Error> {
@@ -794,3 +952,7 @@ fn prepare(
 #[cfg(test)]
 #[path = "document_view_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "document_kernel_metadata_tests.rs"]
+mod kernel_metadata_tests;

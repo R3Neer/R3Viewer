@@ -176,6 +176,106 @@ impl SafeTextModel {
             previous_end: 0,
         }
     }
+    /// Fallible checkpoint lookup for Common; existing Legacy APIs keep their original behavior.
+    fn checkpoint_metered_with(
+        &self,
+        offset: usize,
+        source_axis: bool,
+        work: &mut Work<'_>,
+    ) -> Result<(usize, usize, usize, usize, usize), PrepareError> {
+        work.admit(0).map_err(engine_error)?;
+        // Three actual header fields: original length, visible length, checkpoint length.
+        work.admit(3 * std::mem::size_of::<usize>())
+            .map_err(engine_error)?;
+        let original_len = self.original.len();
+        let visible_len = self.visible.len();
+        let mut right = self.checkpoints.len();
+        let target = offset.min(if source_axis {
+            original_len
+        } else {
+            visible_len
+        });
+        let mut left = 0;
+        while left < right {
+            let mid = left + (right - left) / 2;
+            work.admit(std::mem::size_of::<(usize, usize)>())
+                .map_err(engine_error)?;
+            let checkpoint = self.checkpoints[mid];
+            work.admit(1).map_err(engine_error)?;
+            if if source_axis {
+                checkpoint.0
+            } else {
+                checkpoint.1
+            } <= target
+            {
+                left = mid + 1;
+            } else {
+                right = mid;
+            }
+        }
+        work.admit(std::mem::size_of::<(usize, usize)>())
+            .map_err(engine_error)?;
+        let (raw, safe) = self.checkpoints[left.saturating_sub(1)];
+        Ok((raw, safe, target, original_len, visible_len))
+    }
+    pub(crate) fn provenance_cursor_with(
+        &self,
+        visible_offset: usize,
+        work: &mut Work<'_>,
+    ) -> Result<ProvenanceCursor<'_>, PrepareError> {
+        let (raw, safe, _, source_end, _) =
+            self.checkpoint_metered_with(visible_offset, false, work)?;
+        work.admit(std::mem::size_of::<ProvenanceCursor<'_>>())
+            .map_err(engine_error)?;
+        Ok(ProvenanceCursor {
+            chars: self.original[raw..].char_indices().peekable(),
+            base: raw,
+            safe,
+            source_end,
+            previous_end: 0,
+        })
+    }
+    pub(crate) fn source_range_metered_with(
+        &self,
+        visible: Range<usize>,
+        work: &mut Work<'_>,
+    ) -> Result<Range<usize>, PrepareError> {
+        self.provenance_cursor_with(visible.start, work)?
+            .source_range_with(visible, work)
+    }
+    fn visible_boundary_metered_with(
+        &self,
+        source_offset: usize,
+        end: bool,
+        work: &mut Work<'_>,
+    ) -> Result<usize, PrepareError> {
+        let (raw, mut safe, target, _, visible_len) =
+            self.checkpoint_metered_with(source_offset, true, work)?;
+        let mut chars = self.original[raw..].char_indices().peekable();
+        while let Some((relative, ch)) = chars.next() {
+            work.project(ch.len_utf8()).map_err(engine_error)?;
+            let offset = raw + relative;
+            if offset == target {
+                return Ok(safe);
+            }
+            let len = replacement_len(ch, chars.peek().map(|(_, ch)| *ch));
+            if offset + ch.len_utf8() > target {
+                return Ok(if end { safe + len } else { safe });
+            }
+            safe += len;
+        }
+        Ok(visible_len)
+    }
+    pub(crate) fn visible_range_metered_with(
+        &self,
+        source: Range<usize>,
+        work: &mut Work<'_>,
+    ) -> Result<Range<usize>, PrepareError> {
+        Ok(
+            self.visible_boundary_metered_with(source.start, false, work)?
+                ..self.visible_boundary_metered_with(source.end, true, work)?,
+        )
+    }
     pub fn original_handle(&self) -> std::sync::Arc<String> {
         self.original.clone()
     }
@@ -235,6 +335,48 @@ impl SafeTextModel {
     ) -> Result<Option<text_engine::Unit>, PrepareError> {
         self.cell_index
             .step(&self.visible, &self.identity, at, work)
+            .map_err(engine_error)
+    }
+    pub(crate) fn viewport_cursor_metered(
+        &self,
+        line: usize,
+        left: usize,
+        work: &mut Work<'_>,
+    ) -> Result<text_engine::Point, PrepareError> {
+        work.admit(3 * std::mem::size_of::<usize>() + 2)
+            .map_err(engine_error)?;
+        let range = self
+            .line_range(line)
+            .ok_or(PrepareError::Limit("invalid line"))?;
+        let at = self
+            .cell_index
+            .start_cell_metered(&self.visible, &self.identity, line, left, work)
+            .map_err(engine_error)?;
+        if at.line() == line {
+            Ok(at)
+        } else {
+            self.cell_index
+                .line_entry_metered(&self.visible, &self.identity, range, line, work)
+                .map_err(engine_error)
+        }
+    }
+    pub(crate) fn next_unit_metered(
+        &self,
+        at: &mut text_engine::Point,
+        work: &mut Work<'_>,
+    ) -> Result<Option<text_engine::Unit>, PrepareError> {
+        self.cell_index
+            .step_metered(&self.visible, &self.identity, at, work)
+            .map_err(engine_error)
+    }
+    pub(crate) fn cell_for_offset_metered_with(
+        &self,
+        offset: usize,
+        work: &mut Work<'_>,
+    ) -> Result<usize, PrepareError> {
+        self.cell_index
+            .position_metered(&self.visible, &self.identity, offset, work)
+            .map(|(_, column)| column)
             .map_err(engine_error)
     }
     pub fn line_count(&self) -> usize {
@@ -566,3 +708,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "source_checkpoint_metered_tests.rs"]
+mod checkpoint_metered_tests;

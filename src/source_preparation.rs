@@ -97,6 +97,9 @@ impl PreparedSourceContext {
     pub(crate) fn source(&self) -> &Arc<DocumentSource> {
         &self.source
     }
+    pub(crate) fn is_document_context(&self) -> bool {
+        self.input.document.is_some()
+    }
     pub(crate) fn input(&self) -> &Arc<SourcePreparationInput> {
         &self.input
     }
@@ -147,8 +150,19 @@ impl PreparedSourceModel {
 pub(crate) enum SourcePrepared {
     Hash(Arc<PreparedSourceContext>),
     Model(Box<PreparedSourceModel>),
+    ScopedModel(Box<PreparedSourceModel>, crate::source_shared::SourceScope),
+    Viewport(Box<crate::source_view_preparation::SourceViewportPrepared>),
 }
-pub(crate) type SourcePreparationOwner = OwnedPreparation<SourcePreparationInput, SourcePrepared>;
+pub(crate) enum SourcePreparationTaskInput {
+    Build {
+        input: Arc<SourcePreparationInput>,
+        scope: Option<crate::source_shared::SourceScope>,
+        metadata: Option<crate::document_budget::Lease>,
+    },
+    Viewport(crate::source_view_preparation::SourceViewportInput),
+}
+pub(crate) type SourcePreparationOwner =
+    OwnedPreparation<SourcePreparationTaskInput, SourcePrepared>;
 pub(crate) fn start_hash<DI: Send + Sync + 'static, DO: Send + 'static>(
     input: Arc<SourcePreparationInput>,
     revision: u64,
@@ -157,24 +171,35 @@ pub(crate) fn start_hash<DI: Send + Sync + 'static, DO: Send + 'static>(
     let binding = input.binding(revision);
     let context = input.clone();
     authority.start_source_owner(move || {
-        OwnedPreparation::spawn(input, binding, move |i, stop| {
-            match DocumentSource::new(
-                i.original.clone(),
-                i.origin.clone(),
-                i.generation,
-                i.request,
-                stop,
-            ) {
-                Ok(s) => match PreparedSourceContext::checked(context, Arc::new(s)) {
-                    Ok(c) => Outcome::Ready(SourcePrepared::Hash(c)),
-                    Err(e) => Outcome::Failed(e),
-                },
-                Err(e) => match e.kind {
-                    crate::document_model::ErrorKind::Cancelled => Outcome::Cancelled,
-                    _ => Outcome::Failed(Cause::Limit("DocumentSource")),
-                },
-            }
-        })
+        OwnedPreparation::spawn(
+            Arc::new(SourcePreparationTaskInput::Build {
+                input,
+                scope: None,
+                metadata: None,
+            }),
+            binding,
+            move |i, stop| {
+                let SourcePreparationTaskInput::Build { input: i, .. } = i else {
+                    return Outcome::Failed(Cause::Stale);
+                };
+                match DocumentSource::new(
+                    i.original.clone(),
+                    i.origin.clone(),
+                    i.generation,
+                    i.request,
+                    stop,
+                ) {
+                    Ok(s) => match PreparedSourceContext::checked(context, Arc::new(s)) {
+                        Ok(c) => Outcome::Ready(SourcePrepared::Hash(c)),
+                        Err(e) => Outcome::Failed(e),
+                    },
+                    Err(e) => match e.kind {
+                        crate::document_model::ErrorKind::Cancelled => Outcome::Cancelled,
+                        _ => Outcome::Failed(Cause::Limit("DocumentSource")),
+                    },
+                }
+            },
+        )
     })
 }
 pub(crate) fn start_source<DI: Send + Sync + 'static, DO: Send + 'static>(
@@ -185,7 +210,15 @@ pub(crate) fn start_source<DI: Send + Sync + 'static, DO: Send + 'static>(
     let binding = context.binding(revision);
     let input = context.input.clone();
     authority.start_source_owner(move || {
-        OwnedPreparation::spawn(input, binding, move |_, stop| prepare_source(context, stop))
+        OwnedPreparation::spawn(
+            Arc::new(SourcePreparationTaskInput::Build {
+                input,
+                scope: None,
+                metadata: None,
+            }),
+            binding,
+            move |_, stop| prepare_source(context, stop),
+        )
     })
 }
 pub(crate) fn prepare_source(
@@ -206,4 +239,61 @@ pub(crate) fn prepare_source(
         Err(PrepareError::Cancelled) => Outcome::Cancelled,
         Err(PrepareError::Limit(v)) => Outcome::Limit(v),
     }
+}
+
+/// Common Source build retains the charged original scope under the same kernel, including Pending.
+pub(crate) fn start_scoped_source<DI: Send + Sync + 'static, DO: Send + 'static>(
+    scope: crate::source_shared::SourceScope,
+    revision: u64,
+    authority: &mut PreparationAuthority<DI, DO>,
+) -> Result<(), Cause> {
+    if !authority
+        .actor_arena()
+        .is_some_and(|a| a.same(scope.arena()))
+    {
+        return Err(Cause::Stale);
+    }
+    let context = scope.context().clone();
+    let binding = scope.binding(revision);
+    let input = context.input().clone();
+    let run = move |i: &SourcePreparationTaskInput, stop: &AtomicBool| {
+        let SourcePreparationTaskInput::Build {
+            scope: Some(retained),
+            ..
+        } = i
+        else {
+            return Outcome::Failed(Cause::Stale);
+        };
+        let retained = match retained.try_alias() {
+            Ok(s) => s,
+            Err(e) => return Outcome::Failed(e),
+        };
+        match prepare_source(context, stop) {
+            Outcome::Ready(SourcePrepared::Model(model)) => {
+                Outcome::Ready(SourcePrepared::ScopedModel(model, retained))
+            }
+            Outcome::Cancelled => Outcome::Cancelled,
+            Outcome::Limit(s) => Outcome::Limit(s),
+            Outcome::Failed(e) => Outcome::Failed(e),
+            _ => Outcome::Failed(Cause::Stale),
+        }
+    };
+    let bytes = SourcePreparationOwner::known_spawn_bytes(&run)
+        .and_then(|n| n.checked_sub(std::mem::size_of::<crate::source_shared::SourceScope>()))
+        .ok_or(Cause::Limit("Source Build arithmetic"))?;
+    let metadata = scope
+        .arena()
+        .reserve(bytes)
+        .map_err(|_| Cause::Limit("Source Build metadata"))?;
+    authority.start_source_owner(move || {
+        OwnedPreparation::spawn(
+            Arc::new(SourcePreparationTaskInput::Build {
+                input,
+                scope: Some(scope),
+                metadata: Some(metadata),
+            }),
+            binding,
+            run,
+        )
+    })
 }

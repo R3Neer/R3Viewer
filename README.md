@@ -126,3 +126,5 @@ El [renderer documental b2](docs/reviews/Markdown-D2b2-renderer-adoption-r1.md) 
 
 
 El [fix del bloque contenedor de recursos](docs/reviews/Markdown-B2-resource-owner-adoption-r1.md) evita errores con varias imágenes y conserva su texto alternativo al desplazar código ajeno. Tiene aceptación independiente y 77 regresiones de composición aprobadas. Este cambio corresponde al renderer interno; la vista Markdown interactiva y los recursos gráficos siguen pendientes.
+
+Fuente compartida: [biblioteca R2 integrada](docs/reviews/Markdown-Source-common-adoption-r2.md), con aceptación independiente y 132 controles de composición PASS. Comparte modelo/contexto y contabiliza aperturas del viewport; conexión a sesión interactiva y Hash común aún pendientes.

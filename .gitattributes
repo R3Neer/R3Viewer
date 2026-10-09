@@ -40,3 +40,5 @@ tests/fixtures/document-b2/** -text whitespace=cr-at-eol
 
 # Resource-owner regression fixtures retain exact reviewed source offsets.
 tests/fixtures/document-b2-resource-owner/** -text whitespace=cr-at-eol
+
+tests/fixtures/source-common/** -text whitespace=cr-at-eol

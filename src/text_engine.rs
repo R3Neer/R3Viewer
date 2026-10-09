@@ -633,6 +633,236 @@ impl Index {
     }
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Default, Debug)]
+pub(crate) struct CommonLookupCounters {
+    pub headers: usize,
+    pub fields_and_comparisons: usize,
+    pub point_clones: usize,
+    pub point_constructions: usize,
+    pub exception_clones: usize,
+}
+#[cfg(test)]
+thread_local! { static COMMON_LOOKUP_COUNTERS: std::cell::Cell<CommonLookupCounters> = std::cell::Cell::new(CommonLookupCounters::default()); }
+#[cfg(test)]
+pub(crate) fn common_lookup_counters() -> CommonLookupCounters {
+    COMMON_LOOKUP_COUNTERS.with(|c| c.get())
+}
+fn common_lookup_admit(w: &mut Work<'_>, n: usize, _kind: u8) -> Result<(), Error> {
+    w.admit(n)?;
+    #[cfg(test)]
+    COMMON_LOOKUP_COUNTERS.with(|cell| {
+        let mut c = cell.get();
+        match _kind {
+            0 => c.headers += n,
+            1 => c.fields_and_comparisons += n,
+            2 => c.point_clones += n,
+            3 => c.point_constructions += n,
+            _ => c.exception_clones += n,
+        };
+        cell.set(c);
+    });
+    Ok(())
+}
+// Only the Common methods use this fallible lookup; Legacy lookup bodies are unchanged.
+fn metered_partition<T>(
+    values: &[T],
+    work: &mut Work<'_>,
+    mut predicate: impl FnMut(&T, &mut Work<'_>) -> Result<bool, Error>,
+) -> Result<usize, Error> {
+    common_lookup_admit(work, std::mem::size_of::<usize>(), 0)?;
+    let mut right = values.len();
+    let mut left = 0;
+    while left < right {
+        let middle = left + (right - left) / 2;
+        if predicate(&values[middle], work)? {
+            left = middle + 1;
+        } else {
+            right = middle;
+        }
+    }
+    Ok(left)
+}
+impl Index {
+    pub fn start_offset_metered(
+        &self,
+        text: &str,
+        identity: &Identity,
+        offset: usize,
+        w: &mut Work<'_>,
+    ) -> Result<Point, Error> {
+        w.admit(0)?;
+        common_lookup_admit(w, 2 * std::mem::size_of::<usize>(), 0)?;
+        self.validate(text, identity)?;
+        let target = offset.min(self.len);
+        let n = metered_partition(&self.points, w, |p, w| {
+            common_lookup_admit(w, std::mem::size_of::<usize>() + 1, 1)?;
+            Ok(p.offset <= target)
+        })?;
+        common_lookup_admit(w, std::mem::size_of::<Point>(), 2)?;
+        Ok(self.points[n.saturating_sub(1)].clone())
+    }
+    pub fn start_cell_metered(
+        &self,
+        text: &str,
+        identity: &Identity,
+        line: usize,
+        column: usize,
+        w: &mut Work<'_>,
+    ) -> Result<Point, Error> {
+        w.admit(0)?;
+        common_lookup_admit(w, 2 * std::mem::size_of::<usize>(), 0)?;
+        self.validate(text, identity)?;
+        let zero = metered_partition(&self.exceptions, w, |e, w| {
+            common_lookup_admit(w, std::mem::size_of::<usize>() + 1, 1)?;
+            if e.unit.line < line {
+                return Ok(true);
+            }
+            common_lookup_admit(w, 1, 1)?;
+            if e.unit.line != line {
+                return Ok(false);
+            }
+            common_lookup_admit(w, std::mem::size_of::<usize>() + 1, 1)?;
+            Ok(e.unit.column < column)
+        })?;
+        if let Some(e) = self.exceptions.get(zero) {
+            common_lookup_admit(w, 3 * std::mem::size_of::<usize>() + 3, 1)?;
+            if e.unit.line == line && e.unit.column == column && e.unit.width == 0 {
+                common_lookup_admit(w, std::mem::size_of::<usize>(), 0)?;
+                return self.start_offset_metered(text, identity, e.unit.range.start, w);
+            }
+        }
+        let n = metered_partition(&self.points, w, |p, w| {
+            common_lookup_admit(w, std::mem::size_of::<usize>() + 1, 1)?;
+            if p.line < line {
+                return Ok(true);
+            }
+            common_lookup_admit(w, 1, 1)?;
+            if p.line != line {
+                return Ok(false);
+            }
+            common_lookup_admit(w, std::mem::size_of::<usize>() + 1, 1)?;
+            Ok(p.column <= column)
+        })?;
+        common_lookup_admit(w, std::mem::size_of::<Point>(), 2)?;
+        Ok(self.points[n.saturating_sub(1)].clone())
+    }
+    pub fn line_entry_metered(
+        &self,
+        text: &str,
+        identity: &Identity,
+        range: Range<usize>,
+        line: usize,
+        w: &mut Work<'_>,
+    ) -> Result<Point, Error> {
+        common_lookup_admit(
+            w,
+            std::mem::size_of::<Point>() + 2 * std::mem::size_of::<usize>(),
+            3,
+        )?;
+        self.line_entry(text, identity, range, line)
+    }
+    pub fn position_metered(
+        &self,
+        text: &str,
+        identity: &Identity,
+        offset: usize,
+        w: &mut Work<'_>,
+    ) -> Result<(usize, usize), Error> {
+        common_lookup_admit(w, std::mem::size_of::<usize>(), 0)?;
+        let target = offset.min(self.len);
+        let mut at = self.start_offset_metered(text, identity, target, w)?;
+        while let Some(unit) = self.step_metered(text, identity, &mut at, w)? {
+            if target < unit.range.end {
+                return Ok((unit.line, unit.column));
+            }
+            if target == unit.range.end {
+                return Ok((at.line, at.column));
+            }
+        }
+        Ok((at.line, at.column))
+    }
+    pub fn step_metered(
+        &self,
+        text: &str,
+        identity: &Identity,
+        at: &mut Point,
+        w: &mut Work<'_>,
+    ) -> Result<Option<Unit>, Error> {
+        self.validate(text, identity)?;
+        if !self.identity.same(&at.identity)
+            || at.base > at.offset
+            || at.offset > at.end
+            || at.end > self.len
+            || at.cursor.cur_cursor() != at.offset - at.base
+        {
+            return Err(Error::Invalid);
+        }
+        w.admit(0)?;
+        if at.offset >= at.end {
+            return Ok(None);
+        }
+        let n = metered_partition(&self.exceptions, w, |e, w| {
+            common_lookup_admit(w, std::mem::size_of::<usize>() + 1, 1)?;
+            Ok(e.unit.range.start < at.offset)
+        })?;
+        let selected = if let Some(e) = self.exceptions.get(n) {
+            common_lookup_admit(w, std::mem::size_of::<usize>() + 1, 1)?;
+            (e.unit.range.start == at.offset).then_some(e)
+        } else {
+            None
+        };
+        if let Some(e) = selected {
+            common_lookup_admit(w, std::mem::size_of::<Exception>(), 4)?;
+            *at = e.after.clone();
+            return Ok(Some(e.unit.clone()));
+        }
+        let start = at.offset;
+        let end =
+            at.base + next(&text[at.base..at.end], &mut at.cursor, w)?.ok_or(Error::Invalid)?;
+        let raw = &text[start..end];
+        let newline = raw == "\n" || raw == "\r\n";
+        let (visible_len, cells, _) = if self.projected {
+            projected_metrics(raw, at.column, w)?
+        } else {
+            (
+                raw.len(),
+                if newline {
+                    0
+                } else {
+                    width(raw, at.column, w)?
+                },
+                newline,
+            )
+        };
+        let safe_control = self.projected && is_projected_control(raw);
+        let ascii = if safe_control {
+            raw.len() == 2
+        } else {
+            raw == "\r\n" || raw.len() == 1 && raw.as_bytes()[0].is_ascii()
+        };
+        let unit = Unit {
+            visible: at.visible..at.visible + visible_len,
+            ascii,
+            safe_control,
+            range: start..end,
+            line: at.line,
+            column: at.column,
+            width: cells,
+            newline,
+        };
+        at.offset = end;
+        at.visible += visible_len;
+        if newline {
+            at.line += 1;
+            at.column = 0;
+        } else {
+            at.column = at.column.saturating_add(cells);
+        }
+        Ok(Some(unit))
+    }
+}
+
 /// Exact safe-control projection metrics without constructing the projected leaf.
 pub(crate) fn projected_metrics(
     raw: &str,

@@ -28,6 +28,9 @@ impl ActorArena {
             limit,
         }))
     }
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
     pub fn used(&self) -> usize {
         self.0.used.load(Ordering::Acquire)
     }
@@ -66,6 +69,11 @@ impl Default for ActorArena {
 pub(crate) struct Lease {
     arena: ActorArena,
     bytes: usize,
+}
+impl Lease {
+    pub(crate) fn arena(&self) -> &ActorArena {
+        &self.arena
+    }
 }
 impl Drop for Lease {
     fn drop(&mut self) {

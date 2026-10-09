@@ -648,7 +648,13 @@ fn auth03_typed_source_pending() {
     let i = context.input().clone();
     a.start_source_owner(|| {
         OwnedPreparation::spawn_with(
-            i,
+            Arc::new(
+                crate::source_preparation::SourcePreparationTaskInput::Build {
+                    input: i,
+                    scope: None,
+                    metadata: None,
+                },
+            ),
             binding,
             move |_, stop| crate::source_preparation::prepare_source(context, stop),
             move |f| {
