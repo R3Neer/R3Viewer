@@ -4,6 +4,8 @@
 
 Autoridad: AGENTS.md, docs/process/METODOLOGIA.md, decisiones/backlog/arquitectura; MARKDOWN-CONSUMIDOR-DOCUMENTO, MARKDOWN-D2-FLOW-LAYOUT, MARKDOWN-D2B-LAYOUT-SEARCH R3 y revisión Markdown-D2b-plan-r3; D3 routing R03. El importe vigente DocumentWork::frame es 8MiB: no reintroducir los 256KiB históricos de D2b. Frame256KiB, Window128KiB, Symbol16KiB, Consumer1MiB, checkpoints4096 y ledgers Source/ActorArena conservan sus ámbitos propios.
 
+Estado posterior del plan: [núcleo de búsqueda y headings integrado](../reviews/Markdown-D2b3-coresearch-adoption-r2.md); [almacenamiento de historial R2 revisado](MARKDOWN-HISTORY-STORAGE.md), pendiente de tipos/adaptadores reales tras freeze b2. La aceptación del núcleo no acredita las demás acciones ni la sesión.
+
 ## Objetivo observable y frontera
 
 Sobre Document real ya validado, el lector puede encontrar texto literal seguro, inspeccionar sus asociaciones, elegir una procedencia acreditada y preparar la Fuente original sin perder la lectura actual. Resultados y transiciones son tipados y transaccionales. La biblioteca deja peticiones/resultados aptos para el pump; b3 no conecta teclas, CLI, ratatui ni parser nuevo. El contrato no ejecuta enlaces, resuelve URLs, carga imágenes ni inventa bases de ruta. D2c conecta sesión/terminal y D3c routing; sus verificaciones funcionales siguen pendientes.
