@@ -494,3 +494,5 @@ Sesión Markdown privada: panel6 conserva discrepancia de fidelidad tras corregi
 
 
 2026-10-10: [replay raíz del inventario PDF D1 R1](reviews/PDF-product-d1-root-replay-r1.md),2737/2737 archivos exactos e inventario1/familia12PASS sobre host congelado del autor, SHA pre/post igual. Revisión independiente activa; no adopción ni aceptación por asociación de registry, supervisor/IO, PDFium/EOF/Job/publicación o navegación. D2 preparado en corte separado; P1/RV204 y composición/QA/Unix pendientes.
+
+2026-10-10: [revisión independiente PDF D1 sin críticas pendientes](reviews/PDF-product-d1-independent-r1.md), limitada al inventario compilado exacto: cinco controles propios,41 expectativas útiles del compilador,77 layouts/cuatro capturas,Clippy/formato0 y regresión12 separada. Raíz cotejó1842/1842 evidencias físicas, sin discrepancias. O3/O7, rechazo expired/cancelled antes mintage real, Init/FSM, registry/hook/IO/supervisor/Job/EOF/publicación, QA/Unix y RV204 siguen pendientes D2; sin adopción productiva del actor. Fallos históricos y ausencia de copia del primer bin fallido conservados explícitamente.

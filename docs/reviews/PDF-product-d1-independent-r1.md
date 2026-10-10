@@ -1,0 +1,34 @@
+# Revisión independiente PDF D1 R1
+
+2026-10-10. **SIN_CRITICAS_PENDIENTES en el corte D1 de tipos, builders e inventario compilado exacto.** No es aceptación de actor PDF productivo ni de D2/native/registry/wire completo/QA. Los criterios D101–D108 originales permanecen intactos; obligaciones que requieren mintage o ejecución nativa continúan pendientes.
+
+## Identidad y separación de evidencia
+
+Freeze MANIFEST: 5CE5AE3D56CBB32894198F7130CE81CFC6FA941227D85E27E456D0E45CA72212. Verificación propia 2737/2737 entradas, bytes/SHA/rutas; copia exacta 855 fuentes sin discrepancias. SOURCE-BIN-before-final-outputs: 0362E4181F8178604879140A27396C9CC6234E0B86548233BB16AE69C5B2E037. Los nueve deltas coinciden con su inventario y con la base canónica; 846 restantes conservados. Controller sólo cambia visibilidad ThreadOwned/reexport y fin de líneas; campos, launch y métodos siguen privados. Lib registra inventario Windows y allocator exclusivamente de test.
+
+Criterios previos: 1D6D3E90DE71BC7EC266F4E29749C5F6A5A95361361BE9CE62FCECF7DF228C62. Copias privadas product-exact y product-r1. Esta última conserva prefijos EXACTOS del freeze en actor.rs/pdf_d1.rs y añade únicamente módulos propios cfg(test), más own_checks.rs. Clippy se ejecuta sobre product-exact; no sobre un sustituto DTO.
+
+Bin propio final físicamente conservado OWN-HOST-final.exe: 05F385FC439A0F97DB0BFB907A4F9F47EE9BC6139F31D82E19DE714F051F6923. Pre-runtime extendido: 568A50E9D98DC4E72A86E15DD66FAE42CA740C49C72E9ACDF9D7946193290042. Logs finales storage/kernel BE9AD08F24EC80CFAC5E214994CEDD50F82196DB154E9D471319091C0B4D68FF y actor 674A79FF08673FDB1FA80D860E556839130737B47E0A973565FD1DF505E7FC3D. Posthash idéntico.
+
+## Matriz de criterios intactos
+
+| Familia | CodeAE / AE propia acreditada | Pendiente fuera D1 |
+|---|---|---|
+| D101 identidad | Arena física/cancel por ptr/deadline exacto/Binding completo en supports; propio fixture de predicado local rechaza foreign Arena/cancel/changed deadline/input sin cargos. No dispatch mediante permiso ficticio. | Mintage real, identidad de autoridad registrada y rechazo expired/cancelled antes reserve/clone/spawn productivo; ausencia de mintage no se sustituye por fixture. |
+| D102 financiación | Snapshot/alias/storage/raster reservan metadata y capacidad antes copy/clone; exceso de capacidad mantiene lease adicional; cálculo checked y fallos liberan nuevo funding. Alias, TextStorage y Raster propios 0/K−1/K con recurso antiguo vivo; último Drop vuelve a TRANSPORT_RESERVE. H40/D24/source1Mi/raster4Mi/body65536 sin ampliar. | OS/allocator/thread/channel/native Unknown, no peak RSS ni cargo0. Preadmisión completa native/factory runtime D2. |
+| D103 alias físico | Own Weak/bodyptr verifica backing snapshot igual hasta último alias; generic loan conserva payload/puntero tras Drop de cell externo y hasta Drop del loan. Core público independiente del control: último handle publica Exit aunque sobreviva Shared interno. | Running/Pending/reaping real, backstop y joins nativos. |
+| D104 tamaños/capturas | Inventario propio 77/77 sizeof/align coincide y cuatro tipos opacos reales de builders coinciden 32/32/32/1288. WorkerCapture local real104, partes464, completion296/final320 y known1208. UTF16 almacenamiento real N=U65536 capacity8454146, longitudes0; Native64/Unit16/Scalar40 reales. | Native IO/supervisor no ejecutados, wrappers CapturedThread y ThreadOwned requieren composición/ledger nuevo D2. Reservar tablas no prueba validación UTF16/ExactSource. |
+| D105 tipos cerrados | 41 expectativas útiles propias de rustc: 24 Send/Sync/Clone/Default negativos, seis new negativos, cuatro escape de lifetime negativos, seis extracción de campo negativos y ABI positiva. Fuente native.rs byteexacta, sin cargar DLL. Borrow Bitmap mantiene píxeles exclusivos y guards retienen padres; capacidades inicio tienen campos privados, sin ctor público/Default/Clone. | Implementación real de constructors/mintage/Api load y elección del adapter D2. |
+| D106 campos | Own Raster rechaza página0/257, rotation1/2/3/360, reserved, NaN/Inf/emptycrop, stride/format/alpha; positivos page1/256 y grados0/90/180/270. Header little endian y reserved/magic/version/body corruptos rechazados. | Init/Metadata son storage tipado: request/gen/op/page0 Metadata, decoder completo y FSM no se validan aquí. Semántica UTF16 permanece gate dependiente, no aceptación por asociación. |
+| D107 causas | Own escrow exact-/1/unwind/poison vuelve a mismo payload sin pérdida. Own factory local REAL vía entrada cfg(test) inventario: hash Ready, original cancel→Cancelled y deadline original expirado→Failed; join precede take/publicación y últimos aliases recuperan baseline. | Estos fallos son comprobados dentro del worker local, NO rechazo de mintage antes spawn. Sticky native, partial setup, process/Job/EOF y shutdown físico pendientes. |
+| D108 evidencia | Own compile offline0, Clippy exact all-targets -D warnings0, fmt global exact0; cinco controles propios PASS. Regresión12 del autor sobre ownbuild PASS separada y un inventario compilado PASS; no declarados como oráculos propios ni worker PDF. | No Unix, QA visual, D2/D3/integración/engine/render actual. |
+
+## Errores propios conservados
+
+AE-own-attempt1 exit101: broad selector own_ ejecutó un test ajeno que exigía worker; dos asserts propios esperaban0 cuando ActorArena canónica inicializa TRANSPORT_RESERVE=3145728. No defecto del candidato. Corrección prospectiva sólo del harness: selector pdf_d1 y baseline canónica, incluyendo limits=baseline+headroom. Fuentes completas previas/prehash/log/receipt conservados. El bin físico attempt1 fue reemplazado por cargo rebuild antes copiarlo aparte: su prehash permanece, **no puede reproducirse con una copia conservada de ese bin**. Bins attempt2 y final sí se conservan físicamente. No se relabela el FAIL.
+
+Cuatro fixtures new iniciales tuvieron sintaxis Rust incorrecta de turbofish y no acreditan privacidad; fuentes/logs se conservan. Cuatro fixtures attempt2, fijados antes salida, obtienen E0599 esperado. Los 31 restantes del primer conjunto y seis campos adicionales conforman las 41 expectativas útiles. Comparador ledger attempt1 eligió claves inexistentes y produjo count0; no aceptación. Attempt2 selecciona inline y exige77/77+cuatro closures sin discrepancia, conservando recibo anterior.
+
+## Disposición
+
+Autor O1/O2/O4/O5(layout/storage)/O6/O8 tiene apoyo propio focal arriba, con dimensiones no ejecutadas explícitas. **O3 registro/arbitraje global/mintage/hooks/backstop y O7 IO/native/supervisor/EOF/Job activo siguen NOT_RUN D2.** No thread nativo, DLL/PDFium, parser PDF, proceso hijo PDF o motores ejecutados. No promesa de render, texto exacto, límites de RSS o cleanup nativo. Todo cambio de fields/capture/factory en D2 invalida inventario afectado y exige nuevos controles físicos. Integrar documentación de este inventario D1 no concede adopción productiva del actor.
