@@ -17,3 +17,7 @@ S03 conserva aceptación funcional Windows parcial e incrementos integrados. QA 
 ## Resolución de preparación externa (2026-10-10)
 
 Ante la falta de hosts Unix y QA visual permitida, el usuario elige «Preparar una guía de QA manual y una matriz de CI local para configurar después». Se preparan y revisan ambos artefactos; esta decisión difiere su configuración/ejecución, sin sustituir pruebas por documentación ni declarar cerrado S03. Se completa el trabajo funcional ejecutable en Windows mientras V/U conservan dependencia explícita. No avanzar al siguiente sprint para ocultar esa dependencia.
+
+## Dependencia restante al terminar el trabajo local
+
+La [matriz final independiente](../reviews/S03-cierre-windows-final.md) conserva19filas y no exige más trabajo funcional Windows concreto. W2 y composición C01/W3 aceptadas; documentación y backlog reconciliados, fallos históricos y causas UNKNOWN preservados. La continuación de S03 depende de ejecutar la QA visual y U-G1–5 que el usuario difirió. Se entrega el punto de reanudación y no se empieza otro sprint. Esto registra una dependencia externa, no declara cumplida la condición de parada tras el cierre completo de S03.

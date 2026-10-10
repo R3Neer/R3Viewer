@@ -84,3 +84,7 @@ Cancelación durante [preparación](research/S03_CANCELPREPARE.md) y [fronteras 
 ## Preparación externa S03 (2026-10-10)
 
 El usuario eligió preparar una [guía de QA manual](validation/S03-QA-MANUAL.md) y una [matriz CI local](validation/S03-CI-MATRIZ.md), con [datos YAML](validation/s03-ci-matriz.yml), para configurar y ejecutar posteriormente. [Revisión independiente](reviews/S03-preparacion-externa-final.md) sin críticas sobre la preparación; cuatro identidades verificadas. No se instaló WezTerm, añadió remoto, activó workflow ni ejecutó Linux/macOS o QA visual. Las lanes y V/U-G1–5 conservan estado pendiente; S03 sigue abierto.
+
+## Dictamen funcional Windows de S03
+
+[Revisión final independiente](reviews/S03-cierre-windows-final.md) de las19filas originales: SIN_CRITICAS_PENDIENTES en obligaciones funcionales Windows concretas. W2 P/Q/T/I fueron reproducidas una vez cada una por el adversario; raíz cotejó su freeze1026/1026 y el dictamen/readset29/29. [Estado vigente](sprints/S03-CIERRE.md) y backlog reconciliados. S03 continúa abierto por QA visual Windows y runtime/contención Linux/macOS; las guías preparadas no acreditan ejecución. No más pruebas funcionales locales exigidas por este dictamen ni inicio de sprint siguiente.
