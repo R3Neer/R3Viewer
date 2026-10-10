@@ -125,6 +125,7 @@ fn failure(e: &str) -> StructureFailure {
 fn model_error(e: ModelError) -> &'static str {
     match e {
         ModelError::Cancelled => "Cancelled",
+        ModelError::Timeout => "Timeout",
         ModelError::Budget | ModelError::SourceLimit => "Budget",
         ModelError::Depth => "Depth",
         ModelError::Invalid => "XmlRepresentation",
@@ -943,8 +944,24 @@ pub(crate) fn validate_source(
     model: &Structure,
     cancel: &mut impl FnMut() -> bool,
 ) -> std::result::Result<(), ModelError> {
+    validate_source_until(model, cancel, Instant::now() + Duration::from_secs(5))
+}
+fn validation_error(error: &str) -> ModelError {
+    match error {
+        "Cancelled" => ModelError::Cancelled,
+        "Timeout" => ModelError::Timeout,
+        "Budget" => ModelError::Budget,
+        "Depth" => ModelError::Depth,
+        _ => ModelError::Invalid,
+    }
+}
+fn validate_source_until(
+    model: &Structure,
+    cancel: &mut impl FnMut() -> bool,
+    deadline: Instant,
+) -> std::result::Result<(), ModelError> {
     let mut control = Control {
-        deadline: Instant::now() + Duration::from_secs(5),
+        deadline,
         cancel,
         own: 0,
         base: model.persistent_bytes() + HEADROOM,
@@ -955,19 +972,14 @@ pub(crate) fn validate_source(
         next: 0,
         relations: Vec::new(),
     };
-    let depth = parse(model.source(), &mut sink, &mut control).map_err(|e| match e {
-        "Cancelled" | "Timeout" => ModelError::Cancelled,
-        "Budget" => ModelError::Budget,
-        "Depth" => ModelError::Depth,
-        _ => ModelError::Invalid,
-    })?;
+    let depth = parse(model.source(), &mut sink, &mut control).map_err(validation_error)?;
     if sink.next as usize != model.node_count() {
         return Err(ModelError::Invalid);
     }
     checked_sort(&mut sink.relations, &mut control, |a, b, _| {
         Ok((a.0.0, a.1.0).cmp(&(b.0.0, b.1.0)))
     })
-    .map_err(|_| ModelError::Cancelled)?;
+    .map_err(validation_error)?;
     let mut at = 0;
     for owner in 0..model.node_count() {
         let node = model.node(NodeId(owner as u32)).unwrap();
@@ -992,6 +1004,65 @@ mod tests {
         project(Arc::new(s.to_owned()), 7, &AtomicBool::new(false))
             .unwrap()
             .0
+    }
+    #[test]
+    fn expired_validation_is_timeout_and_cancellation_keeps_priority() {
+        let m = model("<r><a/><b/></r>");
+        assert_eq!(validate_source(&m, &mut || false), Ok(()));
+        let expired = Instant::now();
+        let error = validate_source_until(&m, &mut || false, expired).unwrap_err();
+        assert_eq!(error, ModelError::Timeout);
+        assert_eq!(failure(model_error(error)), StructureFailure::Timeout);
+        assert_eq!(
+            validate_source_until(&m, &mut || true, expired),
+            Err(ModelError::Cancelled)
+        );
+    }
+    #[test]
+    fn real_relation_sort_preserves_timeout_and_cancel_cause() {
+        let m = model("<r><a/><b/></r>");
+        let relations: Vec<_> = (0..m.node_count())
+            .flat_map(|owner| {
+                m.node(NodeId(owner as u32))
+                    .unwrap()
+                    .entries()
+                    .map(move |entry| (NodeId(owner as u32), entry.value().id()))
+            })
+            .collect();
+        assert!(relations.len() >= 2);
+        for (cancelled, expired, expected) in [
+            (false, false, Ok(())),
+            (false, true, Err(ModelError::Timeout)),
+            (true, true, Err(ModelError::Cancelled)),
+        ] {
+            let mut values = relations.clone();
+            values.reverse();
+            let mut cancel = || cancelled;
+            let mut control = Control {
+                deadline: Instant::now()
+                    + if expired {
+                        Duration::ZERO
+                    } else {
+                        Duration::from_secs(5)
+                    },
+                cancel: &mut cancel,
+                own: 0,
+                base: m.persistent_bytes() + HEADROOM,
+                limit: MAX_STRUCTURE_BYTES,
+            };
+            let result = checked_sort(&mut values, &mut control, |a, b, _| {
+                Ok((a.0.0, a.1.0).cmp(&(b.0.0, b.1.0)))
+            })
+            .map_err(validation_error);
+            assert_eq!(result, expected);
+            if expected.is_ok() {
+                assert!(
+                    values
+                        .windows(2)
+                        .all(|pair| (pair[0].0.0, pair[0].1.0) <= (pair[1].0.0, pair[1].1.0))
+                );
+            }
+        }
     }
     #[test]
     fn mixed_physical_nodes_namespaces_and_references() {

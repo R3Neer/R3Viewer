@@ -27,6 +27,7 @@ impl AsRef<str> for SharedSource {
 fn failure(error: ModelError) -> StructureFailure {
     match error {
         ModelError::Cancelled => StructureFailure::WorkerExited,
+        ModelError::Timeout => StructureFailure::Timeout,
         ModelError::SourceLimit => StructureFailure::SourceBudget,
         ModelError::Budget => StructureFailure::ArenaBudget,
         ModelError::Depth => StructureFailure::Depth,

@@ -631,6 +631,7 @@ impl Drop for Connection {
 fn model_error(error: ModelError) -> WorkError {
     match error {
         ModelError::Cancelled => WorkError::Cancelled,
+        ModelError::Timeout => WorkError::Failure(StructureFailure::Timeout),
         ModelError::SourceLimit => WorkError::Failure(StructureFailure::SourceBudget),
         ModelError::Budget => WorkError::Failure(StructureFailure::ArenaBudget),
         ModelError::Depth => WorkError::Failure(StructureFailure::Depth),

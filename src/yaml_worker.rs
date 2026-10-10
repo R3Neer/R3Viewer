@@ -15,6 +15,7 @@ fn error(e: ModelError) -> Failure {
         ModelError::Budget => Failure::ArenaBudget,
         ModelError::Depth => Failure::Depth,
         ModelError::Cancelled => Failure::WorkerExited,
+        ModelError::Timeout => Failure::Timeout,
         ModelError::Invalid => Failure::YamlRepresentation,
     }
 }

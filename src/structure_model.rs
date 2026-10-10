@@ -146,6 +146,7 @@ struct Declaration {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelError {
     Cancelled,
+    Timeout,
     SourceLimit,
     Budget,
     Depth,
@@ -155,6 +156,7 @@ impl fmt::Display for ModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Cancelled => "structure cancelled",
+            Self::Timeout => "structure validation timed out",
             Self::SourceLimit => "structure source limit exceeded",
             Self::Budget => "structure budget exceeded",
             Self::Depth => "structure depth exceeded",

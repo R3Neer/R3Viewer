@@ -13,6 +13,7 @@ use std::{
 fn error(e: ModelError) -> Failure {
     match e {
         ModelError::Cancelled => Failure::WorkerExited,
+        ModelError::Timeout => Failure::Timeout,
         ModelError::SourceLimit => Failure::SourceBudget,
         ModelError::Budget => Failure::ArenaBudget,
         ModelError::Depth => Failure::Depth,
