@@ -1,0 +1,9 @@
+# Presencia física del pack en worker R5 — revisión independiente
+
+SIN_CRITICAS_PENDIENTES limitado a esta investigación. Manifest raíz CA760D9BFA8EFFA4A8407B28D9A5906993D52AFED3294ED0A509D3D2AD014195:9/9 entradas y6/6 inputs bytes/SHA verificados. Propio scanner identificado antes de output, ejecutado por Python instalado; worker NO ejecutado. Se usa pack reconstruido por este revisor en bundle-own-r1, no el match extraído por raíz.
+
+El worker exacto B68C86DF5CACD47EA66D36AB8A80E48F1BBCA47FA48499C241C4D21550BB52B3 contiene TODOS355889bytes del pack301A65C46F0B86764BBF557674616EA899CBE67C402E48751EB3AEA6B7B62C51 exactamente una vez, offset8027880. Cabecera PE y tabla de secciones leídas con bounds: intervalo entero incluido en.rdata. Extracción propia compara bytes completos y SHA idéntico, sin búsqueda de prefijo/muestra ni normalización.
+
+Lectura separada del build.rs y syntax_worker.rs congelados: build genera bundled.syntax.pack desde defaults+TOML/Nu/PowerShell ordenados; bundled_syntaxes cfgWindows usa include_bytes!(OUT_DIR/bundled.syntax.pack); run_worker llama bundled_syntaxes. Canónico y freeze syntax_worker tienen hashes distintos registrados: no se afirma igualdad de archivos por semejanza de loader.
+
+Esto demuestra presencia física en ESE candidato y lectura del código de carga, no pointer/camino dinámico probado, ejecución real del loader, embedding final release, instalación/distribución, otros plataformas, licencias exhaustivas ni RV501. No ejecutable modificado, no código canónico/freeze escrito. No reemplaza el cierre estrecho previo de reproducibilidad ni amplía su alcance.
