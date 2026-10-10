@@ -1,0 +1,11 @@
+# Contraste de diseño R4 ingress — 2026-10-10
+
+SIN_CRITICAS_PENDIENTES limitado al mecanismo de diseño focal descrito por MECHANISM-R4-final-before-ingress-output.md SHA 2C7167675EFA2FE2CCA9F259D111FDA5D4C4CC7071C97FD7EC4DF36F2017D1B7. No es aceptación productiva R4 ni cierre de I01/P01 mediante runtime.
+
+Identidad propia: handoff reader MANIFEST 0BEEAB806C616436958152B7D763661EBD9C4281D8794CCF41C4B278370BDC20, ocho entradas bytes/SHA conformes; focal D784C29E2CA643A2FB5977508934C3FDF66A8F83549D8122CD4276E2105DE43B, 19139B. Snapshot matches_operation manifest 4DC6C5CD54720734C44AA691DC07033E2F3426B8FDB30443566438D892E1D605; fuente 5CE43D56926B73FD4B7106EA84F5FAC69962E584BAB9CE22841B30040C39A49E, 6133B; getter delega a operation.same sin campos nuevos.
+
+El control accepted-sequence se publica sólo tras canal Ok o inserción efectiva del primer overflow. Getter Acquire no toma, escanea ni asigna; ack de evento realmente consumido no borra una señal posterior. Metadata precede allocations/spawn y ReaderParts retiene lease físico. Esto acredita CodeAE del handoff, no runtime de la copia focal: el bin adjunto procede de una fuente de sesión distinta.
+
+La nota final obliga identidad opaca authority+SAMEoperation antes control/peek, distingue ScopePending de cuota/físico y conserva NEW evento dentro cola pagada durante busy. Materialización preadmite estructuras reales antes next_event. CodeIngressEvent conserva préstamo exclusivo del slot latest financiado y sus leases; release_for_mandatory mueve ese préstamo a CodeMandatoryEventLoan y sólo dropea Phase, con spent persistente. El evento y padre siguen vivos durante viewport/draw/flush; CURRENT sólo después de flush/history reales y nueva fase SAMEoperation cobrada. Drop sin ack retiene latest; no SeqEvent suelto ni captura gratis.
+
+La comparación ordered/color y request supersede declaran preadmisión SAMEphase antes tomar/mutar, mismo Child/gen/input/context y rechazo oldevent. Es implementable como dirección documental. La derivación known_next_event_work_bytes y bridge.matches_ingress aún requieren fuente exacta del freeze final, compilación y AE propia de costes 0/K-1/K, new-event busy/ack/exit/lastDrop y O06. Originales DS/O/DF/DM y FAIL R1-R3 intactos; no adopción de D2c completo, D4c/Inline ni QA. No se leyó product R4 mutable ni se ejecutó candidato.
