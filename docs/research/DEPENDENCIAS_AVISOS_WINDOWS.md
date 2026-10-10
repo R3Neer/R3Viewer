@@ -48,3 +48,15 @@ Capturas, árboles originales y script permanecen privados en .tmp/root-dependen
 [Investigación de fuentes fijadas](AVISOS_GRAMATICAS.md) y [dictamen final R2](../reviews/Gramaticas-avisos-r2.md): 74/74 gramáticas del árbol Packages fijado verificadas por bytes/SHA256/blob Git; fuentes del cargador y generador Syntect2/2 cotejadas. Avisos propios MIT identificados en C# y YAML; cinco coincidencias restantes son tokens de gramática. La revisión independiente se limita a exactitud y clasificación: no acredita ausencia legal exhaustiva, procedencia del dump generado ni avisos finales del bundle. RV-501 sigue pendiente.
 
 La [reconstrucción íntegra del dump base](REPRODUCIBILIDAD_DUMP_GRAMATICAS.md) y la del [pack local con tres adiciones](REPRODUCIBILIDAD_PACK_LOCAL.md) cuentan ahora con compilación y ejecución independientes. Se acredita reproducibilidad actual byteexacta; no autoría histórica, embedding final ni avisos exhaustivos/distribución. Estas comprobaciones amplían la investigación anterior sin cerrar RV-501.
+
+## Ensamblaje privado de avisos R2
+
+2026-10-10. [Revisión independiente del ensamblaje](../reviews/Dependencias-avisos-ensamblaje-Windows-r2.md) sin críticas pendientes para copia mecánica, procedencia registrada y privacidad del índice. Receta propia del adversario: 275 paquetes, 467 avisos y 2.252.777 bytes; comparación íntegra contra origen y candidato congelado. Universo de IDs exactamente igual al metadata, siete hashes de blob Git recalculados, ledger e índice iguales. No nueva validación remota de pertenencia de esos blobs al árbol histórico.
+
+El índice público usa 275 package_ref relativos únicos y referencias a avisos; ninguna ruta local, URL de archivo, ruta UNC/Unix absoluta o carpeta de caché. El ledger de procedencia con rutas originales permanece privado. Las alternativas declaradas y todos los textos se preservan, sin normalizar, deduplicar entre paquetes, elegir licencias ni inventar titulares.
+
+R1 se conserva rechazado para el índice: diez IDs Cargo locales exponían rutas absolutas. El registro notice-staging-r1-index-rejection.json y sus archivos no cambiaron. R2 corrige la construcción del índice y reproduce los mismos bytes y correspondencias. El primer comprobador histórico del adversario usó una clave equivocada y contó cero; su fallo está preservado y la corrección posterior acredita diez, sin cambiar R1 ni R2.
+
+Raíz leyó el dictamen y cotejó 487/487 evidencias independientes. Candidato privado .tmp/root-dependency-inventory-2026-10-10/notice-staging-r2: manifest7B3ED94CE1EAE2A7EA075B3DEF3FDB67345CA103277EC0C728D60DD056C4CA8F. Evidencia independiente .tmp/d4b-scheduler-adversary-2026-10-10/notice-staging-own-r2: manifestF0450D38006A18F34FE113DBDF467236E85A43BCFE45751A5E94A1D22B3B725B; informe4EFD8280D8F7344D59B68BC11E9A21C352DE5CBFE574DA5D2299281ADA5F6C27.
+
+Esta aceptación no adopta los avisos como bundle final. El inventario sigue siendo superset Cargo Windows con build/dev/runtime; recursos de gramáticas/motores, fuentes/codecs, cierre por artefacto/plataforma, derechos exhaustivos y RV-501 siguen pendientes. No se ejecutó, instaló o publicó el producto.
