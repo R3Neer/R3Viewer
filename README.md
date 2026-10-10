@@ -136,3 +136,5 @@ HTML estático: [contrato R2 revisado](docs/refinement/HTML-STATIC-DOM.md), con 
 
 
 PDF: [diseño de integración revisado](docs/refinement/PDF-PRODUCT-INTEGRATION.md) para páginas, raster, capa textual, búsqueda e historial. Los experimentos aceptados sirven de base; todavía no hay visor PDF productivo ni QA gráfica acreditada.
+
+HTML ResponseLease: [diseño R3 incorporado](docs/refinement/HTML-RESPONSE-LEASE.md) tras revisión independiente sin críticas; [adopción y límites](docs/reviews/HTML-response-lease-adoption-r3.md). Guard opt-in, callback estable y cierre conjunto físico de respuesta/worker definidos. SDK/conversor aún no implementados ni aceptados.
