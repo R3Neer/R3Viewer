@@ -491,3 +491,6 @@ Sesión Markdown privada: panel6 conserva discrepancia de fidelidad tras corregi
 
 
 2026-10-10: [investigación de fuentes MathJax/Mermaid publicadas](research/MOTORES_FUENTES_PUBLICADAS.md) con [dictamen R1 evidencia+R2 texto](reviews/Motores-publicados-fuentes-r2.md). Tarballs/inventarios completos y23selecciones comprobados por revisor; raíz cotejó38/38 evidencias. MM-PATH01 confirma que el predicado de contención admite parent/sibling fuera, sin explotación completa acreditada; gate de integración propia permanece abierto. Observador Windows fallido y corrección textual preservados. No diseño de motor, runtime, instalación, QA ni cierre RV302/303/501.
+
+
+2026-10-10: [replay raíz del inventario PDF D1 R1](reviews/PDF-product-d1-root-replay-r1.md),2737/2737 archivos exactos e inventario1/familia12PASS sobre host congelado del autor, SHA pre/post igual. Revisión independiente activa; no adopción ni aceptación por asociación de registry, supervisor/IO, PDFium/EOF/Job/publicación o navegación. D2 preparado en corte separado; P1/RV204 y composición/QA/Unix pendientes.
