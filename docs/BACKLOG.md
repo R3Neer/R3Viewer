@@ -488,3 +488,6 @@ Sesión Markdown privada: panel6 conserva discrepancia de fidelidad tras corregi
 
 
 2026-10-10: [ensamblaje privado de avisos Cargo R2](research/DEPENDENCIAS_AVISOS_WINDOWS.md#ensamblaje-privado-de-avisos-r2) con [revisión independiente cerrada](reviews/Dependencias-avisos-ensamblaje-Windows-r2.md).275paquetes/467copias verbatim/índice relativo sin rutas locales, reconstrucción propia exacta; raíz cotejó487/487 evidencias. R1 conserva rechazo por10IDs y observador fallido histórico. No bundle final, elección de licencias, recursos de motores, exhaustividad legal ni cierre RV501.
+
+
+2026-10-10: [investigación de fuentes MathJax/Mermaid publicadas](research/MOTORES_FUENTES_PUBLICADAS.md) con [dictamen R1 evidencia+R2 texto](reviews/Motores-publicados-fuentes-r2.md). Tarballs/inventarios completos y23selecciones comprobados por revisor; raíz cotejó38/38 evidencias. MM-PATH01 confirma que el predicado de contención admite parent/sibling fuera, sin explotación completa acreditada; gate de integración propia permanece abierto. Observador Windows fallido y corrección textual preservados. No diseño de motor, runtime, instalación, QA ni cierre RV302/303/501.
