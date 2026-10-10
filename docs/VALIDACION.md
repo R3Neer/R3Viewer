@@ -73,3 +73,8 @@ XML D4 R1 tiene [revisión y aceptación funcional parcial Windows](reviews/S03-
 
 
 XML R1: [addendum inline](reviews/S03-XML-inline-r1.md) aporta timeout del controlador real bajo suspensión propia y Fuente completa, exit0 y reap/residuos correctos, con inspección independiente. Tiempo final observado incluye escritura/drenaje; medición aislada, carreras adicionales/estrés y visual/Unix siguen pendientes. No cierre de RV ni modificación de código por esta evidencia.
+
+
+## Actualización focal de S03 — 2026-10-10
+
+El [timeout XML](research/S03_XML_TIMEOUT.md), el [spike de propagación Onig](research/S03_ONIG_PROPAGACION.md), el [catálogo de78gramáticas](research/S03_CATALOGO.md) y los [controles nativos N01–03](research/S03_SINTAXIS_NATIVA.md) tienen aceptación focal documentada. Los estados anteriores se conservan como registro histórico. La auditoría de cierre y S03 siguen abiertos: estas evidencias no sustituyen las restantes pruebas Windows, QA visual ni contención/runtime Unix.
