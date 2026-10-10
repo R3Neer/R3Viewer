@@ -42,3 +42,7 @@ Capturas, árboles originales y script permanecen privados en .tmp/root-dependen
 ## Revisión independiente del inventario
 
 [Revisión final R1](../reviews/Dependencias-avisos-Windows-r1.md): SIN_CRITICAS_PENDIENTES para exactitud y procedencia sobre e960082. Reconstrucción ajena de275/458/ocho ausencias, commits/rutas y7capturas byteexactas contra blobs y árboles vivos. Atribuciones pendientes concretas: mcy incluye plantilla Apache sin copyright nominal; omnipath ofrece permiso MIT sin copyright nominal. No inventar titular/año al preparar avisos; investigación cerrada en este alcance, RV-501 y bundle final abiertos.
+
+## Avisos de gramáticas
+
+[Investigación de fuentes fijadas](AVISOS_GRAMATICAS.md) y [dictamen final R2](../reviews/Gramaticas-avisos-r2.md): 74/74 gramáticas del árbol Packages fijado verificadas por bytes/SHA256/blob Git; fuentes del cargador y generador Syntect2/2 cotejadas. Avisos propios MIT identificados en C# y YAML; cinco coincidencias restantes son tokens de gramática. La revisión independiente se limita a exactitud y clasificación: no acredita ausencia legal exhaustiva, procedencia del dump generado ni avisos finales del bundle. RV-501 sigue pendiente.

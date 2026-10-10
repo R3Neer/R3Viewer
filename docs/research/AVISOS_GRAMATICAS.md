@@ -1,0 +1,9 @@
+# Avisos de gramáticas fijadas
+
+2026-10-10. Captura pública de las 74 fuentes `.sublime-syntax` del árbol Packages fa6b8629c95041bf262d4c1dab95c456a0530122; 74/74 descargadas, 0 errores, cada blob Git y SHA256 comprobados de nuevo desde disco. El árbol incluye también Plain Text.tmLanguage, pero Syntect5.3.0 add_from_folder sólo carga `.sublime-syntax`; gendata añade Plain Text mediante definición propia. No se ha ejecutado generador ni cambiado producción.
+
+El barrido de candidatos encuentra avisos reales en C#/C#.sublime-syntax (líneas4–6, copyright2016 Sublime Text HQ Pty, @gwenzek, Matthew Winter @wintermi, Adam Lickel @lickel; referencia MIT) y YAML/YAML.sublime-syntax (líneas2–21, MIT completo, copyright2015 FichteFoll). Los otros cinco resultados están dentro de expresiones de tokens de Matlab, Objective-C, PHP, Python y R; sus coincidencias (license/licence o Permission, según el archivo) son tokens de gramática, no avisos legales. El permiso general de Packages y Rust/LICENSE.txt permanecen aplicables como fuentes separadas, sin completar titulares ausentes.
+
+Conservar texto original de los avisos y todos los titulares reales al generar distribución, en vez de usar sólo LICENSE de Syntect o de R3Viewer. La búsqueda por palabras no prueba ausencia de cualquier excepción legal, y el gitlink no prueba que el dump publicado se regenerara exactamente desde ese árbol. [Revisión independiente R2](../reviews/Gramaticas-avisos-r2.md) cerrada para exactitud y clasificación. Pendiente: vínculo semántico/serializado con el dump utilizado, avisos de derivaciones locales y bundle final. RV-501 sigue abierto.
+
+Fuente primaria fijada: https://github.com/sublimehq/Packages/tree/fa6b8629c95041bf262d4c1dab95c456a0530122 . El archivo CAPTURE-r1.json contiene URLs exactas por fuente, blobs Git, bytes y SHA256; ROOT-IDENTITIES-AND-CANDIDATES-R1.json contiene recomprobación y clasificación. No pruebas runtime, QA visual ni distribución.
