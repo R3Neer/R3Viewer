@@ -46,3 +46,5 @@ Capturas, árboles originales y script permanecen privados en .tmp/root-dependen
 ## Avisos de gramáticas
 
 [Investigación de fuentes fijadas](AVISOS_GRAMATICAS.md) y [dictamen final R2](../reviews/Gramaticas-avisos-r2.md): 74/74 gramáticas del árbol Packages fijado verificadas por bytes/SHA256/blob Git; fuentes del cargador y generador Syntect2/2 cotejadas. Avisos propios MIT identificados en C# y YAML; cinco coincidencias restantes son tokens de gramática. La revisión independiente se limita a exactitud y clasificación: no acredita ausencia legal exhaustiva, procedencia del dump generado ni avisos finales del bundle. RV-501 sigue pendiente.
+
+La [reconstrucción íntegra del dump base](REPRODUCIBILIDAD_DUMP_GRAMATICAS.md) y la del [pack local con tres adiciones](REPRODUCIBILIDAD_PACK_LOCAL.md) cuentan ahora con compilación y ejecución independientes. Se acredita reproducibilidad actual byteexacta; no autoría histórica, embedding final ni avisos exhaustivos/distribución. Estas comprobaciones amplían la investigación anterior sin cerrar RV-501.
