@@ -193,6 +193,20 @@ impl PresentationConfig {
             .colours;
         let overrides = file.colours;
         let override_value = overrides.value.is_some();
+        let role_overrides = [
+            overrides.heading.is_some(),
+            overrides.accent.is_some(),
+            overrides.secondary.is_some(),
+            overrides.value.is_some(),
+            overrides.success.is_some(),
+            overrides.error.is_some(),
+            overrides.process.is_some(),
+        ];
+        let inherited = if theme == Theme::Auto {
+            cli.nu_palette_value.unwrap_or_default()
+        } else {
+            crate::nu_palette::NuPalette::default()
+        };
         if let Some(x) = overrides.heading {
             colours.heading = x;
         }
@@ -227,8 +241,18 @@ impl PresentationConfig {
         for (index, value) in values.iter().enumerate() {
             palette[index] = parse_colour(value)?;
         }
+        for (index, colour) in inherited.roles.iter().enumerate() {
+            if !role_overrides[index]
+                && let Some(colour) = colour
+            {
+                palette[index] = *colour;
+            }
+        }
         // Auto inherits terminal foreground rather than assuming dark background.
-        if theme == Theme::Auto && !override_value {
+        if theme == Theme::Auto
+            && !override_value
+            && inherited.roles[Role::Value as usize].is_none()
+        {
             palette[Role::Value as usize] = Color::Reset;
         }
         Ok(Self {
@@ -324,5 +348,37 @@ mod tests {
         let file = toml::from_str::<UserConfig>("[colours]\nheading='red'").unwrap();
         assert!(PresentationConfig::resolve(&cli, file, false, false, false).is_err());
         assert!(parse_colour("#🦊ab").is_err());
+    }
+    #[test]
+    fn nu_foreground_precedence_and_auto_value_presence() {
+        let raw = r#"{"v":1,"roles":{"heading":{"ansi":2},"value":{"rgb":[18,52,86]},"success":{"default":true}}}"#;
+        let mut cli = Cli::parse_from(["viewer", "--nu-wire", "--nu-palette", raw]);
+        cli.prepare_metadata().unwrap();
+        assert!(cli.nu_palette.is_none());
+        let c =
+            PresentationConfig::resolve(&cli, UserConfig::default(), true, false, false).unwrap();
+        assert_eq!(c.palette[0], Color::Indexed(2));
+        assert_eq!(c.palette[3], Color::Rgb(18, 52, 86));
+        assert_eq!(c.palette[4], Color::Reset);
+        assert_eq!(c.palette[5], Color::Rgb(245, 90, 90));
+        let file =
+            toml::from_str::<UserConfig>("[colours]\nvalue='#aabbcc'\nheading='default'").unwrap();
+        let c = PresentationConfig::resolve(&cli, file, true, false, false).unwrap();
+        assert_eq!(c.palette[0], Color::Reset);
+        assert_eq!(c.palette[3], Color::Rgb(170, 187, 204));
+        cli.theme = Some(Theme::Light);
+        let c =
+            PresentationConfig::resolve(&cli, UserConfig::default(), true, false, false).unwrap();
+        assert_eq!(c.palette[0], Color::Rgb(18, 104, 117));
+        assert_eq!(c.palette[3], Color::Rgb(32, 36, 43));
+        cli.theme = Some(Theme::Auto);
+        cli.colour = Some(Colour::Never);
+        let c =
+            PresentationConfig::resolve(&cli, UserConfig::default(), true, false, false).unwrap();
+        assert_eq!(c.style(Role::Heading), Style::default());
+        cli.colour = Some(Colour::Always);
+        let c =
+            PresentationConfig::resolve(&cli, UserConfig::default(), false, false, false).unwrap();
+        assert_eq!(c.style(Role::Heading), Style::default());
     }
 }

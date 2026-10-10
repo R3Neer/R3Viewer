@@ -9,6 +9,11 @@ pub struct Cli {
     /// Transporte privado del companion Nushell.
     #[arg(long, hide = true)]
     pub nu_wire: bool,
+    /// Foreground presentation projected by the private Nu module.
+    #[arg(long, hide = true, requires = "nu_wire")]
+    pub nu_palette: Option<String>,
+    #[arg(skip)]
+    pub(crate) nu_palette_value: Option<crate::nu_palette::NuPalette>,
     /// Imprimir en el scrollback y terminar.
     #[arg(short = 'i', long)]
     pub inline: bool,
@@ -57,6 +62,22 @@ pub enum Format {
 }
 
 impl Cli {
+    /// Decode and drop argv metadata before configuration clones or document I/O.
+    pub fn prepare_metadata(&mut self) -> Result<(), crate::input::InputError> {
+        if let Some(raw) = self.nu_palette.take() {
+            if !self.nu_wire {
+                return Err(crate::input::InputError::new(
+                    2,
+                    "--nu-palette requiere --nu-wire",
+                ));
+            }
+            self.nu_palette_value =
+                Some(crate::nu_palette::NuPalette::parse(&raw).map_err(|_| {
+                    crate::input::InputError::new(2, "metadata de paleta Nu inválida")
+                })?);
+        }
+        Ok(())
+    }
     /// Validate option semantics before configuration or document I/O.
     pub fn validate(&self) -> Result<(), crate::input::InputError> {
         if self.structure && self.format == Format::Text {

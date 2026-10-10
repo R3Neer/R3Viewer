@@ -121,3 +121,5 @@ mod document_provider_gate_tests;
 
 #[cfg(test)]
 mod document_resource_owner_tests;
+
+pub mod nu_palette;

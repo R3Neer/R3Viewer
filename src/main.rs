@@ -10,60 +10,66 @@ use std::{
 };
 
 fn main() -> ExitCode {
-    let document_args: Vec<_> = std::env::args_os().skip(1).take(5).collect();
-    if document_args
-        .first()
-        .is_some_and(|arg| arg == "--document-worker")
     {
-        if document_args.len() != 4 {
-            return ExitCode::from(75);
-        }
-        let parsed = (
-            document_args[1]
-                .to_str()
-                .and_then(|s| s.parse::<u64>().ok()),
-            document_args[2]
-                .to_str()
-                .and_then(|s| s.parse::<u64>().ok()),
-            document_args[3]
-                .to_str()
-                .and_then(|s| s.parse::<usize>().ok()),
-        );
-        return match parsed {
-            (Some(generation), Some(request), Some(handle)) => {
-                if r3viewer::document_worker::run_private_stdio(generation, request, handle).is_ok()
-                {
-                    ExitCode::SUCCESS
-                } else {
-                    ExitCode::from(75)
+        let document_args: Vec<_> = std::env::args_os().skip(1).take(5).collect();
+        if document_args
+            .first()
+            .is_some_and(|arg| arg == "--document-worker")
+        {
+            if document_args.len() != 4 {
+                return ExitCode::from(75);
+            }
+            let parsed = (
+                document_args[1]
+                    .to_str()
+                    .and_then(|s| s.parse::<u64>().ok()),
+                document_args[2]
+                    .to_str()
+                    .and_then(|s| s.parse::<u64>().ok()),
+                document_args[3]
+                    .to_str()
+                    .and_then(|s| s.parse::<usize>().ok()),
+            );
+            return match parsed {
+                (Some(generation), Some(request), Some(handle)) => {
+                    if r3viewer::document_worker::run_private_stdio(generation, request, handle)
+                        .is_ok()
+                    {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::from(75)
+                    }
                 }
-            }
-            _ => ExitCode::from(75),
-        };
-    }
-
-    let mut private_args = std::env::args_os().skip(1);
-    let private = private_args.next();
-    if private_args.next().is_none() {
-        let worker = match private.as_deref() {
-            Some(arg) if arg == "--syntax-worker" => {
-                Some(r3viewer::syntax_worker::run_private_stdio())
-            }
-            Some(arg) if arg == "--structure-worker" => {
-                Some(r3viewer::structure_worker::run_private_stdio())
-            }
-            _ => None,
-        };
-        if let Some(result) = worker {
-            return if result.is_ok() {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(75)
+                _ => ExitCode::from(75),
             };
         }
     }
-    let cli = Cli::parse();
-    if let Err(error) = cli.validate() {
+
+    {
+        let mut private_args = std::env::args_os().skip(1);
+        let private = private_args.next();
+        if private_args.next().is_none() {
+            let worker = match private.as_deref() {
+                Some(arg) if arg == "--syntax-worker" => {
+                    Some(r3viewer::syntax_worker::run_private_stdio())
+                }
+                Some(arg) if arg == "--structure-worker" => {
+                    Some(r3viewer::structure_worker::run_private_stdio())
+                }
+                _ => None,
+            };
+            if let Some(result) = worker {
+                return if result.is_ok() {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::from(75)
+                };
+            }
+        }
+    }
+
+    let mut cli = Cli::parse();
+    if let Err(error) = cli.prepare_metadata().and_then(|_| cli.validate()) {
         eprintln!("r3viewer: {}", text::safe_text(&error.message));
         return ExitCode::from(error.code);
     }
