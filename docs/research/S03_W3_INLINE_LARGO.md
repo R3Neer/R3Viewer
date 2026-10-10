@@ -11,3 +11,7 @@ Nu propio15008 redirect y45320 terminal terminan0; Jobs internos baseline2→2/4
 Raíz verificó45/45 del final propio C2DB2A05C2B91287A9A9392E3889158F1B105754E39F3C2C8253220F79BD1B67; informe0CADDAA4454AE058C8A6DE9CD8CF20368C7E778D11C1D0E08AC8849EC288E6BE. Freeze autor91entradas47832B8AECC91460524729F109CEDF27B59CF3E562A174FD1BEAF72485D9B01B. Binarios normales baseline29993a0 y módulo anterior separados de C01; reproducción de copias exactas sin build propio. Cotejo/smoke del build canónico combinado pendiente y se registra aparte.
 
 La prueba acredita correspondencia textual bajo esas condiciones, no apariencia, fuentes/DPI, wraps, toda salida Unicode o Unix. No cierre S03/RV ni adopción de arneses.
+
+## Composición canónica C01/W3
+
+Una única redirección con el lector release canónico76154360…5131, companion6A95282D…049B y módulo256D691C…86EC pasó:298899bytes completos iguales a expected prospectivo, golden previo y golden nuevo. Nu34428exit0; EOF/wait/joins/cierres, Job interno2→2 y externo0, sin force/Pending. [Auditoría independiente de evidencia](../reviews/S03-W3-canonical-smoke-final.md) sin críticas, sin runtime propio nuevo ni nueva terminal. Freeze34entradas84F5EFAE03418C41D4B143EE36A66C4FA32F1D05C757A8F91D291B6C9194EE73 y preinput22 intactos; raíz cotejó34/34. La igualdad textual combinada queda aceptada; apariencia y Unix siguen pendientes.
