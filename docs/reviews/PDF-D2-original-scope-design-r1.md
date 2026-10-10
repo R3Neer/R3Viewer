@@ -1,0 +1,23 @@
+# PDF D2: adendum independiente original scope R1
+
+**SIN_CRITICAS_PENDIENTES limitado al delta de diseño exacto** manifest844E127BE75376DE4829A7F3B1BEA20C6A847051698A59A7FD5CB187D6DF9146, notaC3648782F8028F021350EDE5275B5653DDF068F8A94104E256C786B49B83C66C,4436B. No implementación, build, edición de código, spawn, FFI, DLL o runtime. No elusión del rechazo de auto-review: la propuesta separa el delta contractual congelado de cualquier acción posterior.
+
+PC05–06 y dictamen process-owner previos intactos. PO01–06 prospectivos físicos se fijaron antes de leer el nuevo candidato: ORACULOS-ORIGINAL-SCOPE-before-candidate.md SHA4FCDEC66466A4638F542BAD78299AD4E83BFF03B332F8204773A8BD3FA289F14. Se contrastaron actor, wire y process-owner canónicos actuales por lectura; no se usa build5 mutable como evidencia de implementación.
+
+## Contraste
+
+OriginalNativeScope privado/noClone/noDefault se obtiene de NativeStartLease original vivo, cobra sizeof real antes de clonar Shared/Core y conserva cancel/deadline/Exit originales, sin Instant/cancel elegidos por el caller. No tiene mintage de proceso. Esto conserva separación entre propiedad original y coincidencia de Arena; no crea un permiso a partir de un getter. Su posición inline en OwnedPdfProcess es realizable. La deducción sólo de ese componente ya pagado no permite deducir otros headers/capturas/errores/aliases; el inventario nuevo debe demostrar total simultáneo y capacidades, no estimates presentados como medición.
+
+resume_checked verifica scope original antes de attach/readback y nuevamente antes de ResumeThread, sin sustituirlo por un lease vivo distinto. Sólo retorno1 acredita la suspensión única esperada; -1/0/>1 conservan owner fallido. Cancelled/Deadline son causas tipadas, no Budget ni metadata/errorformat gratuitos. **El check anterior a ResumeThread no sustituye el gate original propio antes del primer envío START**: la implementación debe verificar ese gate y su sincronización, incluidos cancel/exit/deadline entre resume y START. El wire original sigue vigente; el delta no propone omitirlo.
+
+terminate_original es una operación de cleanup del HANDLE retenido, independiente de que el proceso haya sido asignado al Job. Permitida después de cancel/deadline original sin renovar request ni mintar nueva autoridad. TerminateJob/Jobclose no recoge un proceso fuera del Job. TerminateProcess sólo inicia terminación: wait original/GetExitCodeProcess, checked process/thread close, active0/Jobclose y pipes/joins/loan return permanecen recibos separados. Si falla terminate/wait/close se conserva proceso/hilo/capsule/registry/cargos en Pending, causa irreversible y gates ocupados; no Reaped por un enum o por retorno de API.
+
+Si attach devuelve fallo ambiguo o readback falla tras asignación, el owner debe conservar proceso y Job sin presumir ausencia de membresía; recoger ambas rutas originales y contrastar recibos. No OpenProcess/PID/nombre/newclient, no fuerza a terceros. Locks Registry→Shared breves y escrow prestado no admiten IO/lastDrop dentro locks. El backstop se dirige al core original registrado, no al Shared llamante. La propuesta conserva esta dirección y no declara que registry declarado o lease no mintado pruebe esas garantías.
+
+## Prospective AE y siguiente gate
+
+PO01–06 permanecen NOT_RUN. Exigir controles propios sobre fuente/bin exactos: fallo assign de proceso original suspendido fueraJob sin Resume/START/native; originalcancel/expireddeadline aunque caller nuevo esté vivo; scope0/N−1/exact antes aliases, cargos y Weak hasta últimoDrop real; attach/readback/resume cada frontera y retorno -1/0/>1; unwind tras cada adquisición/cierre fallido retenido; proceso original wait/exit/checkedclose separado de active0/Jobclose/EOF/joins/loan. Profile10s/cleanup2s intactos, sin nuevos plazos/cuotas o rescuer. No confundir exit0 tras cleanup con Ready del intento fallido.
+
+Es una dirección implementable, sin crítica accionable nueva de diseño. Autorización posterior de código/revisión automática debe evaluar el comando y su alcance concreto; este dictamen no convierte un rechazo anterior en aceptación del comando. O3 registry/mintage/hooks/backstop y O7 IO/native/supervisor/EOF/Job reales, financiación/inventario actualizado y AE independiente quedan pendientes. D1/sourceframing/Legacy/QA/distribución no reciben cierre por asociación.
+
+Lectura: se conservaron las fallas de búsqueda por glob literal PowerShell y por título del review usado como filename; se localizaron PDF-D2-PROCESS-OWNER.md y PDF-P1-WIRE.md reales antes de contrastar. Ningún fallo de runtime ni test ejecutado en este corte.
