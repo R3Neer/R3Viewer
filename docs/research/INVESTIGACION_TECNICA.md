@@ -110,3 +110,5 @@ Syntect5.3.0 default-syntaxes+regex-onig, Onig6.5.3/onig_sys69.9.3, sin temas ni
 
 
 2026-10-10: [fuentes publicadas MathJax/Mermaid contrastadas](MOTORES_FUENTES_PUBLICADAS.md) con revisión independiente de tarballs, selección, métricas y caminos de IO. MM-PATH01 confirmado en predicado sintético; frontera propia de recursos/red obligatoria antes integración. Investigación aceptada, motores/runtime/distribución/RV302/303/501 pendientes.
+
+2026-10-10: [NewCM publicado y avisos embebidos](NEWCM_FUENTES_AVISOS.md) con revisión independiente:105 WOFF2 contienen remisión GUST en copyright, frente a declaración Apache del paquete; ambas identidades separadas. Referencias primarias conservadas, origen Git exacto404 no verificado. Investigación cerrada en alcance limitado, diseño/motores/cobertura/distribución pendientes.
