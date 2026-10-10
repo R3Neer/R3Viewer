@@ -87,3 +87,7 @@ Todos requieren freeze fuentes/bin/lock/native/fixtures/oracle antes outputs, au
 5. P5 aceptación integrada amplia PDF+RV202/203/305/306 y fixtures autorizado Clases HEAD sólo lectura tras gates sintéticos; evidencia por task, visual Windows y Unix/macOS native runtime pendientes hasta plataforma disponible. Publicación/perfiles/bundle distribuidos siguen fuera autorización.
 
 No cerrar RV204 por P1/P2 ni por diseño sin críticas. RV202/203 sólo cierran cache/composición común y QA respectivos; RV305/306 necesitan caminos cruzados reales. Packaging/build provenance/licencias/Unix quedan pendientes visibles. El coordinador mantiene un sprint activo y decide secuencia por dependencias sin pedir decisiones cerradas Q04–Q08/Q11 otra vez.
+
+## Refinamiento de P1 aceptado sólo como diseño
+
+2026-10-10: [autoridad/recuperación R2](PDF-P1-ACTOR.md) y [oráculos prospectivos](PDF-P1-ACTOR-EXPECTED.json), con [adopción y límites](../reviews/PDF-P1-ACTOR-adoption-r2.md). Cinco hallazgos R1 resueltos documentalmente; D0 cerrado para actor, D1 inventario real, D2 implementación/AE y D3 integración pendientes. Wire/geometría R4 necesita revisión separada. No sustituye alcance P1–P5 ni acepta cuotas compiladas, runtime o QA.

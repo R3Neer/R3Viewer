@@ -1,0 +1,105 @@
+{
+  "status": "prospective_not_runtime",
+  "sourceR1": "8FE81576A7FFBF48725FCE1E9624F8A318EDB3BE9F44D8595AFBA7CEA724FC3A",
+  "revision": "R2 PA05 corrects author A07 explicitly; other original author A01-A12 unchanged; supplement R2-A13-A16",
+  "policy": "Single session-bound native residence per CLI process; independent CLI processes; bounded legacy Document+Syntax coexistence retained",
+  "independentCriteria": "PDF-P1-ACTOR-ORACULOS.md uses a distinct A01-A12 numbering set",
+  "oracles": [
+    {
+      "id": "A01",
+      "status": "NOT_RUN",
+      "expect": "A lease/core installed before acquisition; B native blocked, zero process spawn; alias may cancel A, no authority from matching numeric binding",
+      "fixture": "Same Shared alias and different Shared B request while A Starting at bootstrap barrier"
+    },
+    {
+      "id": "A02",
+      "status": "NOT_RUN",
+      "expect": "All actual handles/captures/leases retained by original core; no Idle from Drop; NeverSpawned distinguished; no Ready",
+      "fixture": "Native spawn, attach/readback, START and every thread acquisition fault"
+    },
+    {
+      "id": "A03",
+      "status": "NOT_RUN",
+      "expect": "B ForeignOwner cannot take capsule; A gets Reaping exactly once; original Shared wake/state updated only after physical proof; second retry Busy zero spawn",
+      "fixture": "A Pending live; different Shared B retry; same Shared A retry; concurrent aliases retry"
+    },
+    {
+      "id": "A04",
+      "status": "NOT_RUN",
+      "expect": "Strong retained Shared/core/capsule remains funded; B native blocked; orphan retry uses original authority and cause; no rescue by PID/new client",
+      "fixture": "A ExitIntent/drop while child/thread Pending, next session B"
+    },
+    {
+      "id": "A05",
+      "status": "NOT_RUN",
+      "expect": "No NativeReapProof/Idle until every actual join/close and active0; failure sticky prevents Ready even after reaping",
+      "fixture": "Valid End/EOF then writer panic, close failure, supervisor delayed exit"
+    },
+    {
+      "id": "A06",
+      "status": "NOT_RUN",
+      "expect": "Local kernel borrows same authority, no second native or quota, no deadlock, original connection survives and next viewport works; local capsules charged through lastDrop",
+      "fixture": "Syntax native worker stays Live after Styles; same Shared inspect/search/Codeprep local jobs sequentially"
+    },
+    {
+      "id": "A07",
+      "status": "NOT_RUN",
+      "expect": "Same SyntaxClient/scheduler/Shared, not same Connection: SourceLegacy/CodeDocument or changed BlockKey/input/OperationContext requires physical pause/reap and new Init; same valid input/context viewport may reuse connection. PDF waits physical retirement and native lease; old failed Styles/cause never replayed",
+      "fixture": "Source/Code identity change in same SyntaxClient, same-context viewport, then PDF during blocked native call"
+    },
+    {
+      "id": "A08",
+      "status": "NOT_RUN",
+      "expect": "Local physical owner stays under original Shared, borrowed kernel not Legacy OCCUPIED acquisition; native and local lifetimes distinct, model/scopes financed, no lock cleanup",
+      "fixture": "Local job Pending holding model; live Syntax response and PDF transition/cancel"
+    },
+    {
+      "id": "A09",
+      "status": "NOT_RUN",
+      "expect": "Registry hooks linearize reservation before family spawn; new session and native legacy cannot overlap; historic legacy family coexistence/signatures/quotas preserved; flags-only snapshot is FAIL",
+      "fixture": "Standalone legacy native concurrently races admission with new session; legacy family pair regression"
+    },
+    {
+      "id": "A10",
+      "status": "NOT_RUN",
+      "expect": "Admission before allocations and captures; H40/D24 requested profile intact; capacities and transient old/new actual; unknown native/runtime distinguished; last alias Drop required before refund",
+      "fixture": "Compiled exact/-1/+1 summed ledger for Text/Raster/Metadata and pending retry with old+new aliases"
+    },
+    {
+      "id": "A11",
+      "status": "NOT_RUN",
+      "expect": "No user callback, IO, joinlive, allocation or destruction of last financed object under arbiter lock; Retiring remains occupied until real retirement outside lock",
+      "fixture": "Lock instrumentation and allocator/destructor/close/join barriers on every phase and proof"
+    },
+    {
+      "id": "A12",
+      "status": "NOT_RUN",
+      "expect": "Cycle deliberately retained during Pending but broken after joins/proof; no leaked idle cycle; original capsule recovered, sticky errors retained, latest1/result1 charged; no detached handles",
+      "fixture": "Shared/core reference cycles, cancellation while cell InExecutor, executor spawn failure and panic"
+    },
+    {
+      "id": "R2-A13",
+      "status": "NOT_RUN",
+      "expect": "Guard owns exact physical capsule through every acquisition/error/unwind; returns it to original escrow without allocation or IO, never empty proof",
+      "fixture": "Panic before and after every partial factory acquisition and guard return"
+    },
+    {
+      "id": "R2-A14",
+      "status": "NOT_RUN",
+      "expect": "Last public ControlLifetime Drop sets ExitIntent without UI wait; registered original owner remains accessible, aliases funded and cycle broken only after physical retirement",
+      "fixture": "Last handle Drop during Running/Pending/Reaping and prepaid public aliases"
+    },
+    {
+      "id": "R2-A15",
+      "status": "NOT_RUN",
+      "expect": "Registry then Shared is only double-lock order; registration remains occupied through loan/reap/rollback Retiring, legacy hooks cannot bypass it",
+      "fixture": "Concurrent sessions, legacy family admission, foreign retry and NeverSpawned rollback"
+    },
+    {
+      "id": "R2-A16",
+      "status": "NOT_RUN",
+      "expect": "D1 measures actual compiled captures/layout and funds before allocation; D2 freezes same identities before independent physical AE; changes invalidate affected inventory",
+      "fixture": "D0-D3 sequence and capture/type/capacity changes"
+    }
+  ]
+}
