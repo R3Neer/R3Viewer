@@ -1,0 +1,9 @@
+# Guía QA y matriz CI S03 R3: SIN_CRITICAS_PENDIENTES preparación
+
+Candidato son exactamente tres snapshots físicos adjuntos; manifestselected identifica bytes/SHA, sin workflow activo. QP01 cerrado por bundle privado/fixtures/config/PowerShell/Nu y comandos build/calidad Windows/POSIX nativos con env/config y fail-stop. QP02 cerrado V11W3 aún pendiente de runtime/aceptación, no atribución por diseño. QP03 cerrado texto Fuente por defecto sinflag/--structure solicita Estructura inicialTUI acorde main203/viewer_session2969 y CLI. QP04 cerrado destinoCI nominalnuevo con guardnoexist ymkdir antes emptyconfig en ambas shells; sinborrar/sobrescribir.
+
+Cotejo incremental R2→R3 de dos documentos sólo correcciones anteriores; YAML unchangedpreparation_only/not_executed y todaslanespending. Gates originales V/U-G1–5/QA separados; no nuevasmatrices/intercalaciones/cuotas. Offline requiere deps preparadas, UnixBackend/PTYharness/pins/remote/disponibilidad quedan configuraciónejecución futura, no skippedPASS. Hostedjobtimeout no deadline/reap producto; capturas realesvisual no ConPTY/GridVT. Corpus sintético propio sinClases, sin instalación/perfil/publicación implícita.
+
+Referencias primarias cotejadas en lectura: runners/arquitecturas https://docs.github.com/en/actions/reference/runners/github-hosted-runners y dispatchdefaultbranch https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow . Labels son candidatos a revalidar en activación. Nuparseyaml autor sintáctico no acredita jobs; este revisor no ejecutó comandos de estas guías ni QAWindows/Unix/build/instalación/Actions.
+
+SIN_CRITICAS_PENDIENTES sólo como preparación solicitada. Puede integrarse documentación exacta; ejecución manual/CI configurada posterior y aceptación V/Unix/S03 permanecen abiertas. R1/R2/reviews críticas conservadas en directorio padre; no relabel de aceptación completa.

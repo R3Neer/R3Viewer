@@ -13,3 +13,7 @@ Al verificar cierre real de S03: conservar evidencia final, actualizar documenta
 ## Situación al fijar la parada
 
 S03 conserva aceptación funcional Windows parcial e incrementos integrados. QA visual y ejecución/contención Unix figuran pendientes en sus registros canónicos. Actualmente sólo se dispone de Windows, según respuesta del usuario; CI futura no está configurada ni autorizada por esta petición como publicación. El siguiente paso es auditar evidencia y completar trabajo ejecutable aquí antes de identificar cualquier dependencia externa imprescindible.
+
+## Resolución de preparación externa (2026-10-10)
+
+Ante la falta de hosts Unix y QA visual permitida, el usuario elige «Preparar una guía de QA manual y una matriz de CI local para configurar después». Se preparan y revisan ambos artefactos; esta decisión difiere su configuración/ejecución, sin sustituir pruebas por documentación ni declarar cerrado S03. Se completa el trabajo funcional ejecutable en Windows mientras V/U conservan dependencia explícita. No avanzar al siguiente sprint para ocultar esa dependencia.

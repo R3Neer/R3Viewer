@@ -80,3 +80,7 @@ XML R1: [addendum inline](reviews/S03-XML-inline-r1.md) aporta timeout del contr
 El [timeout XML](research/S03_XML_TIMEOUT.md), el [spike de propagación Onig](research/S03_ONIG_PROPAGACION.md), el [catálogo de78gramáticas](research/S03_CATALOGO.md) y los [controles nativos N01–03](research/S03_SINTAXIS_NATIVA.md) tienen aceptación focal documentada. Los estados anteriores se conservan como registro histórico. La auditoría de cierre y S03 siguen abiertos: estas evidencias no sustituyen las restantes pruebas Windows, QA visual ni contención/runtime Unix.
 
 Cancelación durante [preparación](research/S03_CANCELPREPARE.md) y [fronteras materiales YAML/XML](research/S03_MATERIAL.md) tienen aceptación focal independiente. Consultar el [estado vigente de cierre](sprints/S03-CIERRE.md) para separar resultados aceptados, controles en preparación y dependencias visuales/nativas; S03 continúa abierto.
+
+## Preparación externa S03 (2026-10-10)
+
+El usuario eligió preparar una [guía de QA manual](validation/S03-QA-MANUAL.md) y una [matriz CI local](validation/S03-CI-MATRIZ.md), con [datos YAML](validation/s03-ci-matriz.yml), para configurar y ejecutar posteriormente. [Revisión independiente](reviews/S03-preparacion-externa-final.md) sin críticas sobre la preparación; cuatro identidades verificadas. No se instaló WezTerm, añadió remoto, activó workflow ni ejecutó Linux/macOS o QA visual. Las lanes y V/U-G1–5 conservan estado pendiente; S03 sigue abierto.

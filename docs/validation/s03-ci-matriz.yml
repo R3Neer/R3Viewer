@@ -1,0 +1,32 @@
+schema_version: 1
+status: preparation_only_not_executed
+platforms:
+  - os: windows
+    runner_candidate: windows-2025
+    architecture_required: x86_64
+  - os: linux
+    runner_candidate: ubuntu-24.04
+    architecture_required: x86_64
+  - os: macos
+    runner_candidate: macos-14
+    architecture_required: arm64
+lanes:
+  - id: build_quality
+    status: pending
+  - id: nushell_contract
+    status: pending
+  - id: unix_containment_ug1_ug3
+    platforms: [linux, macos]
+    status: pending_backend_and_native_execution
+  - id: native_runtime_ug4_ug5
+    status: pending
+  - id: visual_qa_manual
+    hosted_ci: false
+    status: pending_manual_execution
+activation:
+  remote_configured: false
+  workflow_installed: false
+  actions_pins: unresolved_before_activation
+  rust_pin: unresolved_before_activation
+  nushell_pin: unresolved_before_activation
+  missing_gate_is_pass: false
