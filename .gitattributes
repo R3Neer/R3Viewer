@@ -45,3 +45,6 @@ tests/fixtures/source-common/** -text whitespace=cr-at-eol
 
 # Inspector fixtures retain reviewed source offsets and byte-exact model evidence.
 tests/fixtures/document-b3-inspector/** -text whitespace=cr-at-eol
+
+# Prospective HTML fixtures retain original encoding, CRLF and control bytes.
+docs/refinement/html-static-fixtures/** -text whitespace=cr-at-eol

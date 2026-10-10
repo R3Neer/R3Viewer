@@ -1,0 +1,15 @@
+# Adopción del diseño HTML estático R2
+
+2026-10-10. Base canónica f04954817ecd3afc1e07dc30ad6527852632286b. Se incorpora el contrato de representación estática HTML, sus oráculos y 23 fixtures sintéticas, tras revisión independiente iterativa. No código, parser, Cargo, SDK ni perfiles modificados.
+
+[Contrato final](../refinement/HTML-STATIC-DOM.md), [oráculos previos](../refinement/HTML-STATIC-DOM-ORACULOS.md), [dictamen independiente](HTML-static-dom-plan-r2.md). HTML5 reparado, fuente original y documento visual son representaciones distintas; se preservan texto mixto, atributos, namespaces, templates, origen/base y raw. Controles sólo lectura, sin JS/CSS activo, envío ni carga automática de recursos. from html/from htm son companion opcional, separado de la integración viewer.
+
+HD-R1-01 resuelto en diseño: radio y select efectivos, selectedcontent y clones tienen resultados fijados antes de runtime. Atributos originales y estado efectivo se conservan separados; clones poseen identidad y derivación acreditadas, sin spans originales inventados. Las 20 fixtures R1 permanecen byteexactas y tres suplementos se añaden prospectivamente. El rechazo R1 y versiones intermedias se conservan fuera de Git. No se deducen goldens de un parser ejecutado.
+
+El adversario mantiene sus 16 familias originales previas y emite SIN_CRITICAS_PENDIENTES limitado al diseño R2. Raíz verifica los 27 archivos del manifest por SHA/tamaño, el sello y las 20 fixtures originales contra R1. La regla específica de atributos conserva sus bytes en Git. Esta verificación no es ejecución ni aceptación del producto.
+
+Identidades privadas: propuesta A3F0C5D87CD674DE4BD5B5C8D0A508C41718B1DAB2F7C9EF083C7A93DC8E913D; oráculos 617767C3263AEDE31FB036ACF9643C5260937C9C1E8FDB4105474C432D3A1F6C; manifest B7D16F52B724609504E61B284520C8A0B0F4F0C50AA87522C4E9EBF27FD80973; sello 162E1C2AC44DD5E44A6C90B057A83F9009797E0DAFE12EB30FAE44D8771ACF25; revisión 7155350A710D7B0A9BE6538B8CCBF45D83A359CDDB5F2EEB13F7386A35FD3665. Copias canónicas normalizadas a LF e identificadas por prefacio; fixtures sin normalización.
+
+Próximo gate focal: ResponseLease del CallId real conserva Value completo, cargos y slot durante init_write/error recursivo/write/flush/error/unwind y hasta liberación física. El SDK mantenido no expone aún ese guard. Deben fijarse transferencia entre clones/contextos, doble registro, errores previos y writer bloqueado, sin mutex de registro durante IO ni anuncio de cobertura de streamwriters. Requiere diseño concreto y CodeAE/AE antes del conversor productivo; el spike de registro Nu ya cerrado no se repite.
+
+También pendientes lock/licencias de parser/decoder, sink/finalizer y cargos reales, controlador/protocolo/quarantine/HTML adapter, origen HTTP final acreditado, navegación compartida y recursos explícitos. Cuotas numéricas son candidatas a comprobar, no garantía de aceptar cualquier HTML de ese tamaño ni memoria total de Nushell. No runtime, QA visual ni Unix acreditados; RV-401/402/403/404 siguen abiertas.

@@ -130,3 +130,6 @@ El [fix del bloque contenedor de recursos](docs/reviews/Markdown-B2-resource-own
 Fuente compartida: [biblioteca R2 integrada](docs/reviews/Markdown-Source-common-adoption-r2.md), con aceptación independiente y 132 controles de composición PASS. Comparte modelo/contexto y contabiliza aperturas del viewport; conexión a sesión interactiva y Hash común aún pendientes.
 
 Inspector y admisión física: [biblioteca R2 integrada](docs/reviews/Markdown-inspector-gate-adoption-r2.md), con [aceptación independiente](docs/reviews/Markdown-inspector-gate-acceptance-r2.md) y219pruebas distintas de composición PASS. Inspección desde posición/hit real, procedencia paginada y gate de dos proveedores scoped conservan owner, estado y cargos físicos. La conexión a la sesión interactiva y la ejecución de acciones de Fuente siguen pendientes; el comando mantiene Fuente con aviso.
+
+
+HTML estático: [contrato R2 revisado](docs/refinement/HTML-STATIC-DOM.md), con DOM y fuente separados, controles de solo lectura y from html opcional. Es diseño aceptado, aún sin conversor ni vista HTML productivos; [gates y límites](docs/reviews/HTML-static-dom-adoption-r2.md).
