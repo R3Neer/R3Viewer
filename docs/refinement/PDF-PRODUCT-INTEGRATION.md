@@ -91,3 +91,5 @@ No cerrar RV204 por P1/P2 ni por diseño sin críticas. RV202/203 sólo cierran 
 ## Refinamiento de P1 aceptado sólo como diseño
 
 2026-10-10: [autoridad/recuperación R2](PDF-P1-ACTOR.md) y [oráculos prospectivos](PDF-P1-ACTOR-EXPECTED.json), con [adopción y límites](../reviews/PDF-P1-ACTOR-adoption-r2.md). Cinco hallazgos R1 resueltos documentalmente; D0 cerrado para actor, D1 inventario real, D2 implementación/AE y D3 integración pendientes. Wire/geometría R4 necesita revisión separada. No sustituye alcance P1–P5 ni acepta cuotas compiladas, runtime o QA.
+
+2026-10-10: [wire/geometría/alfa R5](PDF-P1-WIRE.md) aceptado sólo D0, con [dictamen y límites](../reviews/PDF-P1-WIRE-adoption-r5.md). Completa contratos actor+transporte para D1, sin aceptar API nueva, pixels, ledger compilado, runtime, P1 ni RV. T01–T16/P01–P26 NOT_RUN y P2–P5 intactos; sustituye R4 como referencia vigente, sin alterar el texto histórico anterior.

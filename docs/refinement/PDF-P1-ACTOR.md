@@ -1,4 +1,4 @@
-> Contrato de diseño aceptado tras revisión adversaria R2 el 2026-10-10. El texto congelado siguiente conserva su estado histórico de propuesta; la aceptación no acredita código ni runtime. Véanse PDF-P1-ACTOR-adoption-r2.md y PDF-P1-ACTOR-plan-r2.md en ../reviews. Wire/geometría R4 permanece pendiente de revisión independiente. El apéndice extrae únicamente el inventario importado de R1; su antigua dependencia circular queda sustituida por D0–D3 de R2.
+> Contrato de diseño aceptado tras revisión adversaria R2 el 2026-10-10. El texto congelado siguiente conserva su estado histórico de propuesta; la aceptación no acredita código ni runtime. Véanse PDF-P1-ACTOR-adoption-r2.md y PDF-P1-ACTOR-plan-r2.md en ../reviews. Referencia actual: [wire/geometría R5](PDF-P1-WIRE.md), revisada sólo como diseño; R4 conserva su estado histórico. El apéndice extrae únicamente el inventario importado de R1; su antigua dependencia circular queda sustituida por D0–D3 de R2.
 
 # PDF P1: autoridad y recuperación R2 candidata
 
