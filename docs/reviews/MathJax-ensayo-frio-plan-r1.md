@@ -1,0 +1,31 @@
+# Dictamen independiente: plan de ensayo frío MathJax R1
+
+**SIN_CRITICAS_PENDIENTES para dirección de diseño del ensayo privado exacto**, propuesta FB0D4E5198985FC5A16729B07593EC629433F6E41996256BE310B1B891F49611 + corpus prospectivo MANIFEST-before-review B5807E09CE5B8C83C362541AC567817F5C1E9D427B17ED3DF3DE7E0685E0F5AC. No se acepta engine, implementación del guardian, perfil de producto o runtime. No se ejecutó Node, MathJax, npm, módulos, fonts o conversiones.
+
+Criterios MC01–08 propios fijados antes de leer plan/corpus, SHA5A1691B87311B452100CC8E2D199C84970677923BFF79F2E8C5D108E4C636725. Se contrastaron arquitectura/VALIDACION/RV303 y la investigación de API directa previamente revisada. Propuesta y corpus2/2 bytes/SHA coinciden. El corpus conserva estado PROPOSED_NOT_RUN.
+
+## Contraste y condiciones de ejecución futura
+
+MC01 PASS diseño: assembly sólo de tarballs contrastados, validación de todas rutas e inventario/capacidades, sin package scripts ni descarga implícita. La resolución debe conservar imports relativos y exportmaps reales al elegir destinos; mapa numérico no autoriza reescritura incompleta. Si falta dependencia o se supera cap, fallo preservado y revisión prospectiva antes de ampliar. La selección previa de doce módulos no equivale a closure; el plan lo reconoce.
+
+MC02/07 PASS dirección: etapa B previa a cualquier import MathJax, mismo proceso e hilo primario retenidos, CreateProcess suspendido/HANDLE_LIST de tres stdio, asignación/readback del Job antes resume, shim START antes import. Recibos parent de wait/EOF/active0/close separados de reportes del hijo. Los detalles Win32 revisados en PDF process-owner también aplican a esta llamada propia: flags/handles válidos, payload HANDLE_LIST estable hasta Delete, Resume==1 para suspensión única, partial acquisition bajo owner y cierre verificado. Si assign falla antes de pertenecer al Job, matar SAMEJob no recoge ese hijo por sí solo: setup parcial debe recoger el proceso original, sin spawn rescuer. Esta obligación de ownership es parte de los controles parciales previstos, no aceptación desde SDK.
+
+MC03 PASS diseño: loader cerrado por claves exactas de manifest, no contenido TeX→import arbitrario; no require/autoload/HTML/menú/SRE en este perfil experimental. El hook propio debe instalarse antes de la primera carga que lo necesite, incluido fontdata/retries. Imports estáticos y los efectos anteriores al hook no quedan cerrados sólo por observar asyncLoad. CP05 y CP11 requieren evidencias propias; ausencia de requests no demuestra cierre completo. No se atribuye a Node --permission una frontera de red ni seguridad frente a código malicioso.
+
+MC04 PASS diseño: límites experimentales declarados de input/output/chunks/paquetes/proceso/tiempo; reloj30s único y cleanup5s separado, no renovados por promesas. Parent/allocator/OS UNKNOWN y caps de captura no se convierten en peakRSS. El código futuro debe documentar capacidad real y retención de pipes, colas, atributos, UTF16, herramientas/resultados y logs. La política sin crecimiento por consumidor parado requiere drain concurrente o mecanismo equivalente de backpressure verificado; no cabe esperar primero exit y sólo después drenar a ciegas. Pending físico detiene próximos launches.
+
+MC05 PASS preliminar: casos exactos x+1 inline/block, fracción, radical, integral, matriz, dos errores y macro/proceso independiente son compatibles con base/ams/newcommand y exclusión NoUndefined. Se distingue TexError/nodoerror de SVG existente y fuente exacta/diagnóstico de wording upstream. Required tags/text no prueban toda topología matemática o ausencia de contenido extra; la rationale lo declara y no se eleva este control a cobertura completa. CP12 usa procesos realmente distintos y configuración/fuentes iguales, sin afirmar aislamiento warm de clear/reset.
+
+MC06/08 PASS límites: em16/ex8/containerWidth640 son entradas del laboratorio, no métricas de terminal. bbox/ink/baseline/pwidth/currentColor/autosuficiencia/raster y comparación independiente siguen pendientes. El plan no afirma fidelidad por <svg>, Promise fulfilled o exit0. M01–10/D01–08/X01–08 completos permanecen, con M05/06/09/10 explícitamente fuera del primer corpus.
+
+## Disposición
+
+Se puede implementar la herramienta privada por etapas conforme al plan. A debe congelar herramientas/assembly exactos antes de ejecución. B requiere oráculos concretos prospectivos CP01–04 (positivo, cancel, timeout, cada adquisición/assign/readback/IO/close y decoy) antes de sus salidas. C sólo después de B válido y requiere CP05/11 concretos, snapshot de shim/loader/Node/moduleclosure/casos y controles de receipts físicos antes de nuevas salidas. Estos pasos ya son gates del plan: la lista abstracta no sustituye fixtures/expectativas ni una aprobación de runtime futuro.
+
+Si falla setup/cleanup, conservar causa, recursos/owner, fallo/log/preidentidades y detener lanzamientos; ningún force posterior transforma el intento en limpio. Sin freshdeadline, freshruntime o cambio de cobertura para conseguir PASS. Evaluación futura independiente deberá revisar código exacto y reproducir sobre copia propia. No cerrar registry/actor productivos, cuotas de producto, sandbox OS/red, dialecto final, estado/caché warm, baseline/render/QA/Unix/RV303/008/501 o distribución/avisos por asociación.
+
+## Referencias y fallos de lectura
+
+La [documentación primaria Node v24.16.0](https://raw.githubusercontent.com/nodejs/node/v24.16.0/doc/api/permissions.md) confirma restricciones fs/child/worker/addons/WASI/inspector y advierte límites FD/symlinks/código malicioso. No se importa la capacidad allow-net de documentación actual26 al bin24.16. El hash/version de Node declarado deberá revalidarse físicamente antes del spawn futuro; no se realizó spawn en esta revisión.
+
+Dos búsquedas de lectura fallaron por globliteral PowerShell/ruta de VALIDACION inexistente y una lectura usó modules-own/mathjax.js en vez del path real mjs/mathjax.js. Se localizaron las rutas canónicas reales sin cambiar fuente ni derivar criterios de salidas. No fueron fallos de runtime; ningún caso ejecutado o aprobado físicamente en este corte.
