@@ -1,0 +1,27 @@
+# Revisión independiente: PDF D2 process owner
+
+Dictamen: **SIN_CRITICAS_PENDIENTES, limitado a la dirección de diseño exacta E5396174CFABE9019DC7244138F60E98306DB0396EE52A58583B362910DBA09E**. No aceptación de implementación ni de D2 completo; no runtime, proceso PDF, motor o DLL ejecutados en esta revisión.
+
+Los criterios PC01–08 se fijaron antes de leer el candidato, en CRITERIOS-before-candidate.md (32ECC37253CE368C4D41E37D7AC16634064DA2E53D5BAA2B6BBFE99DDFFBA284). Se contrastaron los contratos canónicos PDF-P1-ACTOR y PDF-WIRE con la propuesta, y las firmas locales de windows-sys 0.61.2 con documentación primaria Win32. La propuesta conserva NativeStartLease/escrow originales, registry y capsule ocupados antes de spawn, límites y bootstrap de wire; reemplaza sólo la representación PDF de Child, sin modificar Legacy.
+
+PC01–04: el proceso suspendido y su hilo primario quedan en el owner físico original antes de llamadas fallibles. El orden attach/readback SAME Job → resume → START es realizable y conserva la prohibición de carga nativa anterior a la contención. La lista explícita de bootstrapRead/stdinRead/stdoutWrite/stderrWrite evita inferir whitelist de std::Command. No se admite rescate mediante IDs/nombres ni otra autoridad.
+
+PC05–06: Wait del proceso original, lectura de exit code posterior a señalización, cierre del hilo primario/proceso, Job active0 y Jobclose siguen siendo recibos separados. Drop/OptionNone no sustituyen esos recibos. El inventario y los controles futuros deben mantener la causa fallida irreversible y el mismo owner durante rollback/Pending. Un fallo de attach antes de pertenecer al Job no permite asumir que cerrar/terminar el Job termine ese proceso: la ruta de fallo debe usar y recoger el proceso original. No se introduce un nuevo permiso o mecanismo de rescate.
+
+PC07–08: la propuesta invalida expresamente los tipos/capturas afectados del inventario D1 y exige financiar estructuras y capacidades reales antes de operar. La disponibilidad del SDK sólo acredita firmas; no acredita whitelist, contención, cierre, límites o unwind físico.
+
+## Condiciones concretas que debe cumplir el futuro código
+
+- CreateProcessW requiere lpCommandLine mutable y terminada, executable explícito, STARTF_USESTDHANDLES y handles válidos; STARTUPINFOEX exige EXTENDED_STARTUPINFO_PRESENT. Entorno Unicode explícito exige CREATE_UNICODE_ENVIRONMENT y doble terminador. No búsqueda implícita de ejecutable ni interpolación de shell.
+- HANDLE_LIST requiere los cuatro handles realmente heredables y bInheritHandles TRUE; los demás handles del parent deben permanecer no heredables. No pseudo handles. El array HANDLE[4] pasado como lpValue debe permanecer estable hasta DeleteProcThreadAttributeList, no sólo hasta CreateProcessW. La lista inicializada debe eliminarse antes de liberar su payload y backing storage.
+- La consulta inicial de tamaño de InitializeProcThreadAttributeList usa el resultado esperado ERROR_INSUFFICIENT_BUFFER; no debe tratarse como éxito de inicialización. Su resultado debe conducir a almacenamiento alineado/capacidad preadmitida, con guard de adquisición que cubra setup y unwind sin devolución gratuita de recursos.
+- ResumeThread devuelve el conteo anterior. Para el hilo creado suspendido una única vez, la transición ordinaria exige retorno 1. Retorno -1 es error; 0 o >1 no acreditan esa transición ordinaria ni autorizan START. Cancel/deadline originales deben comprobarse en las fronteras irreversibles previstas en actor/wire.
+- La captura inmediata de PROCESS_INFORMATION y su movimiento a escrow no debe dejar una ventana de panic con handles sin dueño. FailedCreateProcess sólo permite adoptar outputs válidos según contrato, con estructura inicializada y sin leer basura. Los errores de cierre conservan el handle exacto, no una bandera que presuma cierre.
+
+Estas condiciones derivan de PC01–08 y de Win32; no amplían cuotas, plazos o alcance ni introducen criterios según salidas. No hay contradicción en la propuesta que requiera otra ronda de diseño. Deben contrastarse sobre fuentes congeladas futuras y AE propia antes de aceptación de código.
+
+## Evidencia primaria y límites
+
+[CreateProcessW](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw), [UpdateProcThreadAttribute](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute), [InitializeProcThreadAttributeList](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-initializeprocthreadattributelist), [DeleteProcThreadAttributeList](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-deleteprocthreadattributelist) y [ResumeThread](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-resumethread).
+
+La consulta primaria de STARTUPINFOEXW falló en la herramienta y no se usa como evidencia. No se descargó SDK ni rust-src. No hubo compilación, FFI, native engine, IO worker o pruebas de procesos en este corte. O3 registry/mintage/hooks/backstop y O7 supervisor/EOF/Job/IO, adquisición/unwind real, alias/capacidades y whitelist decoy quedan pendientes de CodeAE/AE de D2 exacto. D1, wire, Legacy, QA y distribución no reciben aceptación por asociación.
