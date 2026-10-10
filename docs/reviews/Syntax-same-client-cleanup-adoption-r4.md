@@ -1,0 +1,15 @@
+# Recuperación física en el mismo cliente de sintaxis
+
+2026-10-10. Integración sobre 99a1bfa. SYN-CLEANUP-SAMECLIENT01 y SC-R1-01 quedan cerrados en este incremento tras [aceptación independiente R4](Syntax-same-client-cleanup-acceptance-r4.md) y [complemento de integración](Syntax-same-client-cleanup-integration-codeae-r4.md). No cierra D4b, sesión, gráficos, RV ni QA de plataformas.
+
+El controller original permanece disponible cuando el cierre deja una conexión Pending. Sólo el reintento explícito permite recoger la autoridad física; un Set o request nuevo se rechaza mientras siga pendiente. El Update fallido no se reproduce. Connection conserva el Shared propietario real: un cliente extranjero no puede recoger al propietario vivo; tras su shutdown, el backstop recoge y publica exclusivamente en el Shared original. Memoria retenida y aliases siguen cargados hasta su último Drop.
+
+Reserva compilada del escenario de metadatos: 5040 bytes, incluyendo Connection272, Shared544, header Arc16, Outgoing y margen4096. El control exacto acepta; menos uno rechaza antes clone/spawn. No se aumentan cuotas ni plazos. La reserva es contabilidad solicitada de este perfil, no una cota de toda la RAM del proceso.
+
+Freeze R4: manifest F561E123364F3B4230E6644279E09E84F76C160D59BF6ADCB85788838238A689, 25 entradas comprobadas por raíz y adversario. Fuente física revisada8538D33389D38D3C2137AC861D2B680AB43FDABF6BD8F8E918F1ADD6AE1DDA9C. La copia canónica normaliza únicamente CRLF a LF conforme a .gitattributes: SHA52516454B72A4DCF631895E0B9F9B0566933117090AE24113EB2C72D30A4FC0D. El módulo de tests cambia solamente dos stores por el helper cfg(test) equivalente, revisados independientemente: SHA59EE41EAAF0ED4FD7DDD0F813DDEE4495B5917500856F8C724FE4899D96BC13F. No cambia criterios ni selectores. El aviso inicial de helper sin uso se resuelve mediante su uso real, sin suprimir warnings.
+
+Composición canónica Windows: 14 controles normales PASS / 6 nativos ignorados en ejecución normal; luego tres controles nativos de recuperación/propietario/metadatos y uno de cancelación activa PASS con worker nuevo real. Fmt y Clippy workspace/all-targets con -D warnings PASS. El aviso de incompatibilidad futura proc-macro-error2 de Cargo permanece visible y no constituye certificación del próximo Rust. Worker canónico749365A8E3B15D29267C07292E963908A7DF10E242E69DC8B63889F0171DCDAB, fijado antes runtime. Evidencia privada: .tmp/root-syntax-same-client-integration-2026-10-10.
+
+El adversario construyó sus propios ejecutores y worker R4; los binarios históricos R3 incluidos en el manifiesto no se usaron como prueba R4. Sus controles originales, suplemento de propietario, regresiones y diferencias entre estado global/local constan en el informe. Fallos previos y correcciones de harness se conservan íntegros; el StartupTimeout frío histórico sigue FAIL y no se anuncia garantía de arranque frío. R1 y R3 no se adoptan.
+
+D4b necesita todavía su freeze compuesto, CodeAE y AE independiente: este cierre habilita el siguiente trabajo y no lo sustituye. Tampoco demuestra QA visual, integración Nushell nueva ni ejecución Unix/macOS.

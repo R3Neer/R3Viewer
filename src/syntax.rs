@@ -443,6 +443,9 @@ impl SyntaxClient {
         if state.stopping {
             return Err(FallbackReason::Cancelled);
         }
+        if state.cleanup == CleanupStatus::Pending || PENDING_PRESENT.load(Ordering::Acquire) {
+            return Err(FallbackReason::ContainmentFailed);
+        }
         let revision = state
             .revision
             .checked_add(1)
@@ -550,6 +553,8 @@ impl SyntaxClient {
             return 0;
         }
         if state.stopping
+            || state.cleanup == CleanupStatus::Pending
+            || PENDING_PRESENT.load(Ordering::Acquire)
             || !state.has_document
             || state.generation != generation
             || state.plain.is_some()
@@ -644,6 +649,19 @@ impl SyntaxClient {
         }
         state.memory.pending_style_bytes = 0;
         state.event.take()
+    }
+    #[cfg(test)]
+    pub(crate) fn own_controller_thread(&self) -> Option<std::thread::ThreadId> {
+        self.owner.as_ref().map(|owner| owner.thread().id())
+    }
+    #[cfg(test)]
+    pub(crate) fn own_close_pipe_fault(enabled: bool) {
+        CLOSE_PIPE_FAULT.store(enabled, Ordering::Release);
+    }
+    /// Scheduler adopts the already-owned client without resetting its generation.
+    #[cfg(test)]
+    pub(crate) fn current_generation(&self) -> u64 {
+        self.shared.lock().generation
     }
     /// Accounting reports retained source copies/cache, not an exact heap bound.
     pub fn cleanup_status(&self) -> CleanupStatus {
@@ -772,6 +790,7 @@ fn close_file(file: &mut Option<std::fs::File>) -> io::Result<()> {
     Ok(())
 }
 struct Connection {
+    owner_shared: Arc<Shared>,
     child: Child,
     job: Option<ChildJob>,
     send: Option<SyncSender<Outgoing>>,
@@ -821,8 +840,14 @@ impl Connection {
             .source
             .budget()
             .map(|b| {
-                b.reserve(size_of::<Self>() + size_of::<Outgoing>() + 4096)
-                    .map_err(|_| (FallbackReason::SourceBudget, None))
+                b.reserve(
+                    size_of::<Self>()
+                        + size_of::<Shared>()
+                        + 2 * size_of::<usize>()
+                        + size_of::<Outgoing>()
+                        + 4096,
+                )
+                .map_err(|_| (FallbackReason::SourceBudget, None))
             })
             .transpose()?;
         let executable =
@@ -861,6 +886,7 @@ impl Connection {
             spawn_started.elapsed()
         );
         let mut connection = Self {
+            owner_shared: shared.clone(),
             child,
             job: None,
             send: Some(send),
@@ -1677,24 +1703,77 @@ fn close_connection(connection: &mut Option<Connection>, shared: &Shared) -> boo
     }
     true
 }
+/// Owns the same controller thread while a failed cleanup is parked. A retry only
+/// closes retained physical authority; it never republishes the failed request.
+fn retry_pending_connection(caller: &Arc<Shared>) {
+    let mut slot = pending_slot().lock().unwrap_or_else(|e| e.into_inner());
+    let Some(owner) = slot.as_mut() else {
+        return;
+    };
+    // A live owner's retry may never be stolen by another Shared/controller.
+    // Orphan backstop is authorized only by the actual owner's terminal stop intent.
+    if !Arc::ptr_eq(caller, &owner.owner_shared) && !owner.owner_shared.lock().stopping {
+        return;
+    }
+    owner.cleanup_deadline = None;
+    if !owner.close() {
+        return;
+    }
+    let failed = owner.sticky.is_some();
+    let original = owner.owner_shared.clone();
+    let next = owner.pending_next.take().map(|b| *b);
+    *slot = next;
+    PENDING_PRESENT.store(slot.is_some(), Ordering::Release);
+    let mut state = original.lock();
+    state.cleanup = if slot.is_some() {
+        CleanupStatus::Pending
+    } else {
+        CleanupStatus::Reaped { failed }
+    };
+    if slot.is_none() {
+        state.memory = Default::default();
+    }
+}
 fn controller(shared: Arc<Shared>, limits: SyntaxLimits) {
     let mut connection = None;
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        controller_run(shared.clone(), limits, &mut connection)
-    }));
-    if result.is_err() {
-        let generation = shared.lock().generation;
-        shared.latch(generation, FallbackReason::WorkerExited);
-    }
-    if !close_connection(&mut connection, &shared)
-        && let Some(owner) = connection.take()
-    {
-        let mut slot = pending_slot().lock().unwrap_or_else(|e| e.into_inner());
-        // Constructor checks this persistent slot before any future spawn.
-        let mut owner = owner;
-        owner.pending_next = slot.take().map(Box::new);
-        *slot = Some(owner);
-        PENDING_PRESENT.store(true, Ordering::Release);
+    loop {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            controller_run(shared.clone(), limits.clone(), &mut connection)
+        }));
+        if result.is_err() {
+            let generation = shared.lock().generation;
+            shared.latch(generation, FallbackReason::WorkerExited);
+        }
+        if !close_connection(&mut connection, &shared)
+            && let Some(owner) = connection.take()
+        {
+            let mut slot = pending_slot().lock().unwrap_or_else(|e| e.into_inner());
+            let mut owner = owner;
+            owner.pending_next = slot.take().map(Box::new);
+            *slot = Some(owner);
+            PENDING_PRESENT.store(true, Ordering::Release);
+        }
+        if shared.lock().stopping || shared.cancelled.load(Ordering::Acquire) {
+            return;
+        }
+        // Failure ended this run but not the session-owned thread. The failed Set/request
+        // were discarded by controller_run, the Plain latch remains sticky for generation.
+        // No Set/Init is allowed while Pending; only a new explicit generation after reap.
+        while PENDING_PRESENT.load(Ordering::Acquire) {
+            let mut state = shared.lock();
+            if state.stopping || shared.cancelled.load(Ordering::Acquire) {
+                return;
+            }
+            if std::mem::take(&mut state.retry_cleanup) {
+                drop(state);
+                retry_pending_connection(&shared);
+            } else {
+                let _ = shared
+                    .wake
+                    .wait_timeout(state, Duration::from_millis(25))
+                    .unwrap_or_else(|e| e.into_inner());
+            }
+        }
     }
 }
 fn controller_run(shared: Arc<Shared>, limits: SyntaxLimits, connection: &mut Option<Connection>) {
@@ -1707,23 +1786,7 @@ fn controller_run(shared: Arc<Shared>, limits: SyntaxLimits, connection: &mut Op
             std::mem::take(&mut state.retry_cleanup)
         };
         if retry {
-            let mut slot = pending_slot().lock().unwrap_or_else(|e| e.into_inner());
-            if let Some(owner) = slot.as_mut()
-                && {
-                    owner.cleanup_deadline = None;
-                    owner.close()
-                }
-            {
-                let failed = owner.sticky.is_some();
-                let next = owner.pending_next.take().map(|b| *b);
-                *slot = next;
-                PENDING_PRESENT.store(slot.is_some(), Ordering::Release);
-                shared.lock().cleanup = if slot.is_some() {
-                    CleanupStatus::Pending
-                } else {
-                    CleanupStatus::Reaped { failed }
-                };
-            }
+            retry_pending_connection(&shared);
         }
         if shared.cancelled.load(Ordering::Relaxed) {
             let generation = shared.lock().generation;
@@ -1983,7 +2046,11 @@ fn controller_run(shared: Arc<Shared>, limits: SyntaxLimits, connection: &mut Op
     if let Some((_, ticket)) = state.pause.take() {
         ticket.complete(reaped);
     }
-    state.stopping = true;
+    // Preserve explicit exit intent; cleanup failure itself parks this same controller.
+    if !cleanup_failed {
+        state.stopping = true;
+    }
+    state.has_document = false;
     if reaped {
         state.memory = Default::default();
     }
@@ -1997,7 +2064,7 @@ mod tests {
     use super::*;
     // No controller is spawned: barriers force the exact wait-status/Progress-take
     // interleaving against the same public UI methods and production transaction.
-    fn dormant_client() -> SyntaxClient {
+    pub(super) fn dormant_client() -> SyntaxClient {
         SyntaxClient {
             shared: Arc::new(Shared {
                 state: Mutex::new(State {
@@ -2558,14 +2625,18 @@ mod tests {
         PENDING_PRESENT.store(true, Ordering::Release);
         let retained = weak.upgrade().is_some();
         let second = dormant_client();
+        let generation_before = second.current_generation();
+        let charged_before = budget.used();
         second.set_document(Arc::new("x\n".into()), "Rust".into(), 2);
-        let Some(Update::Set(second_doc)) = second.shared.lock().update.take() else {
-            panic!("document")
-        };
-        let denied = matches!(
-            Connection::spawn(&second_doc, &second.shared),
-            Err((FallbackReason::ContainmentFailed, None))
-        );
+        let denied = second.shared.lock().update.is_none()
+            && second.current_generation() == generation_before
+            && second.request(2, None) == 0
+            && budget.used() == charged_before;
+        // This component control has a manually-owned Connection, not a controller thread.
+        // Mark the actual owner terminally stopped before exercising orphan backstop.
+        // Real SAME-thread recovery is covered separately by SA14, never by this reaper.
+        let original_shared = client.shared.clone();
+        client.shutdown().join().unwrap();
         let retry =
             SyntaxClient::new(SyntaxLimits::default(), Arc::new(AtomicBool::new(false))).unwrap();
         retry.retry_cleanup();
@@ -2575,7 +2646,7 @@ mod tests {
         }
         let resolved = !PENDING_PRESENT.load(Ordering::Acquire);
         let failed = matches!(
-            retry.cleanup_status(),
+            original_shared.lock().cleanup,
             CleanupStatus::Reaped { failed: true }
         );
         retry.shutdown().join().unwrap();
@@ -2594,3 +2665,7 @@ mod tests {
         assert!(!SYNTAX_ACTIVE.load(Ordering::Acquire));
     }
 }
+
+#[cfg(test)]
+#[path = "syntax_same_client_r2_tests.rs"]
+mod same_client_r2_tests;
