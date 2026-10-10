@@ -430,3 +430,6 @@ NuKeyR3 [revisado y aceptado](reviews/S03-unicode-clave-nu-r3.md), tres controle
 
 
 2026-10-10: [diseño HTML estático R2](refinement/HTML-STATIC-DOM.md) y [oráculos prospectivos](refinement/HTML-STATIC-DOM-ORACULOS.md) incorporados tras [revisión independiente sin críticas pendientes de diseño](reviews/HTML-static-dom-plan-r2.md). HD-R1-01 cerrado para contrato de estado readonly/clonado; 20 fixtures originales y tres suplementos conservados. DOM/raw/lectura separados, companion opt-in y recursos explícitos. ResponseLease concreto, lock/decoder/sink/adapter/HTTP/history/runtime/QA/Unix siguen pendientes; spike registro Nu cerrado no se repite. RV-401/402/403/404 abiertas.
+
+
+2026-10-10: [diseño de integración PDF R1](refinement/PDF-PRODUCT-INTEGRATION.md) con [revisión independiente sin críticas pendientes de diseño](reviews/PDF-product-integration-plan-r1.md). Reutilización RustR4/UTF16R2 delimitada; supervisor Rust, snapshot binario, raster/text separados, lazy/zoom/búsqueda de ocurrencias/links/bookmarks/cache/history/inline conservan alcance completo.18 criterios/26 familias prospectivas, identidades contrastadas; freeze UTF16 recuperado1112 entradas sin nuevo runtime. P1 necesita wire/ledger técnico y fixtures exactos antes código; ningún RV/QA/Unix cerrado.

@@ -133,3 +133,6 @@ Inspector y admisión física: [biblioteca R2 integrada](docs/reviews/Markdown-i
 
 
 HTML estático: [contrato R2 revisado](docs/refinement/HTML-STATIC-DOM.md), con DOM y fuente separados, controles de solo lectura y from html opcional. Es diseño aceptado, aún sin conversor ni vista HTML productivos; [gates y límites](docs/reviews/HTML-static-dom-adoption-r2.md).
+
+
+PDF: [diseño de integración revisado](docs/refinement/PDF-PRODUCT-INTEGRATION.md) para páginas, raster, capa textual, búsqueda e historial. Los experimentos aceptados sirven de base; todavía no hay visor PDF productivo ni QA gráfica acreditada.
