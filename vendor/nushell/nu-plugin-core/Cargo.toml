@@ -11,9 +11,9 @@
 
 [package]
 edition = "2024"
-rust-version = "1.95.0"
+rust-version = "1.96.1"
 name = "nu-plugin-core"
-version = "0.115.1"
+version = "0.116.1"
 authors = ["The Nushell Project Developers"]
 build = false
 autolib = false
@@ -39,22 +39,22 @@ path = "src/lib.rs"
 bench = false
 
 [dependencies.interprocess]
-version = "2.4.2"
+version = "2.4.3"
 optional = true
 
 [dependencies.log]
-version = "0.4"
+version = "0.4.34"
 
 [dependencies.nu-plugin-protocol]
-version = "0.115.1"
+version = "0.116.1"
 default-features = false
 
 [dependencies.nu-protocol]
-version = "0.115.1"
+version = "0.116.1"
 default-features = false
 
 [dependencies.nu-utils]
-version = "0.115.1"
+version = "0.116.1"
 default-features = false
 
 [dependencies.rmp-serde]

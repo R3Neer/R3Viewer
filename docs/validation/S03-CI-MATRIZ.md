@@ -12,7 +12,7 @@ Labels verificados en [documentación GitHub](https://docs.github.com/en/actions
 
 ## Lanes separadas
 
-1. Build/calidad: Cargo.lock intacto, fmt, Clippy y tests pertinentes, reader+companion reales en target nativo. Nu0.115.1 es referencia Windows, no compatibilidad certificada Unix. Rust1.99.0 es toolchain privado observado: fijar proveedor/release disponible antes de instalar en CI. Actions y descargas deberán quedar fijadas por SHA/digest revisado; resolver pins al configurar, no inventarlos en esta preparación.
+1. Build/calidad: Cargo.lock intacto, fmt, Clippy y tests pertinentes, reader+companion reales en target nativo. Nu0.116.1 es referencia Windows, no compatibilidad certificada Unix. Rust1.99.0 es toolchain privado observado: fijar proveedor/release disponible antes de instalar en CI. Actions y descargas deberán quedar fijadas por SHA/digest revisado; resolver pins al configurar, no inventarlos en esta preparación.
 2. Contrato Nu: plugin/módulo/reader reales, corpus tipos/framing/origen/cwd, enumeración única, colour/redirección/paleta y estructuras. Fallo de build companion en macOS es FAIL de preparación, no skipverde.
 3. Contención U-G1–3: ejecutar probes R4 y verificar baseline/ABI/límites/cobro antes nacimiento/exec, guardian/parser/leases/ACK/FD, memoria y pérdida de dueños sobre procesos propios. Preparar copia versionada/revisada de los probes privados y comandos antes activar; sus rutas .tmp no están disponibles por checkout público. No activar backend Unsupported sin implementar y aceptar previamente el contrato nativo. RLIMIT_AS512MiB no equivale a committed512MiB de Windows.
 4. Runtime U-G4–5: reader+companion+Nu reales, gramáticas/estructuras/budgets, PTY y restauración/q0/Ctrl-C130/nextsession, wait/EOF/joins; stdout/exit/hashes y fuente exacta. Crossbuild Windows no sustituye estos jobs.
@@ -47,7 +47,7 @@ cargo test --offline --locked --release --workspace -- --test-threads=1
 if ($LASTEXITCODE -ne 0) { throw 'Check falló; conservar log y detener' }
 cargo clippy --offline --locked --release --workspace --all-targets -- -D warnings
 if ($LASTEXITCODE -ne 0) { throw 'Check falló; conservar log y detener' }
-& 'C:\Users\Usuario\AppData\Local\Programs\nu\bin\nu.exe' -n -c 'nu-check --as-module nu/r3viewer.nu'
+& 'D:\Program Files\nu\bin\nu.exe' -n -c 'nu-check --as-module nu/r3viewer.nu'
 if ($LASTEXITCODE -ne 0) { throw 'Check falló; conservar log y detener' }
 ```
 

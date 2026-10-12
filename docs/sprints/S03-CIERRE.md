@@ -19,3 +19,5 @@ Actualizado 2026-10-10. **Sprint abierto por QA visual y runtime/contención Uni
 | Freeze/regresión/aceptación final | [Dictamen independiente de las19filas](../reviews/S03-cierre-windows-final.md) sin críticas funcionales Windows; matriz29/29 y W2propio1026/1026 verificados por raíz. Composición canónica pertinente y documentación reconciliadas. QA visual y U-G1–5 mantienen ejecución pendiente; no cierre global del sprint. |
 
 PDF, Markdown enriquecido y MathJax mantienen sus checkpoints; no se inicia otro sprint para suplir pendientes de S03. RV-105/106/107 permanecen abiertos. No se modifica el corpus académico, perfiles, remotos o publicación.
+
+Migración2026-10-12: [SDK y host de referencia0.116.1](../research/NU116_MIGRACION.md), con runner tipado reproducido independientemente, salida larga y regresión canónica actualizadas. Los resultados anteriores conservan su versión de host; no reutilizar paquetes0.115.1 con el host nuevo. V/U continúan abiertos.

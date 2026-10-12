@@ -56,7 +56,7 @@ $qaText = "漢字 e$([char]0x301) 👩‍💻`tTAB`r`nESC=$([char]27)Xfoo`r`nC1=
 [IO.File]::WriteAllText("$qaRoot\fixtures\empty.toml", '')
 [IO.File]::WriteAllText("$qaRoot\fixtures\override.toml", "[colours]`r`nvalue='#ff0000'`r`n")
 Get-ChildItem -LiteralPath "$qaRoot\bin", "$qaRoot\nu", "$qaRoot\fixtures" -File | Get-FileHash -Algorithm SHA256 | Format-Table -AutoSize | Out-String -Width 300 | Set-Content -LiteralPath "$qaRoot\evidence\hashes-before.txt"
-& 'C:\Users\Usuario\AppData\Local\Programs\nu\bin\nu.exe' -n --plugins "$qaRoot\bin\nu_plugin_r3viewer.exe"
+& 'D:\Program Files\nu\bin\nu.exe' -n --plugins "$qaRoot\bin\nu_plugin_r3viewer.exe"
 ```
 
 En cada terminal real, dentro de esa Nu aislada:

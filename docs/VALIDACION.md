@@ -88,3 +88,7 @@ El usuario eligió preparar una [guía de QA manual](validation/S03-QA-MANUAL.md
 ## Dictamen funcional Windows de S03
 
 [Revisión final independiente](reviews/S03-cierre-windows-final.md) de las19filas originales: SIN_CRITICAS_PENDIENTES en obligaciones funcionales Windows concretas. W2 P/Q/T/I fueron reproducidas una vez cada una por el adversario; raíz cotejó su freeze1026/1026 y el dictamen/readset29/29. [Estado vigente](sprints/S03-CIERRE.md) y backlog reconciliados. S03 continúa abierto por QA visual Windows y runtime/contención Linux/macOS; las guías preparadas no acreditan ejecución. No más pruebas funcionales locales exigidas por este dictamen ni inicio de sprint siguiente.
+
+## Migración Nushell — 2026-10-12
+
+[SDK y runners actualizados a0.116.1](research/NU116_MIGRACION.md), con [reproducción independiente](reviews/NU116-migracion-final.md) sin críticas focales. Host Windows en D:\Program Files\nu\bin\nu.exe. SDK43+78unitarias/17ejemplos, workspace583pruebas/ejemplos PASS/10ignored, fmt/nu-check/build/Clippy y salida larga redirigida/ConPTY PASS. Runners nuevos usan la instalación indicada; evidencias0.115.1 conservadas como históricas. No QA visual ni contención/runtime Unix nuevos; S03 permanece abierto por esas dependencias.

@@ -1,4 +1,4 @@
-# R3Viewer for Nushell0.115.1. Load the packaged companion before this module.
+# R3Viewer for Nushell0.116.1. Load the packaged companion before this module.
 # Binary locations belong to the package, never to the current directory.
 const reader = if $nu.os-info.name == 'windows' { path self ../bin/r3viewer.exe } else { path self ../bin/r3viewer }
 

@@ -146,7 +146,7 @@ ls | viewer                 # tabla tipada
 viewer --inline documento.md # también viewer -i documento.md
 ```
 
-La integración debe conservar tipos relevantes de Nushell. El corte S02 utiliza un companion fijado a Nu0.115.1 y transporte tipado propio, sin conversión universal a JSON. El lector accede al terminal de control separado de stdin; S02/S03 registran evidencia funcional Windows y límites de compatibilidad todavía pendientes.
+La integración debe conservar tipos relevantes de Nushell. La integración utiliza un companion fijado al SDK0.116.1 (migración2026-10-12; requiere shell0.116.x) y transporte tipado propio, sin conversión universal a JSON. El lector accede al terminal de control separado de stdin; S02/S03 registran evidencia funcional Windows y límites de compatibilidad todavía pendientes.
 
 open --pretty queda retirado por decisión Q02. No adaptar ni ocultar open o explore.
 

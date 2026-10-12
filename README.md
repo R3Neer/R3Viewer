@@ -61,10 +61,11 @@ Validación actual: 15 pruebas, fmt y Clippy Windows; compilación/Clippy de par
 
 ## Prueba de desarrollo con Nushell
 
-Construir workspace y preparar directorios privados bin/ y nu/ con los dos ejecutables y nu/r3viewer.nu. Cargar companion temporalmente en Nu0.115.1 con --plugins y usar módulo, sin registrar plugins ni cambiar perfiles. En esta sesión existe .tmp/package para reproducir:
+Construir workspace y preparar directorios privados bin/ y nu/ con los dos ejecutables y nu/r3viewer.nu. Cargar companion temporalmente en Nu0.116.1 con --plugins y usar módulo, sin registrar plugins ni cambiar perfiles. Crear un paquete nuevo con el runner antes de invocar el ejemplo; no reutilizar bundles antiguos de SDK0.115:
 
 ```powershell
-& 'C:/Users/Usuario/AppData/Local/Programs/nu/bin/nu.exe' -n --plugins '[D:/Tools/R3Viewer/.tmp/package/bin/nu_plugin_r3viewer.exe]' -c 'use D:/Tools/R3Viewer/.tmp/package/nu/r3viewer.nu *; {nombre: "Ana", puntos: 42} | viewer -i'
+.\scripts\test-nushell-integration.ps1 -OutputDirectory '.tmp/nu116-example'
+& 'D:/Program Files/nu/bin/nu.exe' -n --plugins '[D:/Tools/R3Viewer/.tmp/nu116-example/bin/nu_plugin_r3viewer.exe]' -c 'use D:/Tools/R3Viewer/.tmp/nu116-example/nu/r3viewer.nu *; {nombre: "Ana", puntos: 42} | viewer -i'
 ```
 
 Validación S02: 48pruebas del workspace, Clippy/fmt, revisión independiente R1 sin críticas y aceptación de tipos, errores, límites y abandono. ConPTY propia confirma Ctrl-C130, modos restaurados y siguiente invocación funcional; no acredita QA visual. [Detalle y límites](docs/sprints/S02.md). Custom ajenos no son universalmente transportables: Nu los rechaza por propietario. No se convierten ejecutando callbacks.
@@ -138,3 +139,11 @@ HTML estático: [contrato R2 revisado](docs/refinement/HTML-STATIC-DOM.md), con 
 PDF: [diseño de integración revisado](docs/refinement/PDF-PRODUCT-INTEGRATION.md) para páginas, raster, capa textual, búsqueda e historial. Los experimentos aceptados sirven de base; todavía no hay visor PDF productivo ni QA gráfica acreditada.
 
 HTML ResponseLease: [diseño R3 incorporado](docs/refinement/HTML-RESPONSE-LEASE.md) tras revisión independiente sin críticas; [adopción y límites](docs/reviews/HTML-response-lease-adoption-r3.md). Guard opt-in, callback estable y cierre conjunto físico de respuesta/worker definidos. SDK/conversor aún no implementados ni aceptados.
+
+Pruebas reproducibles de integración con Nushell0.116.x (Windows, Nu0.116.1 en la ruta indicada):
+
+```powershell
+.\scripts\test-nushell-integration.ps1 -NuExe 'D:\Program Files\nu\bin\nu.exe'
+```
+
+El runner crea un paquete y evidencias privados nuevos, carga el plugin sólo para esa invocación y no modifica perfiles. Requiere ambos binarios de target/release; puede cambiarse con -BuildDirectory.

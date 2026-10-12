@@ -11,6 +11,6 @@ name = "nu_plugin_r3viewer"
 path = "src/main.rs"
 
 [dependencies]
-nu-plugin = "=0.115.1"
-nu-protocol = "=0.115.1"
+nu-plugin = "=0.116.1"
+nu-protocol = "=0.116.1"
 r3viewer-wire = { path = "../wire" }
