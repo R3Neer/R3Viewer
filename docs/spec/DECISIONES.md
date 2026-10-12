@@ -97,3 +97,7 @@ El 2026-10-04 el usuario sustituye D01 (solo análisis) y las restricciones hist
 ## Plataformas disponibles para validación: 2026-10-05
 
 El usuario confirma que actualmente sólo dispone de este Windows. GitHub Actions puede servir más adelante para ejecutar pruebas nativas macOS/Linux. Se conserva la matriz objetivo multiplataforma: preparación local y compilación cruzada no equivalen a ejecución nativa; CI futura no acredita apariencia real de terminales. Registrar ejecuciones por plataforma/candidato cuando exista acceso. Esta respuesta no crea remoto ni publica el proyecto ahora.
+
+## Publicación GitHub: 2026-10-12
+
+El usuario autoriza preparar y publicar R3Neer/R3Viewer en GitHub, con descripción, topics y README orientado a instalación y uso. Las herramientas CLI públicas del usuario sirven de referencia; documentación pública en inglés, sin historia de implementación ni comparaciones con versiones anteriores. Esta autorización no instala perfiles personales ni publica una release. Las capacidades del README corresponden al comando integrado disponible; los prototipos no adoptados no se anuncian como soporte.

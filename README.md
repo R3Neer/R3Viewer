@@ -1,149 +1,124 @@
 # R3Viewer
 
-Visor de archivos, documentos y valores de Nushell, con lectura interactiva y salida inline (`--inline/-i`). Windows nativo, macOS y Linux son objetivos de soporte.
+A terminal viewer for local files and Nushell data, with an interactive reader and inline output.
 
-Estado: desarrollo autorizado; lectura textual e integración Nu tipada comprobadas funcionalmente en Windows. Todavía no hay una entrega certificada. Implementación, revisión iterativa y commits locales autorizados; publicación e instalación en perfiles personales fuera del encargo.
+Read text and source code, inspect JSON, YAML, TOML and XML, or explore tables, lists and nested records from a Nushell pipeline. Syntax highlighting, search and keyboard navigation help you inspect content directly in your terminal.
 
-## Documentación
+## Install
 
-- [Requisitos](docs/spec/REQUISITOS.md), [decisiones](docs/spec/DECISIONES.md) y [preguntas](docs/spec/PREGUNTAS.md).
-- [Contratos](docs/spec/CONTRATOS.md), [HTML/web](docs/spec/WEB_HTML.md) y [estudio previo](docs/spec/ESTUDIO_ADICIONAL.md).
-- [Product Backlog](docs/BACKLOG.md): 39 tareas, dependencias y aceptación; diez épicas en el plan general.
-- [Investigación técnica](docs/research/INVESTIGACION_TECNICA.md): fuentes, conclusiones y límites de evidencia.
-- [Arquitectura general y épicas](docs/architecture/ARQUITECTURA.md), revisada iterativamente con adversario independiente hasta cierre sin críticas, y [validación por capacidad](docs/VALIDACION.md).
-- [Política de commits](CONTRIBUTING.md).
+R3Viewer is in development and currently installed from source. The tested environment is Windows with Nushell **0.116.1**. Native Linux/macOS validation is pending.
 
-## Contrato objetivo; cobertura actual indicada más abajo
+You need [Git](https://git-scm.com/downloads), [Rust via rustup](https://rustup.rs/), the Windows C++ build tools, and [Nushell 0.116.1](https://github.com/nushell/nushell/releases/tag/0.116.1). The repository selects Rust 1.99.0 automatically through rustup.
 
-```nu
-viewer notas.md
-viewer -i notas.md
-viewer https://ejemplo.org
-"notas.md" | viewer
-ls | viewer
-viewer --value "# Un título"
-"notas.md" | viewer --path
-```
-
-Argumentos abren rutas o URLs; el pipeline contiene valores. `--path/-p` y `--value/-v` fuerzan la interpretación y no coexisten. Se mantienen `open` y `explore` nativos; `from html` será una utilidad opcional.
-
-## Ubicación canónica
-
-Repositorio local: `D:\Tools\R3Viewer`. Los documentos iniciales de este chat se copiaron conservando el historial como primer commit. A partir de la migración las modificaciones se hacen aquí; las copias del chat son una referencia histórica.
-
-No hay remoto configurado. Licencia del proyecto: [MIT](LICENSE), confirmada el 2026-10-04. Las dependencias conservan sus licencias y avisos; revisarlos antes de distribuir.
-
-## Forma de trabajo
-
-Adaptación de Scrum por objetivos: un Product Backlog, un sprint activo sin cadencia temporal fija y detalles refinados según prioridad/riesgo. Responsabilidades, aceptación y Definition of Done en docs/process/METODOLOGIA.md. Revisiones iterativas independientes de propuestas y código; informes intermedios temporales, versiones finales y evidencia canónicas.
-
-## Desarrollo vigente
-
-El usuario autoriza implementar el producto completo siguiendo [Scrum por objetivos y revisión adversaria](docs/process/METODOLOGIA.md), sin cadencia fija. La descripción de preparación anterior es histórica. Sin publicación ni modificación de perfiles personales.
-
-## Incremento textual disponible para desarrollo
-
-S01 contiene lector UTF-8 local/literal/stdin externo, salida textual y sesión de terminal. S02 incorpora el módulo público `viewer` y companion privado `nu_plugin_r3viewer`; transporta valores tipados de Nushell al ejecutable `r3viewer`. S03 añade navegación estructurada, búsqueda y presentación configurable; su candidato está en validación independiente. Los formatos enriquecidos y la distribución final siguen pendientes.
+In PowerShell, clone and build:
 
 ```powershell
-. ./scripts/dev.ps1 # si se usa el toolchain privado .tools
-cargo test --locked --workspace
-cargo clippy --locked --workspace --all-targets -- -D warnings
-cargo run -- --value "Texto literal"
-cargo run -- -i archivo.txt
+git clone https://github.com/R3Neer/R3Viewer.git
+cd R3Viewer
+cargo build --locked --release --workspace --bins
+New-Item -ItemType Directory -Path bin -Force | Out-Null
+Copy-Item target/release/r3viewer.exe, target/release/nu_plugin_r3viewer.exe bin/
 ```
 
-Para otro entorno de desarrollo se necesita Rust 1.99.0 conforme a rust-toolchain.toml y compilador/enlazador de su plataforma. La configuración privada de esta sesión no cambia PATH global ni perfiles. Cargo.lock fija dependencias. El paquete final no requerirá Rust al usuario.
+Keep the `bin/` and `nu/` folders together. The module locates its executable relative to itself, so you can use `viewer` from any working directory.
 
-Límites S01: solo texto UTF-8, hasta 128MiB por entrada; URL, formatos enriquecidos y --path desde pipe textual diagnosticados como pendientes. Pipeline externo textual no preserva tipos Nu. -p y -v incompatibles; stdin vacío válido, sin entrada con TTY error2. ESC/OSC y controles peligrosos se muestran visiblemente. Cancelación devuelve130; BrokenPipe sin cancelación es salida normal. Sesión: flechas/hjkl, páginas, Home/End, ?, q/Escape y Ctrl-C.
-
-Validación actual: 15 pruebas, fmt y Clippy Windows; compilación/Clippy de partes Linux sin ejecutar Linux. Revisión adversaria de código R2 sin críticas pendientes; aceptación textual independiente. ConPTY funcional comprobado; QA visual Windows Terminal/WezTerm y resto de matriz pendiente. Detalle: docs/sprints/S01.md. Script opcional de reproducción de señales Windows: `python scripts/test-cancellation-windows.py target/debug/r3viewer.exe` (binario debug, grupos hijos aislados; no prueba visual y falla como inconcluso si el proceso acaba antes de señal).
-
-## Prueba de desarrollo con Nushell
-
-Construir workspace y preparar directorios privados bin/ y nu/ con los dos ejecutables y nu/r3viewer.nu. Cargar companion temporalmente en Nu0.116.1 con --plugins y usar módulo, sin registrar plugins ni cambiar perfiles. Crear un paquete nuevo con el runner antes de invocar el ejemplo; no reutilizar bundles antiguos de SDK0.115:
-
-```powershell
-.\scripts\test-nushell-integration.ps1 -OutputDirectory '.tmp/nu116-example'
-& 'D:/Program Files/nu/bin/nu.exe' -n --plugins '[D:/Tools/R3Viewer/.tmp/nu116-example/bin/nu_plugin_r3viewer.exe]' -c 'use D:/Tools/R3Viewer/.tmp/nu116-example/nu/r3viewer.nu *; {nombre: "Ana", puntos: 42} | viewer -i'
-```
-
-Validación S02: 48pruebas del workspace, Clippy/fmt, revisión independiente R1 sin críticas y aceptación de tipos, errores, límites y abandono. ConPTY propia confirma Ctrl-C130, modos restaurados y siguiente invocación funcional; no acredita QA visual. [Detalle y límites](docs/sprints/S02.md). Custom ajenos no son universalmente transportables: Nu los rechaza por propietario. No se convierten ejecutando callbacks.
-
-## Candidato S03 en validación
-
-La TUI permite Enter para inspeccionar una celda/hoja, r para la fila completa, K para una clave completa y Backspace para volver conservando selección. / abre búsqueda literal sensible a mayúsculas; Enter confirma, n/N recorren y vuelven por los extremos. Escape cancela la edición de la consulta de búsqueda; cuando no se está editando una consulta, sale del visor. L alterna números de línea. Consulta máxima4096bytesUTF-8. Nothing, ausencia y string vacío son estados distintos; la búsqueda incluye claves y hojas colapsadas completas.
-
-Opciones de presentación: --colour auto|always|never, --theme auto|dark|light, --line-numbers/-n y --no-line-numbers. --config indica TOML de lectura, máximo64KiB. Flags prevalecen sobre configuración; auto respeta NO_COLOR/TERM=dumb. Redirección siempre plana. Esquema y rutas estándar en [S03](docs/sprints/S03.md). No crear perfiles ni archivos de configuración implícitamente. Desde el módulo Nushell, theme auto hereda siete foregrounds estáticos de color_config; overrides TOML prevalecen y dark/light usan los temas propios. No ejecuta closures de color. [Contrato y aceptación de paleta](docs/research/S03_C01_PALETA_NU.md).
-
-A/B tiene aceptación funcional Windows en R4. C añade resaltado en TUI e inline con 114 pruebas, revisión independiente sin críticas y aceptación funcional parcial Windows. Código, lectura y datos son de solo lectura; los formatos enriquecidos siguen pendientes. Compilación cruzada del lector comprobada para Linux x86_64 y macOS arm64; ejecución en ambos y QA visual todavía pendientes.
-
-Resaltado: --format auto|text|code y --language por nombre/extensión integrada. Auto deduce únicamente la extensión del archivo realmente abierto; pipeline/literal necesita --language. Text con --language es error2; lenguaje desconocido o code sin lenguaje deducible conserva fuente completa plana con diagnóstico. Plain Text, colour never y redirección evitan iniciar el motor. String y string_stream Nu explícitos son textuales; Unknown/Binary mantienen su tipo. No cargar gramáticas arbitrarias ni reabrir metadata.
+Open Nushell in the cloned repository and run these commands **one at a time**:
 
 ```nu
-viewer archivo.rs
-"let saludo = \"hola\";" | viewer --language rs
-viewer -i -n archivo.rs
+plugin add ("bin/nu_plugin_r3viewer.exe" | path expand)
+plugin use r3viewer
+use nu/r3viewer.nu viewer
+"Hello from Nushell" | viewer -i
 ```
 
-Un fallo detectado o presupuesto excedido del motor deja el documento entero plano; no bloquea navegación/búsqueda. Inline espera el resultado completo antes de imprimir. El aislamiento de sintaxis está validado funcionalmente en Windows; en Unix el lector compila como candidato con sintaxis plana y diagnóstico hasta validar su contención y ejecución. El catálogo se genera durante el build a partir del mismo pack de Syntect5.3 y contiene78 entradas de sintaxis, incluidas TOML1.1, Nushell y PowerShell. Auto reconoce .nu/.ps1; --language pwsh es alias explícito y .pwsh no se infiere. La selección prioriza extensiones sobre nombres: ASP elige HTML (ASP) y TeX elige LaTeX. Auto usa la extensión final del archivo; para un token compuesto puedes indicar --language css.erb. [Catálogo y reglas de selección](docs/research/S03_CATALOGO.md). Reutilizamos gramáticas externas MIT con fuentes y adaptación versionadas en resources/syntax; no se escribe un motor nuevo. Windows usa Onig y el build usa fancy-regex. [Integración shell y evidencia](docs/research/S03_SHELL_INTEGRACION.md) con revisión y aceptación independientes; QA visual y runtimeUnix siguen pendientes. Detalles y límites en [S03](docs/sprints/S03.md), [revisión](docs/reviews/S03-sintaxis-integracion-r1.md) y [aceptación](docs/reviews/S03-sintaxis-aceptacion-r1.md).
-
-
-## Estructura opcional de archivos de datos
-
-TOML, JSON, YAML y XML conservan Fuente como vista inicial. Para un archivo real .toml/.json/.yaml/.yml/.xml, Tab/BackTab cambia a Estructura y vuelve manteniendo posición/búsquedas; `--structure` pide Estructura inicialmente. `--format toml|json|yaml|xml` selecciona parser para literal/stdin/string de Nu. `--language` solo selecciona resaltado, no parser; `--format text --structure` es error2.
+To make `viewer` available in new sessions, add these lines to your Nushell `config.nu`, replacing the module path with its absolute location:
 
 ```nu
-viewer config.toml
-viewer datos.json --structure
-'{"a":1,"a":2}' | viewer --format json --structure -i
+plugin use r3viewer
+use 'D:/Tools/R3Viewer/nu/r3viewer.nu' viewer
 ```
 
-Estructura conserva orden y lexemas originales, incluidas todas las ocurrencias JSON con claves repetidas y una advertencia; no convierte números enormes a float. Buscar Estructura compara contenido decodificado, con identidad separada de placeholders de controles. `o` salta al span original completo acreditado; si no existe, conserva la vista y diagnostica. Fallo de parseo/límite mantiene Fuente completa con diagnóstico y código0; cancelar devuelve130. Datos Nu ya tipados mantienen navegación y no se reabren ni se convierten a JSON/TOML/YAML/XML.
+## Use
 
-YAML conserva documentos, claves complejas, anchors y alias por identidad. Enter sigue alias explícitamente; Backspace restaura hasta128retornos sin expansión automática. Tags desconocidos quedan inertes; versiones distintas de1.2 dejan Fuente completa. Búsqueda distingue contenido decoded, URI y descriptor alias de los placeholders visibles. No aplica merge YAML1.1 ni ejecuta constructores.
+Open a local file in the interactive reader:
 
-[Estado JSON y rondas](docs/reviews/S03-JSON-producto.md), [TOML](docs/reviews/S03-TOML-producto.md), [YAML R3](docs/reviews/S03-YAML-producto.md). Aceptación funcional parcial Windows; no certifica visual/matriz, presupuestos completos ni RV-106. [XML R1](docs/reviews/S03-XML-producto.md) tiene revisión adversaria y aceptación funcional parcial Windows: texto mixto, namespaces, referencias, CDATA, spans y búsqueda por dominios. DOCTYPE queda inerte; no procesa recursos ni valida DTD. Fuente busca contenido original separado de su representación segura. QA visual, ejecución Unix, estrés completo y formatos enriquecidos siguen pendientes.
+```nu
+viewer notes.txt
+viewer src/main.rs
+viewer settings.json --structure
+```
 
-## Núcleo documental Markdown integrado
+Inspect values directly from a pipeline:
 
-El repositorio incorpora modelo Document validado, parser pulldown-cmark0.13.4 con adaptación Obsidian contextual, protocolo/worker controlado y consumidor Unicode por dominios. Las correcciones de rutas UNC y enlaces vacíos en título/cuerpo de callouts tienen revisión y aceptación independientes. Los tests usan una fixture sintética UNC relativa al repositorio, sin apuntes privados.
+```nu
+ls | select name type size | viewer
+{name: 'Ana', scores: [8 9 10]} | viewer
+open data.csv | where active == true | viewer
+```
 
-`viewer -i archivo.md` imprime Markdown completo y termina; una salida redirigida también usa esta ruta sin ANSI. `auto` selecciona Markdown por la extensión real `.md`/`.markdown` del archivo. Para texto literal o de una tubería, usa `--format markdown`; en Nushell exige valores textuales y conserva los datos tipados sin ese selector. `--language` elige una gramática de Fuente, no la interpretación de Documento.
+An argument names a file. Pipeline input supplies its value: `"notes.txt" | viewer` displays the literal text `notes.txt`. Use `--path/-p` to interpret a string as a local path, or `--value/-v` to treat an argument as literal content. These flags cannot be combined.
 
-La vista conserva texto, estructura y marcadores seguros de recursos. Imágenes, Mermaid y matemáticas siguen pendientes de representación gráfica; esos marcadores no acreditan gráficos completos. Un fallo del worker con cierre físico comprobado permite Fuente completa segura; cancelación devuelve130 y limpieza pendiente impide publicar salida.
+```nu
+"notes.txt" | viewer --path
+viewer --value 'Hello from the terminal'
+```
 
-Markdown interactivo muestra Fuente y avisa: «Markdown interactivo pendiente; se muestra Fuente. Usa --inline/-i para la vista Markdown.» El renderer/pump de Documento, sus recursos gráficos y resaltado de fences siguen pendientes. No anuncia QA visual, resolución completa de bóveda ni soporte Unix del worker. Evidencia del núcleo y límites en [adopción documental](docs/reviews/Markdown-AC-D1-code-adoption-r1.md).
+Print into the terminal scrollback with `--inline/-i`:
 
+```nu
+viewer notes.txt -i
+{name: 'Ana', score: 42} | viewer -i
+viewer notes.txt -i | save rendered.txt
+```
 
-## Primer renderer textual interno y pausa
+Redirected output is plain text. `viewer` consumes its input and produces a presentation; apply data transformations before passing values to it.
 
-El [primer renderer Markdown textual con estilos](docs/reviews/Markdown-renderer-text-adoption-r2.md) está incorporado como biblioteca interna, con revisión y aceptación independientes. No está conectado al comando interactivo, que continúa mostrando Fuente con aviso; viewer -i conserva su vista Markdown. Recursos gráficos y presentación completa de bloques siguen pendientes. El [checkpoint del hito](docs/process/PAUSA-2026-10-09.md) conserva la pausa histórica y la reanudación posterior autorizada por el usuario el mismo día. El desarrollo completo vuelve a estar activo.
-
-
-## Presentación interna de bloques Markdown
-
-El [renderer documental b2](docs/reviews/Markdown-D2b2-renderer-adoption-r1.md) incorpora bloques, roles, recursos seguros y tablas con posiciones por celda conservadas al redimensionar. Tiene revisión y aceptación independientes y133 regresiones canónicas PASS; sigue siendo biblioteca interna. La conexión a la sesión interactiva, historial, fences y gráficos permanecen pendientes. El comando interactivo continúa mostrando Fuente con el aviso indicado arriba; no se acredita QA visual ni soporte nativo Unix por este incremento.
-
-
-El [fix del bloque contenedor de recursos](docs/reviews/Markdown-B2-resource-owner-adoption-r1.md) evita errores con varias imágenes y conserva su texto alternativo al desplazar código ajeno. Tiene aceptación independiente y 77 regresiones de composición aprobadas. Este cambio corresponde al renderer interno; la vista Markdown interactiva y los recursos gráficos siguen pendientes.
-
-Fuente compartida: [biblioteca R2 integrada](docs/reviews/Markdown-Source-common-adoption-r2.md), con aceptación independiente y 132 controles de composición PASS. Comparte modelo/contexto y contabiliza aperturas del viewport; conexión a sesión interactiva y Hash común aún pendientes.
-
-Inspector y admisión física: [biblioteca R2 integrada](docs/reviews/Markdown-inspector-gate-adoption-r2.md), con [aceptación independiente](docs/reviews/Markdown-inspector-gate-acceptance-r2.md) y219pruebas distintas de composición PASS. Inspección desde posición/hit real, procedencia paginada y gate de dos proveedores scoped conservan owner, estado y cargos físicos. La conexión a la sesión interactiva y la ejecución de acciones de Fuente siguen pendientes; el comando mantiene Fuente con aviso.
-
-
-HTML estático: [contrato R2 revisado](docs/refinement/HTML-STATIC-DOM.md), con DOM y fuente separados, controles de solo lectura y from html opcional. Es diseño aceptado, aún sin conversor ni vista HTML productivos; [gates y límites](docs/reviews/HTML-static-dom-adoption-r2.md).
-
-
-PDF: [diseño de integración revisado](docs/refinement/PDF-PRODUCT-INTEGRATION.md) para páginas, raster, capa textual, búsqueda e historial. Los experimentos aceptados sirven de base; todavía no hay visor PDF productivo ni QA gráfica acreditada.
-
-HTML ResponseLease: [diseño R3 incorporado](docs/refinement/HTML-RESPONSE-LEASE.md) tras revisión independiente sin críticas; [adopción y límites](docs/reviews/HTML-response-lease-adoption-r3.md). Guard opt-in, callback estable y cierre conjunto físico de respuesta/worker definidos. SDK/conversor aún no implementados ni aceptados.
-
-Pruebas reproducibles de integración con Nushell0.116.x (Windows, Nu0.116.1 en la ruta indicada):
+The standalone executable can also read files or text from standard input:
 
 ```powershell
-.\scripts\test-nushell-integration.ps1 -NuExe 'D:\Program Files\nu\bin\nu.exe'
+./bin/r3viewer.exe notes.txt
+'Hello from PowerShell' | ./bin/r3viewer.exe -i
 ```
 
-El runner crea un paquete y evidencias privados nuevos, carga el plugin sólo para esa invocación y no modifica perfiles. Requiere ambos binarios de target/release; puede cambiarse con -BuildDirectory.
+## Keyboard controls
+
+| Key | Action |
+| --- | --- |
+| Arrow keys or `h`, `j`, `k`, `l` | Navigate or scroll |
+| Page Up / Page Down | Move by a page |
+| Home / End | Move to the beginning / end |
+| Enter | Open the selected value |
+| `r` / `K` | Inspect the selected row / key |
+| Tab / Shift+Tab | Switch between source and parsed structure |
+| `o` | Inspect the selected node's original source |
+| Backspace | Return to the parent value |
+| `/` | Search for literal, case-sensitive text |
+| `n` / `N` | Next / previous match |
+| `L` | Toggle line numbers |
+| `?` | Show help |
+| `q` | Quit |
+| Escape | Cancel search or quit |
+| Ctrl+C | Cancel and exit |
+
+## Display options
+
+| Option | Purpose |
+| --- | --- |
+| `--format auto\|text\|code\|json\|yaml\|toml\|xml\|markdown` | Choose how to interpret input |
+| `--language rust` | Select a syntax grammar by name or extension |
+| `--structure` | Start in the parsed structure of a data file |
+| `--line-numbers/-n` | Show line numbers |
+| `--no-line-numbers` | Hide line numbers |
+| `--colour auto\|always\|never` | Select colour behaviour; redirection stays plain |
+| `--theme auto\|dark\|light` | Select a display palette |
+| `--config path/to/viewer.toml` | Load a TOML configuration file |
+
+Local data files open as source by default. Nushell pipeline values retain their types, including nested containers, binary data and null. Appearance follows the terminal and supported static Nushell colour settings; no separate R3CLI installation is required.
+
+Markdown has a formatted text presentation with `viewer notes.md -i` and in redirected output. Its interactive view currently shows source text. Images, Mermaid, graphical mathematics, PDF viewing and web URLs are not available in the user-facing command yet.
+
+Run `viewer --help` in Nushell or `r3viewer --help` for command help.
+
+## Licence
+
+[MIT](LICENSE). Third-party components retain their own licences and notices in `vendor/`.
