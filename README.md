@@ -6,7 +6,7 @@ Read text and source code, inspect JSON, YAML, TOML and XML, or explore tables, 
 
 ## Install
 
-R3Viewer is in development and currently installed from source. The tested environment is Windows with Nushell **0.116.1**. Native Linux/macOS validation is pending.
+Install from source on **Windows** with **Nushell 0.116.1**. Prebuilt downloads are not available. Linux and macOS are not supported installation targets yet.
 
 You need [Git](https://git-scm.com/downloads), [Rust via rustup](https://rustup.rs/), the Windows C++ build tools, and [Nushell 0.116.1](https://github.com/nushell/nushell/releases/tag/0.116.1). The repository selects Rust 1.99.0 automatically through rustup.
 
@@ -113,11 +113,17 @@ The standalone executable can also read files or text from standard input:
 | `--theme auto\|dark\|light` | Select a display palette |
 | `--config path/to/viewer.toml` | Load a TOML configuration file |
 
-Local data files open as source by default. Nushell pipeline values retain their types, including nested containers, binary data and null. Appearance follows the terminal and supported static Nushell colour settings; no separate R3CLI installation is required.
+R3Viewer is a read-only viewer. Local data files open as source by default. Nushell pipeline values retain their types, including nested containers, binary data and null. Appearance follows the terminal and supported static Nushell colour settings; no separate R3CLI installation is required.
 
 Markdown has a formatted text presentation with `viewer notes.md -i` and in redirected output. Its interactive view currently shows source text. Images, Mermaid, graphical mathematics, PDF viewing and web URLs are not available in the user-facing command yet.
 
 Run `viewer --help` in Nushell or `r3viewer --help` for command help.
+
+## Troubleshooting
+
+- If `viewer` is unknown, load the plugin and module in the order shown under Install.
+- If the module cannot find its executable, check that `bin/` and `nu/` are siblings and that both executables were copied into `bin/`.
+- To use the standalone executable by name, add the absolute `bin/` directory to your PATH.
 
 ## Licence
 
